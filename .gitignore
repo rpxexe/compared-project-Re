@@ -1,0 +1,12 @@
+node_modules/
+.expo/
+dist/
+.bundle-check/
+android/
+ios/
+*.apk
+*.aab
+.env
+.env.*
+!.env.example
+*.log
