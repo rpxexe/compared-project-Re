@@ -1,19 +1,5 @@
-import React, {
-  useCallback,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-} from "react";
-import {
-  ActivityIndicator,
-  FlatList,
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  Text,
-  View,
-} from "react-native";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { ActivityIndicator, FlatList, ScrollView, StyleSheet, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { StatusBar } from "expo-status-bar";
 import { Ionicons } from "@expo/vector-icons";
@@ -23,183 +9,124 @@ import FilterChip from "../components/FilterChip";
 import PropertyCard from "../components/PropertyCard";
 import BottomSheet from "../components/BottomSheet";
 import Button from "../components/Button";
-import Input from "../components/Input";
 import { EmptyState, ErrorState, LoadingState } from "../components/StateViews";
+import QuickFilterBar from "../components/filters/QuickFilterBar";
+import QuickFilterSheet from "../components/filters/QuickFilterSheet";
 import { api } from "../services/api";
 import PressableScale from "../components/PressableScale";
 import Screen from "../components/Screen";
-import { colors, radius, shadow, glass } from "../theme";
+import { colors, radius, shadow } from "../theme";
 import { addSearchHistory } from "../services/historyService";
+import { useFilterState } from "../hooks/useFilterState";
+import { useRemovalCounts } from "../hooks/useLiveCount";
+import { contextIds, getContext, getFilter } from "../utils/filterConfig";
+import { chipLabel, fromQueryParams, toQueryParams, withoutEach } from "../utils/filterState";
+import Text from "../components/AppText";
 
-const BHKS = ["1", "2", "3", "4", "5+"];
-const PRICES = [
-  { label: "Under ₹50 L", maxPrice: 5000000 },
-  { label: "₹50 L – 1 Cr", minPrice: 5000000, maxPrice: 10000000 },
-  { label: "₹1 – 2 Cr", minPrice: 10000000, maxPrice: 20000000 },
-  { label: "₹2 – 5 Cr", minPrice: 20000000, maxPrice: 50000000 },
-  { label: "₹5 Cr +", minPrice: 50000000 },
-];
-const POSSESSION = ["Ready", "Under Construction", "New Launch", "Upcoming"];
-const SORTS = [
-  { k: "", l: "Newest" },
-  { k: "price_asc", l: "Price: low to high" },
-  { k: "price_desc", l: "Price: high to low" },
-  { k: "rating", l: "Top rated" },
-];
-const EMPTY = {
-  city: "",
-  locality: "",
-  propertyType: "",
-  bhk: "",
-  minPrice: "",
-  maxPrice: "",
-  minArea: "",
-  maxArea: "",
-  possession: "",
-  developer: "",
-  condition: "",
-  featured: false,
-};
+const PAGE_SIZE = 12;
+const MAX_SUGGESTIONS = 4;
 
-const priceKey = (f) =>
-  PRICES.findIndex(
-    (p) =>
-      String(p.minPrice || "") === String(f.minPrice || "") &&
-      String(p.maxPrice || "") === String(f.maxPrice || ""),
-  );
-const activeCount = (f) =>
-  Object.entries(f).filter(([, v]) => v !== "" && v !== false).length;
-
-function Group({ title, children }) {
-  return (
-    <View style={{ marginBottom: 18 }}>
-      <Text style={styles.gTitle}>{title}</Text>
-      <View style={styles.wrap}>{children}</View>
-    </View>
-  );
-}
-
-export default function SearchScreen({ route }) {
+export default function SearchScreen({ navigation, route }) {
   const insets = useSafeAreaInsets();
   const init = route.params || {};
+  const filters = useFilterState(init);
+  const { state: fs, config, params, ready, activeCount } = filters;
+  const ctx = getContext(config, fs.context);
+
   const [text, setText] = useState(init.search || "");
-  const [query, setQuery] = useState(init.search || "");
-  const [filters, setFilters] = useState({
-    ...EMPTY,
-    ...Object.fromEntries(Object.entries(init).filter(([k]) => k in EMPTY)),
-  });
-  const [sort, setSort] = useState(init.sort || "");
-  const [sheet, setSheet] = useState(false);
+  const [quickFor, setQuickFor] = useState(null);
   const [sortSheet, setSortSheet] = useState(false);
-  const [draft, setDraft] = useState(filters);
-  const [facets, setFacets] = useState({ cities: [], propertyTypes: [] });
 
   const [items, setItems] = useState([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
   const [pages, setPages] = useState(1);
-  const [state, setState] = useState({
-    loading: true,
-    more: false,
-    error: null,
-  });
-  const seq = useRef(0);
+  const [st, setSt] = useState({ loading: true, more: false, error: null });
+  const inflight = useRef(null);
 
+  // The restored state may carry a search term (deep link); show it in the box.
   useEffect(() => {
-    api
-      .facets()
-      .then(setFacets)
-      .catch(() => {});
-  }, []);
+    if (ready) setText(fs.query.search);
+  }, [ready]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
-    const t = setTimeout(() => setQuery(text.trim()), 400);
+    if (!ready) return undefined;
+    const t = setTimeout(() => {
+      if (text.trim() !== fs.query.search) filters.setQuery({ search: text.trim() });
+    }, 400);
     return () => clearTimeout(t);
-  }, [text]); // debounce typing
+  }, [text, ready]); // eslint-disable-line react-hooks/exhaustive-deps -- debounce typing only
 
-  const params = useMemo(
-    () => ({ ...filters, search: query, sort, limit: 12 }),
-    [filters, query, sort],
-  );
+  // Coming back from the filter form with a new search (`_applied` changes each time).
+  const applied = route.params?._applied;
+  useEffect(() => {
+    if (!applied || !ready) return;
+    const next = fromQueryParams(route.params, config, fs.context);
+    if (filters.isSame(next)) return; // first mount already started from these params
+    filters.replace(next);
+    setText(next.query.search);
+  }, [applied, ready]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  const openFilters = () =>
+    navigation.navigate("SearchFilters", { ...params, returnTo: "Search" });
+
+  const listParams = useMemo(() => ({ ...params, limit: PAGE_SIZE }), [params]);
+
+  // Page 1 replaces the list; later pages append. Every page uses the same committed filters,
+  // and a newer request aborts the older one so results never arrive out of order.
   const load = useCallback(
     async (p, append) => {
-      const id = ++seq.current;
-      setState((s) => ({ ...s, loading: !append, more: append, error: null }));
+      inflight.current?.abort();
+      const ctrl = new AbortController();
+      inflight.current = ctrl;
+      setSt((s) => ({ ...s, loading: !append, more: append, error: null }));
       try {
-        const r = await api.properties({ ...params, page: p });
-        if (id !== seq.current) return;
-        setItems((prev) =>
-          append
-            ? [
-                ...prev,
-                ...r.items.filter((n) => !prev.some((o) => o.id === n.id)),
-              ]
-            : r.items,
-        );
+        const r = await api.properties({ ...listParams, page: p }, { signal: ctrl.signal });
+        if (ctrl.signal.aborted) return;
+        setItems((prev) => (append ? [...prev, ...r.items.filter((n) => !prev.some((o) => o.id === n.id))] : r.items));
         setTotal(r.total);
         setPage(r.page);
         setPages(r.pages);
-        setState({ loading: false, more: false, error: null });
+        setSt({ loading: false, more: false, error: null });
       } catch (error) {
-        if (id === seq.current)
-          setState({ loading: false, more: false, error });
+        if (!ctrl.signal.aborted && !error.canceled) setSt({ loading: false, more: false, error });
       }
     },
-    [params],
+    [listParams],
   );
+  useEffect(() => () => inflight.current?.abort(), []);
+
   useEffect(() => {
+    if (!ready) return;
     load(1, false);
-    if (query || filters.city || filters.locality || filters.propertyType || filters.bhk) {
-      addSearchHistory({
-        query,
-        city: filters.city,
-        locality: filters.locality,
-        propertyType: filters.propertyType,
-        bhk: filters.bhk,
-      });
+    const { search, city, locality, propertyType } = fs.query;
+    const typeLabel = propertyType || chipLabel(fs, config, "propertyType") || "";
+    const bhk = (fs.values.bhk || []).join(",");
+    if (search || city || locality || typeLabel || bhk) {
+      addSearchHistory({ query: search, city, locality, propertyType: typeLabel, bhk });
     }
-  }, [load, query, filters.city, filters.locality, filters.propertyType, filters.bhk]);
+  }, [ready, load]); // eslint-disable-line react-hooks/exhaustive-deps -- `load` changes exactly when the filters do
 
-  const count = activeCount(filters);
-  const chips = [];
-  if (filters.city) chips.push(["city", filters.city]);
-  if (filters.propertyType) chips.push(["propertyType", filters.propertyType]);
-  if (filters.bhk) chips.push(["bhk", `${filters.bhk} BHK`]);
-  if (priceKey(filters) >= 0)
-    chips.push(["price", PRICES[priceKey(filters)].label]);
-  if (filters.possession) chips.push(["possession", filters.possession]);
-  if (filters.condition)
-    chips.push(["condition", filters.condition === "new" ? "New" : "Resale"]);
-  if (filters.developer) chips.push(["developer", filters.developer]);
-  if (filters.locality) chips.push(["locality", filters.locality]);
-  if (filters.featured) chips.push(["featured", "Featured"]);
-  if (filters.minArea || filters.maxArea)
-    chips.push([
-      "area",
-      `${filters.minArea || 0}–${filters.maxArea || "∞"} sq.ft`,
-    ]);
+  // Empty results: count what each single removal would bring back, suggest the biggest wins.
+  const removals = useMemo(
+    () => withoutEach(fs, config).slice(0, 6).map((r) => ({ ...r, params: toQueryParams(r.state, config) })),
+    [fs, config],
+  );
+  const noResults = ready && !st.loading && !st.error && total === 0;
+  const removalCounts = useRemovalCounts(removals, { enabled: noResults });
+  const suggestions = removals
+    .filter((r) => removalCounts[r.id] > 0)
+    .sort((a, b) => removalCounts[b.id] - removalCounts[a.id])
+    .slice(0, MAX_SUGGESTIONS);
 
-  const removeChip = (k) =>
-    setFilters((f) =>
-      k === "price"
-        ? { ...f, minPrice: "", maxPrice: "" }
-        : k === "area"
-          ? { ...f, minArea: "", maxArea: "" }
-          : { ...f, [k]: k === "featured" ? false : "" },
-    );
-  const set = (k, v) => setDraft((d) => ({ ...d, [k]: d[k] === v ? "" : v }));
-  const setPrice = (p) =>
-    setDraft((d) =>
-      priceKey(d) === PRICES.indexOf(p)
-        ? { ...d, minPrice: "", maxPrice: "" }
-        : {
-            ...d,
-            minPrice: p.minPrice ? String(p.minPrice) : "",
-            maxPrice: p.maxPrice ? String(p.maxPrice) : "",
-          },
-    );
-  const sortLabel = SORTS.find((s) => s.k === sort)?.l || "Newest";
-  console.log(init);
+  const sortFilter = getFilter(config, fs.context, ctx?.sort);
+  const sortValue = fs.values[ctx?.sort] ?? sortFilter?.default;
+  const sortLabel = sortFilter?.options.find((o) => o.value === sortValue)?.label || "Sort";
+
+  const apply = (next) => {
+    setQuickFor(null);
+    filters.replace(next);
+  };
+
   return (
     <Screen scroll={false} padTop={false} padBottom={false} style={styles.root}>
       <StatusBar style="dark" />
@@ -209,283 +136,142 @@ export default function SearchScreen({ route }) {
           <SearchBar
             value={text}
             onChangeText={setText}
-            onSubmit={() => setQuery(text.trim())}
-            autoFocus={
-              !init.city && !init.propertyType && !init.featured && !init.sort
-            }
-            onFilter={() => {
-              setDraft(filters);
-              setSheet(true);
-            }}
-            filterCount={count}
+            onSubmit={() => filters.setQuery({ search: text.trim() })}
+            autoFocus={!init.city && !init.propertyType && !init.featured && !init.sort && !init.context}
+            onFilter={openFilters}
+            filterCount={activeCount}
           />
         </View>
-        {chips.length ? (
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={{
-              paddingHorizontal: 20,
-              gap: 8,
-              paddingTop: 12,
-            }}
-          >
-            {chips.map(([k, l]) => (
+
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.contexts}
+          accessibilityRole="tablist"
+        >
+          {contextIds(config).map((id) => {
+            const on = id === fs.context;
+            return (
               <PressableScale
-                key={k}
-                onPress={() => removeChip(k)}
-                style={styles.applied}
+                key={id}
+                onPress={() => !on && filters.setContext(id)}
+                style={[styles.ctx, on && styles.ctxOn]}
+                accessibilityRole="tab"
+                accessibilityState={{ selected: on }}
+                accessibilityLabel={`${config.contexts[id].label} listings`}
               >
-                <Text style={styles.appliedText}>{l}</Text>
-                <Ionicons name="close" size={14} color={colors.ink} />
+                <Text style={[styles.ctxText, on && styles.ctxTextOn]}>{config.contexts[id].label}</Text>
               </PressableScale>
-            ))}
-            <Pressable
-              onPress={() => setFilters(EMPTY)}
-              style={{ justifyContent: "center", paddingHorizontal: 6 }}
-            >
-              <Text style={styles.clear}>Clear all</Text>
-            </Pressable>
-          </ScrollView>
-        ) : null}
+            );
+          })}
+        </ScrollView>
+
+        <QuickFilterBar
+          state={fs}
+          config={config}
+          activeCount={activeCount}
+          onOpenAll={openFilters}
+          onOpenFilter={setQuickFor}
+          onRemove={filters.clear}
+        />
+
         <View style={styles.bar}>
-          <Text style={styles.count}>
-            {state.loading && !items.length
-              ? "Searching…"
-              : `${total} propert${total === 1 ? "y" : "ies"} found`}
+          <Text style={styles.count} accessibilityLiveRegion="polite">
+            {st.loading && !items.length ? "Searching…" : `${total.toLocaleString("en-IN")} propert${total === 1 ? "y" : "ies"} found`}
           </Text>
-          <PressableScale
-            onPress={() => setSortSheet(true)}
-            style={styles.sort}
-            hitSlop={8}
-          >
-            <Ionicons name="swap-vertical" size={16} color={colors.ink} />
-            <Text style={styles.sortText}>{sortLabel}</Text>
-          </PressableScale>
+          {sortFilter ? (
+            <PressableScale
+              onPress={() => setSortSheet(true)}
+              style={styles.sort}
+              hitSlop={12}
+              accessibilityRole="button"
+              accessibilityLabel={`Sort: ${sortLabel}`}
+            >
+              <Ionicons name="swap-vertical" size={16} color={colors.ink} />
+              <Text style={styles.sortText}>{sortLabel}</Text>
+            </PressableScale>
+          ) : null}
         </View>
       </View>
 
-      {state.loading && !items.length ? (
+      {!ready || (st.loading && !items.length) ? (
         <View style={{ padding: 20 }}>
           <LoadingState rows={4} />
         </View>
-      ) : state.error && !items.length ? (
-        <ErrorState
-          title="Unable to load results"
-          error={state.error}
-          onRetry={() => load(1, false)}
-        />
+      ) : st.error && !items.length ? (
+        <ErrorState title="Unable to load results" error={st.error} onRetry={() => load(1, false)} />
       ) : (
         <FlatList
           data={items}
           keyExtractor={(i) => i.id}
           keyboardShouldPersistTaps="handled"
-          contentContainerStyle={{
-            padding: 20,
-            paddingTop: 6,
-            paddingBottom: insets.bottom + 30,
-            gap: 14,
-          }}
-          renderItem={({ item, index }) => (
-            <PropertyCard property={item} index={index} />
-          )}
+          contentContainerStyle={{ padding: 20, paddingTop: 6, paddingBottom: insets.bottom + 30, gap: 14 }}
+          renderItem={({ item, index }) => <PropertyCard property={item} index={index} />}
           onEndReachedThreshold={0.4}
           onEndReached={() => {
-            if (!state.more && !state.loading && page < pages)
-              load(page + 1, true);
+            if (!st.more && !st.loading && page < pages) load(page + 1, true);
           }}
           ListEmptyComponent={
-            <EmptyState
-              title="No properties found"
-              message="Try a different search or clear some filters."
-              action={count || query ? "Clear filters" : undefined}
-              onAction={() => {
-                setFilters(EMPTY);
-                setText("");
-              }}
-            />
+            <View>
+              <EmptyState
+                title="No results"
+                message={
+                  suggestions.length
+                    ? "These filters are hiding the most listings. Tap one to remove it."
+                    : activeCount || fs.query.search
+                      ? "Try a different search or fewer filters."
+                      : `No ${ctx?.label.toLowerCase() || ""} listings here yet.`
+                }
+              />
+              {suggestions.length ? (
+                <View style={styles.suggest}>
+                  {suggestions.map((r) => (
+                    <FilterChip
+                      key={r.id}
+                      label={`${r.label}  +${removalCounts[r.id].toLocaleString("en-IN")}`}
+                      icon="close"
+                      onPress={() => filters.replace(r.state)}
+                      accessibilityLabel={`Remove ${r.label}, shows ${removalCounts[r.id]} more results`}
+                    />
+                  ))}
+                </View>
+              ) : null}
+              {activeCount ? (
+                <Button title="Clear all filters" variant="ghost" small onPress={filters.clearAll} style={{ alignSelf: "center", marginTop: 14 }} />
+              ) : null}
+            </View>
           }
           ListFooterComponent={
-            state.more ? (
+            st.more ? (
               <ActivityIndicator color={colors.gold} style={{ margin: 16 }} />
-            ) : state.error ? (
-              <Button
-                title="Retry"
-                variant="ghost"
-                small
-                onPress={() => load(page + 1, true)}
-              />
+            ) : st.error ? (
+              <Button title="Retry" variant="ghost" small onPress={() => load(page + 1, true)} />
             ) : null
           }
         />
       )}
 
-      <BottomSheet
-        visible={sheet}
-        onClose={() => setSheet(false)}
-        title="Filters"
-      >
-        <ScrollView
-          showsVerticalScrollIndicator={false}
-          keyboardShouldPersistTaps="handled"
-          style={{ maxHeight: 460 }}
-        >
-          {facets.cities.length ? (
-            <Group title="City">
-              {facets.cities.slice(0, 20).map((c) => (
-                <FilterChip
-                  key={c}
-                  label={c}
-                  active={draft.city === c}
-                  onPress={() => set("city", c)}
-                />
-              ))}
-            </Group>
-          ) : null}
-          {facets.propertyTypes.length ? (
-            <Group title="Property type">
-              {facets.propertyTypes.map((t) => (
-                <FilterChip
-                  key={t}
-                  label={t}
-                  active={draft.propertyType === t}
-                  onPress={() => set("propertyType", t)}
-                />
-              ))}
-            </Group>
-          ) : null}
-          <Group title="BHK">
-            {BHKS.map((b) => (
-              <FilterChip
-                key={b}
-                label={`${b} BHK`}
-                active={draft.bhk === b}
-                onPress={() => set("bhk", b)}
-              />
-            ))}
-          </Group>
-          <Group title="Price range">
-            {PRICES.map((p) => (
-              <FilterChip
-                key={p.label}
-                label={p.label}
-                active={priceKey(draft) === PRICES.indexOf(p)}
-                onPress={() => setPrice(p)}
-              />
-            ))}
-          </Group>
-          <Group title="Possession">
-            {POSSESSION.map((p) => (
-              <FilterChip
-                key={p}
-                label={p}
-                active={draft.possession === p}
-                onPress={() => set("possession", p)}
-              />
-            ))}
-          </Group>
-          <Group title="Listing">
-            <FilterChip
-              label="New"
-              active={draft.condition === "new"}
-              onPress={() => set("condition", "new")}
-            />
-            <FilterChip
-              label="Resale"
-              active={draft.condition === "resale"}
-              onPress={() => set("condition", "resale")}
-            />
-            <FilterChip
-              label="Featured only"
-              icon="star"
-              active={!!draft.featured}
-              onPress={() => setDraft((d) => ({ ...d, featured: !d.featured }))}
-            />
-          </Group>
-          <Text style={styles.gTitle}>Area (sq.ft)</Text>
-          <View style={{ flexDirection: "row", gap: 12, marginBottom: 18 }}>
-            <Input
-              style={{ flex: 1 }}
-              placeholder="Min"
-              keyboardType="number-pad"
-              value={draft.minArea}
-              onChangeText={(v) =>
-                setDraft((d) => ({ ...d, minArea: v.replace(/\D/g, "") }))
-              }
-            />
-            <Input
-              style={{ flex: 1 }}
-              placeholder="Max"
-              keyboardType="number-pad"
-              value={draft.maxArea}
-              onChangeText={(v) =>
-                setDraft((d) => ({ ...d, maxArea: v.replace(/\D/g, "") }))
-              }
-            />
-          </View>
-          <Input
-            label="Locality"
-            placeholder="e.g. Andheri"
-            value={draft.locality}
-            onChangeText={(v) => setDraft((d) => ({ ...d, locality: v }))}
-            style={{ marginBottom: 14 }}
-          />
-          <Input
-            label="Developer"
-            placeholder="e.g. builder name"
-            value={draft.developer}
-            onChangeText={(v) => setDraft((d) => ({ ...d, developer: v }))}
-          />
-        </ScrollView>
-        <View style={{ flexDirection: "row", gap: 12, marginTop: 14 }}>
-          <Button
-            title="Clear"
-            variant="ghost"
-            style={{ flex: 1 }}
-            onPress={() => setDraft(EMPTY)}
-          />
-          <Button
-            title="Show results"
-            style={{ flex: 2 }}
-            onPress={() => {
-              setFilters(draft);
-              setSheet(false);
-            }}
-          />
-        </View>
-      </BottomSheet>
+      <QuickFilterSheet filterId={quickFor} state={fs} config={config} onApply={apply} onClose={() => setQuickFor(null)} />
 
-      <BottomSheet
-        visible={sortSheet}
-        onClose={() => setSortSheet(false)}
-        title="Sort by"
-        maxHeight={0.5}
-      >
-        {SORTS.map((s) => (
-          <PressableScale
-            key={s.k || "new"}
-            onPress={() => {
-              setSort(s.k);
-              setSortSheet(false);
-            }}
-            style={[
-              styles.sortRow,
-              sort === s.k && styles.sortRowActive,
-            ]}
-          >
-            <Text
-              style={[
-                styles.sortRowText,
-                sort === s.k && { fontWeight: "800", color: colors.goldDeep },
-              ]}
+      <BottomSheet visible={sortSheet} onClose={() => setSortSheet(false)} title="Sort by" maxHeight={0.55}>
+        {(sortFilter?.options || []).map((o) => {
+          const on = sortValue === o.value;
+          return (
+            <PressableScale
+              key={o.value}
+              onPress={() => {
+                filters.set(sortFilter.id, o.value);
+                setSortSheet(false);
+              }}
+              style={[styles.sortRow, on && styles.sortRowActive]}
+              accessibilityRole="radio"
+              accessibilityState={{ checked: on }}
             >
-              {s.l}
-            </Text>
-            {sort === s.k ? (
-              <Ionicons name="checkmark" size={18} color={colors.goldDeep} />
-            ) : null}
-          </PressableScale>
-        ))}
+              <Text style={[styles.sortRowText, on && { fontWeight: "800", color: colors.goldDeep }]}>{o.label}</Text>
+              {on ? <Ionicons name="checkmark" size={18} color={colors.goldDeep} /> : null}
+            </PressableScale>
+          );
+        })}
       </BottomSheet>
     </Screen>
   );
@@ -493,6 +279,21 @@ export default function SearchScreen({ route }) {
 
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: "transparent" },
+  contexts: { paddingHorizontal: 20, gap: 6, paddingTop: 12, paddingBottom: 8 },
+  ctx: {
+    minHeight: 44,
+    justifyContent: "center",
+    paddingHorizontal: 14,
+    borderRadius: radius.pill,
+  },
+  ctxOn: {
+    backgroundColor: "rgba(253, 248, 237, 0.92)",
+    borderWidth: 1,
+    borderColor: "rgba(212, 160, 23, 0.45)",
+    ...shadow.glass,
+  },
+  ctxText: { fontSize: 14, fontWeight: "700", color: colors.muted },
+  ctxTextOn: { color: colors.ink, fontWeight: "800" },
   bar: {
     flexDirection: "row",
     alignItems: "center",
@@ -501,36 +302,15 @@ const styles = StyleSheet.create({
     paddingVertical: 14,
   },
   count: { fontWeight: "700", color: colors.ink, fontSize: 14 },
-  sort: { flexDirection: "row", alignItems: "center", gap: 6 },
+  sort: { flexDirection: "row", alignItems: "center", gap: 6, minHeight: 44 },
   sortText: { fontWeight: "700", color: colors.ink, fontSize: 13 },
-  applied: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-    backgroundColor: "rgba(253, 248, 237, 0.92)",
-    borderRadius: radius.pill,
-    paddingHorizontal: 12,
-    height: 32,
-    borderWidth: 1,
-    borderColor: "rgba(212, 160, 23, 0.45)",
-    ...shadow.glass,
-  },
-  appliedText: { fontSize: 12.5, fontWeight: "700", color: colors.ink },
-  clear: { color: colors.goldDeep, fontWeight: "800", fontSize: 13 },
-  gTitle: {
-    fontSize: 12,
-    fontWeight: "800",
-    letterSpacing: 1,
-    color: colors.muted,
-    marginBottom: 10,
-    textTransform: "uppercase",
-  },
-  wrap: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
+  suggest: { flexDirection: "row", flexWrap: "wrap", justifyContent: "center", gap: 8, paddingHorizontal: 20 },
   sortRow: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
     padding: 14,
+    minHeight: 48,
     borderRadius: radius.md,
     marginBottom: 4,
   },

@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { StyleSheet, Text, View } from "react-native";
+import { StyleSheet, View } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
 import Screen from "../components/Screen";
@@ -8,6 +8,7 @@ import ChoiceDropdown from "../components/ChoiceDropdown";
 import { CATEGORY_OPTIONS, LISTING_OPTIONS } from "../utils/postPropertyFlow";
 import { colors, fonts, glow, radius, shadow } from "../theme";
 import { useAuth } from "../context/AuthContext";
+import Text from "../components/AppText";
 
 // Post Property tab = the two selection steps. The form itself lives in PostPropertyFormScreen
 // and receives the choices as route params, so they are never asked twice.

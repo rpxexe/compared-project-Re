@@ -1,18 +1,10 @@
 import React, { useCallback, useMemo, useState } from "react";
-import {
-  Pressable,
-  ScrollView,
-  StatusBar,
-  StyleSheet,
-  Text,
-  View,
-  ActivityIndicator,
-  RefreshControl,
-} from "react-native";
+import { Pressable, ScrollView, StatusBar, StyleSheet, View, ActivityIndicator, RefreshControl } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import PressableScale from "../components/PressableScale";
 import { colors, fonts, radius, shadow } from "../theme";
+import Text from "../components/AppText";
 
 const INITIAL_NOTIFICATIONS = [
   {

@@ -1,5 +1,5 @@
 import React from 'react';
-import { Alert, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Alert, Pressable, StyleSheet, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import Screen from '../components/Screen';
@@ -10,6 +10,7 @@ import { useSaved } from '../context/SavedContext';
 import { PURPOSES } from './RoleScreen';
 import { formatPhone } from '../utils/format';
 import { colors, fonts, glowSubtle, radius, shadow } from '../theme';
+import Text from "../components/AppText";
 
 function Row({ icon, label, value, onPress, danger, last }) {
   return (

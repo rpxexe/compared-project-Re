@@ -24,4 +24,19 @@ function cached(ttlMs, load) {
   };
 }
 
-module.exports = { cached };
+// Same as cached(), but keeps one entry per key (e.g. per city), dropping the oldest key
+// once `maxKeys` is reached so memory stays bounded however many keys are requested.
+function cachedByKey(ttlMs, maxKeys, load) {
+  const entries = new Map();
+  return function get(key) {
+    let getter = entries.get(key);
+    if (!getter) {
+      if (entries.size >= maxKeys) entries.delete(entries.keys().next().value);
+      getter = cached(ttlMs, () => load(key));
+      entries.set(key, getter);
+    }
+    return getter();
+  };
+}
+
+module.exports = { cached, cachedByKey };

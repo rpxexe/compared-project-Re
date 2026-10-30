@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { ActivityIndicator, FlatList, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, FlatList, ScrollView, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
 import ScreenHeader from '../components/ScreenHeader';
@@ -10,6 +10,7 @@ import { EmptyState, ErrorState, LoadingState } from '../components/StateViews';
 import { useApi } from '../hooks/useApi';
 import { api } from '../services/api';
 import { colors } from '../theme';
+import Text from "../components/AppText";
 
 const CATS = [
   { key: 'projects', label: 'All projects' }, { key: 'new-launch', label: 'New Launch' }, { key: 'upcoming', label: 'Upcoming' },

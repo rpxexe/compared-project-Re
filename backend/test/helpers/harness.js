@@ -8,6 +8,11 @@ const mongoose = require('mongoose');
 const { installFakeModels } = require('./fakeDb');
 
 const models = installFakeModels();
+// Production keeps filterFields filled via the sync job; seeded fixtures get them up front.
+const { withFilterFields } = require('../../src/utils/filterFields');
+const seedRaw = models.Property.seed;
+models.Property.seed = (docs) => seedRaw(docs.map((d) => withFilterFields({ _id: new mongoose.Types.ObjectId(), ...d })));
+models.Property.seedRaw = seedRaw;
 const env = require('../../src/config/env');
 env.reload();
 const { createApp } = require('../../src/app');

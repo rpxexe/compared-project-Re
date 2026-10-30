@@ -1,6 +1,7 @@
 import React from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, View } from 'react-native';
 import { colors, type } from '../theme';
+import Text from "./AppText";
 
 export default function SectionHeader({ title, subtitle, action, onAction, style }) {
   return (

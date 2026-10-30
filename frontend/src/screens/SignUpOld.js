@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from "react";
-import { StyleSheet, Text, View } from "react-native";
+import { StyleSheet, View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import Screen from "../components/Screen";
 import ScreenHeader from "../components/ScreenHeader";
@@ -17,6 +17,7 @@ import { colors, fonts } from "../theme";
 import { Animated } from "react-native";
 import FilterChip from "../components/FilterChip";
 import { EMAIL } from "../utils/validators";
+import Text, { AnimatedText } from "../components/AppText";
 
 export default function SignUpScreen({ navigation }) {
   const [phone, setPhone] = useState("");
@@ -108,9 +109,9 @@ export default function SignUpScreen({ navigation }) {
         <Animated.View style={a}>
           <LogoMark size={60} tone="dark" />
         </Animated.View>
-        <Animated.Text style={[styles.h1, b]}>
+        <AnimatedText style={[styles.h1, b]}>
           Welcome Sign Up{"\n"}to Compare Project
-        </Animated.Text>
+        </AnimatedText>
         <View style={styles.gap} />
         <Text style={styles.lbl}>Who you are</Text>
         <View style={styles.wrap}>
@@ -125,9 +126,9 @@ export default function SignUpScreen({ navigation }) {
         </View>
         {isPreLogin && (
           <>
-            {/* <Animated.Text style={[styles.sub, b]}>
+            {/* <AnimatedText style={[styles.sub, b]}>
               Enter your mobile number.
-            </Animated.Text> */}
+            </AnimatedText> */}
             <Animated.View style={[{ marginTop: 28 }, c]}>
               <Input
                 label="MOBILE NUMBER"
@@ -156,9 +157,9 @@ export default function SignUpScreen({ navigation }) {
                 </View>
               ) : null} */}
             </Animated.View>
-            {/* <Animated.Text style={[styles.sub, b]}>
+            {/* <AnimatedText style={[styles.sub, b]}>
               Enter your Full Name.
-            </Animated.Text> */}
+            </AnimatedText> */}
             <Animated.View style={[{ marginTop: 28 }, c]}>
               <Input
                 label="FULL NAME"
@@ -174,9 +175,9 @@ export default function SignUpScreen({ navigation }) {
                 returnKeyType="done"
               />
             </Animated.View>
-            {/* <Animated.Text style={[styles.sub, b]}>
+            {/* <AnimatedText style={[styles.sub, b]}>
               Enter your Email ID.
-            </Animated.Text> */}
+            </AnimatedText> */}
             <Animated.View style={[{ marginTop: 28 }, c]}>
               <Input
                 label="EMAIL ID"
@@ -203,9 +204,9 @@ export default function SignUpScreen({ navigation }) {
                 </View>
               ) : null} */}
             </Animated.View>
-            {/* <Animated.Text style={[styles.sub, b]}>
+            {/* <AnimatedText style={[styles.sub, b]}>
               Enter your Password.
-            </Animated.Text> */}
+            </AnimatedText> */}
             <Animated.View style={[{ marginTop: 28 }, c]}>
               <Input
                 label="PASSWORD"
@@ -221,9 +222,9 @@ export default function SignUpScreen({ navigation }) {
                 returnKeyType="done"
               />
             </Animated.View>
-            {/* <Animated.Text style={[styles.sub, b]}>
+            {/* <AnimatedText style={[styles.sub, b]}>
               Confirm Password
-            </Animated.Text> */}
+            </AnimatedText> */}
             <Animated.View style={[{ marginTop: 28 }, c]}>
               <Input
                 label="CONFIRM PASSWORD"

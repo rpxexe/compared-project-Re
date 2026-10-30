@@ -1,253 +1,247 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
-import {
-  ActivityIndicator,
-  Animated,
-  FlatList,
-  Image,
-  Modal,
-  Pressable,
-  RefreshControl,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  View,
-} from "react-native";
+import { Animated, FlatList, Image, RefreshControl, StyleSheet, View, useWindowDimensions } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
-import { Ionicons, MaterialCommunityIcons, MaterialIcons } from "@expo/vector-icons";
+import { useIsFocused } from "@react-navigation/native";
+import { Ionicons } from "@expo/vector-icons";
 import Screen from "../components/Screen";
-import SectionHeader from "../components/SectionHeader";
-import PropertyCard from "../components/PropertyCard";
-import CityPicker from "../components/CityPicker";
+import Logo from "../components/Logo";
+import GlassView from "../components/GlassView";
+import HeartButton from "../components/HeartButton";
+import MiniBarChart from "../components/MiniBarChart";
+import MiniLineChart from "../components/MiniLineChart";
+import LoanCalculatorSheet from "../components/LoanCalculatorSheet";
 import PressableScale from "../components/PressableScale";
-import { EmptyState, ErrorState, LoadingState } from "../components/StateViews";
+import RollingPlaceholder from "../components/RollingPlaceholder";
+import { Cover } from "../components/PropertyCard";
+import { ErrorState, LoadingState } from "../components/StateViews";
 import { useAuth } from "../context/AuthContext";
 import { useApi } from "../hooks/useApi";
 import { useCity } from "../hooks/useCity";
-import { useEntrance, usePulse } from "../hooks/useEntrance";
+import { useEntrance } from "../hooks/useEntrance";
 import { api } from "../services/api";
-import { colors, fonts, glow, glowSubtle, radius, shadow } from "../theme";
+import { formatInr } from "../utils/format";
 import {
-  getSearchHistory,
-  getUserPreferences,
-  subscribeSearchHistory,
   clearSearchHistory,
-  addSearchHistory,
+  getSearchHistory,
+  subscribeSearchHistory,
 } from "../services/historyService";
+import BottomSheet from "../components/BottomSheet";
+import { brand, colors, fonts, gradients, radius, surfaces } from "../theme";
+import Text from "../components/AppText";
 
+const HERO_IMAGE = require("../../assets/onboarding_residence.jpg");
 const safe = (p) => p.catch(() => null);
 
-const ROAD_REGEX =
-  /\b(road|rd|marg|rasta|path|lane|gali|street|st|highway|expressway|flyover|bypass|ave|avenue|salai|circle|chowk|cross|main|layout)\b/i;
-
-function getCleanLocalityAndCity(locationTitle, city, exactLocation) {
-  let c = (city || "").trim();
-  let t = (locationTitle || "").trim();
-  const exact = (exactLocation || "").trim();
-
-  if (t.includes(",")) {
-    const parts = t
-      .split(",")
-      .map((p) => p.trim())
-      .filter(Boolean);
-    const localities = parts.filter(
-      (p) =>
-        !ROAD_REGEX.test(p) &&
-        p.toLowerCase() !== c.toLowerCase() &&
-        p.toLowerCase() !== "india" &&
-        !/^\d+$/.test(p),
-    );
-    if (localities.length > 0) {
-      t = localities[localities.length - 1];
-    } else {
-      const nonCity = parts.filter((p) => p.toLowerCase() !== c.toLowerCase());
-      t = nonCity[nonCity.length - 1] || parts[0];
-    }
-  } else if ((!t || ROAD_REGEX.test(t)) && exact) {
-    const parts = exact
-      .split(",")
-      .map((p) => p.trim())
-      .filter(Boolean);
-    const localities = parts.filter(
-      (p) =>
-        !ROAD_REGEX.test(p) &&
-        p.toLowerCase() !== c.toLowerCase() &&
-        p.toLowerCase() !== "india" &&
-        !/^\d+$/.test(p),
-    );
-    if (localities.length > 0) {
-      t = localities[0];
-    }
-  }
-
-  if (t && c) {
-    if (t.toLowerCase() === c.toLowerCase()) return c;
-    if (
-      t.toLowerCase().endsWith(", " + c.toLowerCase()) ||
-      t.toLowerCase().endsWith(" " + c.toLowerCase())
-    ) {
-      t = t
-        .substring(0, t.length - c.length)
-        .replace(/,\s*$/, "")
-        .trim();
-    }
-    return t ? `${t}, ${c}` : c;
-  }
-
-  if (t) return t;
-  if (c) return c;
-  return "All Locations";
-}
-
-// 5 categories directly from the middle phone design
-const CATEGORIES = [
-  { id: "Buy", label: "Buy", icon: "home" },
-  { id: "Rent", label: "Rent", icon: "key-outline" },
-  { id: "Projects", label: "Projects", icon: "layers-outline" },
-  { id: "Commercial", label: "Commercial", icon: "business-outline" },
-  { id: "Invest", label: "Invest", icon: "trending-up-outline" },
+const QUICK_ACTIONS = [
+  { key: "resume", label: "Resume Search", icon: "play-forward", bg: "#FFE4EE", fg: "#E0457B" },
+  { key: "wishlist", label: "My Wishlist", icon: "heart", bg: "#FFE3E6", fg: "#E5484D" },
+  { key: "recommend", label: "Top Picks", icon: "sparkles", bg: "#E3EEFF", fg: "#3B6FE0" },
+  { key: "recent", label: "Recent Searches", icon: "time", bg: "#EEE6FF", fg: brand.violet },
 ];
 
+// Tabs above the search bar; each opens the search form with that context preselected.
+const SEARCH_TABS = [
+  { context: "buy_residential", label: "Buy", icon: "key-outline" },
+  { context: "rent_residential", label: "Rent", icon: "home-outline" },
+  { context: "new_projects", label: "Projects", icon: "business-outline" },
+];
+
+// Short axis labels; the chart readout shows the full stage name.
+const STAGE_SHORT = { "Ready To Move": "Ready", "Under Construction": "U/C", "New Launch": "New" };
+
+function stageBadge(p) {
+  const s = `${p.possessionStatus || ""} ${p.propertyGroup || ""}`;
+  if (/upcoming/i.test(s)) return { text: "Upcoming", bg: "#FFF1D6", fg: "#9A6100" };
+  if (/new\s*launch|pre[-\s]?launch/i.test(s)) return { text: "New Launch", bg: "#FFE9D6", fg: "#B4530A" };
+  if (/under\s*construction/i.test(s)) return { text: "Under Construction", bg: "#E8F1FF", fg: "#2F5FC4" };
+  return { text: "Launching Soon", bg: "#FFF1D6", fg: "#9A6100" };
+}
+
+const bhkLine = (p) =>
+  [p.bhk ? `${p.bhk} BHK` : "", p.propertyType ? p.propertyType.replace(/^Flats\/Apartments$/i, "Apartments") : ""]
+    .filter(Boolean)
+    .join(" ");
+
+const placeLine = (p) => [p.locality, p.city].filter(Boolean).join(", ");
+
+function SectionTitle({ title, action, onAction }) {
+  return (
+    <View style={styles.sectionHead}>
+      <Text style={styles.sectionTitle} accessibilityRole="header">
+        {title}
+      </Text>
+      {action ? (
+        <PressableScale onPress={onAction} hitSlop={10} style={styles.viewAll} accessibilityRole="button">
+          <Text style={styles.viewAllText}>{action}</Text>
+          <Ionicons name="arrow-forward" size={14} color={brand.violet} />
+        </PressableScale>
+      ) : null}
+    </View>
+  );
+}
+
+// Listing titles read "3 BHK Apartments in DGS Sheetal Sky Tower, Oshiwara, ..."; the card heads
+// with the project name when there is one (not when the "in ..." part is just the locality).
+function cardName(p) {
+  const m = String(p.title || "").match(/\bin\s+([^,]+)/i);
+  const name = m && m[1].trim();
+  return name && name.toLowerCase() !== String(p.locality || "").toLowerCase() && name.toLowerCase() !== String(p.city || "").toLowerCase()
+    ? name
+    : p.title;
+}
+
+// Photo inset in a rounded card, name with a RERA tick, price + place, then small stats and a
+// "View" pill - the layout of a profile card, filled with listing facts.
+const FeaturedCard = React.memo(function FeaturedCard({ p, width, onOpen }) {
+  const name = cardName(p);
+  const place = placeLine(p);
+  return (
+    <PressableScale
+      to={0.98}
+      onPress={() => onOpen(p)}
+      style={[styles.fCard, { width }]}
+      accessibilityRole="button"
+      accessibilityLabel={[name, p.reraNumber && "RERA registered", p.price, place, p.bhk && `${p.bhk} BHK`, p.area].filter(Boolean).join(", ")}
+    >
+      <View style={[styles.fImageWrap, { height: Math.round((width - 16) * 0.8) }]}>
+        <Cover uri={p.image} style={StyleSheet.absoluteFill} iconSize={32} />
+        <HeartButton id={p.id} size={16} style={styles.fHeart} />
+      </View>
+      <View style={styles.fBody}>
+        <View style={styles.fNameRow}>
+          <Text style={styles.fTitle} numberOfLines={1}>
+            {name}
+          </Text>
+          {p.reraNumber ? <Ionicons name="checkmark-circle" size={16} color={colors.success} accessibilityElementsHidden importantForAccessibility="no" /> : null}
+        </View>
+        <Text style={styles.fDesc} numberOfLines={2}>
+          {p.price ? <Text style={styles.fPrice}>{p.price}</Text> : null}
+          {p.price && place ? "  ·  " : ""}
+          {place}
+        </Text>
+        <View style={styles.fFoot}>
+          {p.bhk ? <Stat icon="bed-outline" text={`${p.bhk} BHK`} /> : null}
+          {p.area ? <Stat icon="resize-outline" text={p.area} /> : null}
+          <View style={{ flex: 1 }} />
+          <View style={styles.fPill}>
+            <Text style={styles.fPillText}>View</Text>
+            <Ionicons name="arrow-forward" size={13} color={brand.ink} />
+          </View>
+        </View>
+      </View>
+    </PressableScale>
+  );
+});
+
+function Stat({ icon, text }) {
+  return (
+    <View style={styles.fStat}>
+      <Ionicons name={icon} size={13} color={brand.inkSoft} />
+      <Text style={styles.fStatText} numberOfLines={1}>{text}</Text>
+    </View>
+  );
+}
+
+const UpcomingCard = React.memo(function UpcomingCard({ p, onOpen }) {
+  const badge = stageBadge(p);
+  return (
+    <PressableScale to={0.98} onPress={() => onOpen(p)} style={styles.uCard} accessibilityRole="button" accessibilityLabel={`${p.title}, ${badge.text}, ${placeLine(p)}`}>
+      <Cover uri={p.image} style={styles.uImage} iconSize={20} />
+      <View style={styles.uBody}>
+        <View style={[styles.uBadge, { backgroundColor: badge.bg }]}>
+          <Text style={[styles.uBadgeText, { color: badge.fg }]} numberOfLines={1}>
+            {badge.text}
+          </Text>
+        </View>
+        <Text style={styles.uTitle} numberOfLines={1}>
+          {p.title}
+        </Text>
+        <Text style={styles.uMeta} numberOfLines={1}>
+          {placeLine(p)}
+        </Text>
+        {p.bhk ? <Text style={styles.uMeta}>{`${p.bhk} BHK`}</Text> : null}
+      </View>
+    </PressableScale>
+  );
+});
+
 export default function HomeScreen({ navigation }) {
-  const { user } = useAuth();
-  const [
-    city,
-    setCity,
-    {
-      detectingLocation,
-      exactLocation,
-      fullAddress,
-      locationTitle,
-      fetchCurrentLocation,
-      setLocation,
-    },
-  ] = useCity();
-
-  const [pickCity, setPickCity] = useState(false);
-  const [refreshing, setRefreshing] = useState(false);
-  const [activeCategory, setActiveCategory] = useState("Buy");
-  const [searchedText, setSearchedText] = useState("");
-  const [notifications, setNotifications] = useState([]);
-  const [searchHistory, setSearchHistory] = useState([]);
-  const [isLocatingGps, setIsLocatingGps] = useState(false);
+  const { token, openLoginPrompt } = useAuth();
+  const { width: W } = useWindowDimensions();
+  const [city, setCity, { detectingLocation }] = useCity();
   const [selectedLocality, setSelectedLocality] = useState("");
+  const [searchHistory, setSearchHistory] = useState([]);
+  const [refreshing, setRefreshing] = useState(false);
+  const [unread, setUnread] = useState(0);
+  const [loanSheet, setLoanSheet] = useState(null); // null | "emi" | "eligibility"
+  const [recentOpen, setRecentOpen] = useState(false);
+  const [tabsWidth, setTabsWidth] = useState(0);
+  const focused = useIsFocused(); // pauses the rolling search hint while Home is hidden
 
-  const head = useEntrance(0, 12);
-  const notifPulse = usePulse(0.92, 1.14, 1500);
+  const heroAnim = useEntrance(0, 14);
+  const cardW = Math.min(Math.round((W - 40) / 1.55), 250);
 
-  const displayLocation = useMemo(() => {
-    if (detectingLocation || isLocatingGps) return "Detecting location...";
-    if (selectedLocality && city) return `${selectedLocality}, ${city}`;
-    if (!locationTitle && !city && !exactLocation) return "All Locations";
-    return getCleanLocalityAndCity(locationTitle, city, exactLocation);
-  }, [locationTitle, city, exactLocation, detectingLocation, isLocatingGps, selectedLocality]);
-
-  // Load and subscribe to search history
   useEffect(() => {
     getSearchHistory().then(setSearchHistory).catch(() => {});
-    const unsub = subscribeSearchHistory(setSearchHistory);
-    return unsub;
+    return subscribeSearchHistory(setSearchHistory);
   }, []);
 
-  // Main data fetching based on current location and active category
+  // Real unread count (signed-in users only); refreshed whenever Home regains focus.
+  const loadUnread = useCallback(() => {
+    if (!token) return setUnread(0);
+    api.notifications().then((r) => setUnread(r?.unreadCount || 0)).catch(() => {});
+  }, [token]);
+  useEffect(() => {
+    loadUnread();
+    return navigation.addListener("focus", loadUnread);
+  }, [navigation, loadUnread]);
+
   const { data, loading, error, reload, refresh } = useApi(async () => {
     const base = {};
     if (city) base.city = city;
     if (selectedLocality) base.locality = selectedLocality;
-
-    if (activeCategory === "Commercial") {
-      base.propertyType = "Commercial";
-    } else if (activeCategory === "Rent") {
-      base.condition = "rent";
-    }
-
-    const latestSearch = searchHistory[0];
-    const historyParams = latestSearch?.query
-      ? { search: latestSearch.query }
-      : latestSearch?.locality
-      ? { locality: latestSearch.locality }
-      : latestSearch?.propertyType
-      ? { propertyType: latestSearch.propertyType }
-      : {};
-
-    const [recent, featured, launch, upcoming, top, facets, historyProps] =
-      await Promise.all([
-        api.properties({ ...base, limit: 10 }),
-        safe(api.properties({ ...base, featured: true, limit: 8 })),
-        safe(api.properties({ ...base, section: "new-launch", limit: 8 })),
-        safe(api.properties({ ...base, section: "upcoming", limit: 8 })),
-        safe(api.topRated(8)),
-        safe(api.facets()),
-        latestSearch
-          ? safe(api.properties({ ...historyParams, limit: 8 }))
-          : Promise.resolve({ items: [] }),
-      ]);
-
-    return { recent, featured, launch, upcoming, top, facets, historyProps };
-  }, [city, selectedLocality, activeCategory, searchHistory]);
+    const [featured, recent, launch, upcoming, insights] = await Promise.all([
+      safe(api.properties({ ...base, featured: true, limit: 8 })),
+      api.properties({ ...base, limit: 8 }),
+      safe(api.properties({ ...base, section: "new-launch", limit: 6 })),
+      safe(api.properties({ ...base, section: "upcoming", limit: 6 })),
+      safe(api.insights(city)),
+    ]);
+    return { featured, recent, launch, upcoming, insights };
+  }, [city, selectedLocality]);
 
   const onRefresh = async () => {
     setRefreshing(true);
-    await refresh();
+    await Promise.all([refresh(), loadUnread()]);
     setRefreshing(false);
   };
 
-  const first = (user?.name || "").split(" ")[0];
-  const initial = (user?.name || user?.phone || "U").charAt(0).toUpperCase();
-  const cities = data?.facets?.cities || [];
+  const openProperty = useCallback((p) => navigation.navigate("PropertyDetails", { id: p.id, preview: p }), [navigation]);
 
-  // Instant GPS Location Fetching
-  const handleInstantGpsFetch = async () => {
-    if (isLocatingGps || detectingLocation) return;
-    setIsLocatingGps(true);
-    try {
-      const res = await fetchCurrentLocation(cities);
-      if (res?.city) {
-        setSelectedLocality("");
-      }
-    } catch (err) {
-      console.log("[HomeScreen] GPS detection error:", err?.message);
-    } finally {
-      setIsLocatingGps(false);
-    }
+  // No property in the data is flagged "featured" yet, so fall back to the latest listings and
+  // title the rail honestly rather than calling them featured.
+  const featuredItems = data?.featured?.items?.length ? data.featured.items : data?.recent?.items || [];
+  const featuredTitle = data?.featured?.items?.length ? "Featured Properties" : city ? `Latest in ${city}` : "Latest Properties";
+
+  const upcomingItems = useMemo(() => {
+    const seen = new Set();
+    return [...(data?.upcoming?.items || []), ...(data?.launch?.items || [])].filter((p) => !seen.has(p.id) && seen.add(p.id)).slice(0, 8);
+  }, [data]);
+
+  const insights = data?.insights;
+  const priceData = (insights?.priceByBhk || []).map((b) => ({ label: `${b.bhk} BHK`, value: b.medianPrice }));
+  const stageData = (insights?.listingsByStage || []).map((s) => ({ label: s.stage, short: STAGE_SHORT[s.stage] || s.stage, value: s.listings }));
+
+  const runSearch = (params) => {
+    navigation.navigate("Search", { city: city || "", locality: selectedLocality || "", ...params });
   };
 
-  // Submit search from pill bar
-  const onSubmitSearch = () => {
-    const q = (searchedText || "").trim();
-    if (!q) {
-      navigation.navigate("Explore");
-      return;
-    }
-    addSearchHistory({
-      query: q,
-      city: city || "",
-      locality: selectedLocality || "",
-      propertyType: activeCategory === "Commercial" ? "Commercial" : "",
-    });
-    navigation.navigate("Search", {
-      city: city || "",
-      locality: selectedLocality || "",
-      search: q,
-      propertyType: activeCategory === "Commercial" ? "Commercial" : "",
-    });
-  };
+  // The search bar opens the full search form (context tabs, location, filters).
+  const openSearch = (context) =>
+    navigation.navigate("SearchFilters", { city: city || "", locality: selectedLocality || "", ...(context ? { context } : {}) });
 
-  // Handle Category Click
-  const handleSelectCategory = (catId) => {
-    setActiveCategory(catId);
-    if (catId === "Projects") {
-      navigation.navigate("NewProject");
-    } else if (catId === "Invest") {
-      navigation.navigate("Search", { city: city || "", sort: "rating" });
-    }
-  };
-
-  // Re-run previous search
-  const handleRecentSearchTap = (item) => {
-    if (item.city) setCity(item.city);
-    if (item.locality) setSelectedLocality(item.locality);
+  const rerunSearch = (item) => {
+    if (item.city && item.city !== city) setCity(item.city);
     navigation.navigate("Search", {
       city: item.city || city || "",
       locality: item.locality || "",
@@ -257,794 +251,418 @@ export default function HomeScreen({ navigation }) {
     });
   };
 
-  const rail = (title, subtitle, res, actionLabel = "See all", action) => {
-    const items = res?.items || [];
-    if (!items.length) return null;
-    return (
-      <View style={{ marginTop: 26 }}>
-        <SectionHeader
-          title={title}
-          subtitle={subtitle}
-          action={action ? actionLabel : undefined}
-          onAction={action}
-        />
-        <FlatList
-          horizontal
-          data={items}
-          keyExtractor={(i) => i.id}
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={{ paddingHorizontal: 20, gap: 14 }}
-          renderItem={({ item, index }) => (
-            <PropertyCard property={item} variant="hero" index={index} />
-          )}
-        />
-      </View>
-    );
+  const onQuickAction = (key) => {
+    if (key === "resume") {
+      if (searchHistory[0]) rerunSearch(searchHistory[0]);
+      else openSearch();
+    } else if (key === "wishlist") {
+      if (token) navigation.navigate("Saved");
+      else openLoginPrompt({ reason: "general", title: "Sign In to See Your Wishlist", message: "Sign in to save properties and find them here on any device." });
+    } else if (key === "recommend") {
+      // Top-rated listings in the user's city, narrowed by their most recent search if any.
+      const last = searchHistory[0];
+      runSearch({ sort: "rating", propertyType: last?.propertyType || "", bhk: last?.bhk || "" });
+    } else if (key === "recent") {
+      setRecentOpen(true);
+    }
   };
+
+  const cityLabel = detectingLocation ? "Locating…" : selectedLocality || city || "All India";
 
   return (
     <Screen
-      refreshControl={
-        <RefreshControl
-          refreshing={refreshing}
-          onRefresh={onRefresh}
-          tintColor={colors.primary}
-          colors={[colors.primary]}
-        />
-      }
+      refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={brand.violet} colors={[brand.violet]} />}
     >
-      {/* ======================================================
-          1. TOP BRAND HEADER & PROFILE
-      ====================================================== */}
-      <Animated.View style={[styles.topHeader, head]}>
-        <View style={styles.brandRow}>
-          {/* Stylized App Icon Logo (Matches CP design) */}
-          <LinearGradient
-            colors={["#8B5CF6", "#6D28D9"]}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 1 }}
-            style={styles.logoBadge}
-          >
-            <Text style={styles.logoBadgeText}>CP</Text>
-          </LinearGradient>
-          <View style={{ marginLeft: 10 }}>
-            <Text style={styles.brandTitle}>Compare</Text>
-            <Text style={styles.brandTitleSub}>Projects</Text>
-          </View>
-        </View>
+      {/* Architecture bleeding in from the top-right, faded into the canvas. */}
+      <View style={[styles.heroImageWrap, { width: W * 0.58 }]} pointerEvents="none">
+        <Image source={HERO_IMAGE} style={styles.heroImage} resizeMode="cover" fadeDuration={0} />
+        <View style={[StyleSheet.absoluteFill, styles.heroWash]} />
+        <LinearGradient
+          colors={[colors.ivory, "rgba(251,249,255,0.5)", "rgba(251,249,255,0)"]}
+          locations={[0, 0.45, 0.85]}
+          start={{ x: 0, y: 0.5 }}
+          end={{ x: 1, y: 0.5 }}
+          style={StyleSheet.absoluteFill}
+        />
+        <LinearGradient colors={["rgba(251,249,255,0)", colors.ivory]} locations={[0.55, 1]} style={StyleSheet.absoluteFill} />
+      </View>
 
-        <View style={styles.headerRightActions}>
+      <View style={styles.header}>
+        <Logo tone="dark" size={30} wordSize={17} />
+        <View style={styles.headerRight}>
+          <PressableScale onPress={() => navigation.navigate("Location")} accessibilityRole="button" accessibilityLabel={`Location: ${cityLabel}. Change location`}>
+            <GlassView level="regular" blur borderRadius={radius.pill} style={styles.cityPill}>
+              <Ionicons name="location" size={14} color={brand.violet} />
+              <Text style={styles.cityText} numberOfLines={1}>
+                {cityLabel}
+              </Text>
+              <Ionicons name="chevron-down" size={13} color={brand.ink} />
+            </GlassView>
+          </PressableScale>
           <PressableScale
-            to={0.92}
-            style={styles.headerActionBtn}
             onPress={() => navigation.navigate("Notification")}
             accessibilityRole="button"
-            accessibilityLabel="Open notifications"
+            accessibilityLabel={unread ? `Notifications, ${unread} unread` : "Notifications"}
           >
-            <Ionicons name="notifications-outline" size={22} color={colors.ink} />
-            <Animated.View
-              style={[
-                styles.notificationDot,
-                { transform: [{ scale: notifPulse }] },
-              ]}
-            >
-              <Text style={styles.notificationDotText}>2</Text>
-            </Animated.View>
+            <GlassView level="regular" blur borderRadius={21} style={styles.bell}>
+              <Ionicons name="notifications" size={19} color={brand.ink} />
+              {unread > 0 ? (
+                <View style={styles.bellBadge}>
+                  <Text style={styles.bellBadgeText}>{unread > 9 ? "9+" : unread}</Text>
+                </View>
+              ) : null}
+            </GlassView>
           </PressableScale>
+        </View>
+      </View>
 
-          <PressableScale
-            to={0.92}
-            style={styles.headerProfileBtn}
-            onPress={() => navigation.navigate("Profile")}
-            accessibilityRole="button"
-            accessibilityLabel="Open profile"
-          >
-            {user ? (
-              <LinearGradient
-                colors={["#8B5CF6", "#7C3AED"]}
-                style={styles.avatarCircle}
+      <View style={styles.hero}>
+        <Text style={styles.h1} accessibilityRole="header">
+          Find Your{"\n"}Dream <Text style={{ color: brand.violet }}>Property</Text>
+        </Text>
+        <Text style={styles.heroSub}>Compare projects, prices and{"\n"}amenities — all in one place.</Text>
+      </View>
+
+      {/* Folder-style tabs sitting on the search bar's top-left edge. */}
+      <View style={styles.searchBlock}>
+        <View style={styles.searchTabs} accessibilityRole="tablist" onLayout={(e) => setTabsWidth(e.nativeEvent.layout.width)}>
+          {SEARCH_TABS.map((t, i) => (
+            <React.Fragment key={t.context}>
+              {i > 0 ? <View style={styles.searchTabDivider} /> : null}
+              <PressableScale
+                to={0.95}
+                onPress={() => openSearch(t.context)}
+                style={styles.searchTab}
+                accessibilityRole="tab"
+                accessibilityLabel={t.label}
+                accessibilityHint={`Opens search with ${t.label} selected`}
               >
-                <Text style={styles.avatarText}>{initial}</Text>
-              </LinearGradient>
-            ) : (
-              <View style={styles.avatarPlaceholder}>
-                <Ionicons name="person-outline" size={18} color="#6D28D9" />
+                <Ionicons name={t.icon} size={14} color={brand.violet} />
+                <Text style={styles.searchTabText} numberOfLines={1} maxFontSizeMultiplier={1.3}>{t.label}</Text>
+              </PressableScale>
+            </React.Fragment>
+          ))}
+        </View>
+
+        <PressableScale onPress={() => openSearch()} to={0.98} accessibilityRole="search" accessibilityLabel="Search properties" accessibilityHint="Opens search with filters">
+          <GlassView level="strong" borderRadius={radius.lg} style={[styles.search, styles.searchAttached]}>
+            {/* Covers the bar's top border under the tabs so the two read as one shape. */}
+            {tabsWidth ? <View pointerEvents="none" style={[styles.searchSeam, { width: tabsWidth }]} /> : null}
+            <Ionicons name="search" size={19} color={brand.inkSoft} style={{ marginLeft: 4 }} />
+            <RollingPlaceholder active={focused} style={styles.searchInput} />
+          </GlassView>
+        </PressableScale>
+      </View>
+
+      <Animated.View style={heroAnim}>
+        <View style={styles.quickRow}>
+          {QUICK_ACTIONS.map((a) => (
+            <PressableScale
+              key={a.key}
+              to={0.95}
+              onPress={() => onQuickAction(a.key)}
+              style={[styles.quickTile, { width: (W - 50) / 2 }]}
+              accessibilityRole="button"
+              accessibilityLabel={a.label}
+            >
+              <View style={[styles.quickIcon, { backgroundColor: a.bg }]}>
+                <Ionicons name={a.icon} size={18} color={a.fg} />
               </View>
-            )}
-          </PressableScale>
+              <Text style={styles.quickLabel} numberOfLines={1} maxFontSizeMultiplier={1.2}>
+                {a.label}
+              </Text>
+            </PressableScale>
+          ))}
         </View>
       </Animated.View>
 
-      {/* ======================================================
-          2. LOCATION FETCHING & SELECTION BAR (Unified Pill with GPS inside)
-      ====================================================== */}
-      <View style={styles.locationBarWrapper}>
-        <View style={styles.locationPill}>
-          <TouchableOpacity
-            activeOpacity={0.75}
-            onPress={() => navigation.navigate("Location")}
-            style={styles.locationMainPressable}
-            accessibilityRole="button"
-            accessibilityLabel="Change location"
-          >
-            <View style={styles.locationPinIconBox}>
-              <Ionicons name="location" size={14} color="#FFFFFF" />
-            </View>
-            <View style={styles.locationTextBox}>
-              <Text style={styles.locationSubText}>CURRENT LOCATION</Text>
-              <Text style={styles.locationMainText} numberOfLines={1} ellipsizeMode="tail">
-                {displayLocation}
-              </Text>
-            </View>
-            <Ionicons name="chevron-down" size={13} color="#6D28D9" style={styles.locationChevron} />
-          </TouchableOpacity>
-
-          {/* Vertical subtle divider */}
-          <View style={styles.locationDivider} />
-
-          {/* 1-Tap Instant Live GPS Locate Button Placed INSIDE Location Section */}
-          <PressableScale
-            to={0.88}
-            onPress={handleInstantGpsFetch}
-            style={styles.gpsInsideBtn}
-            accessibilityRole="button"
-            accessibilityLabel="Detect live GPS location"
-          >
-            {isLocatingGps || detectingLocation ? (
-              <ActivityIndicator size="small" color="#7C3AED" />
-            ) : (
-              <Ionicons name="locate" size={18} color="#7C3AED" />
-            )}
-          </PressableScale>
-        </View>
-      </View>
-
-      {/* ======================================================
-          3. HERO BANNER: "Find Your Next Home"
-      ====================================================== */}
-      <View style={styles.heroSection}>
-        {/* Modern Penthouse Terrace Illustration Floating in Top-Right */}
-        <View style={styles.heroImageWrapper} pointerEvents="none">
-          <Image
-            source={require("../../assets/hero_luxury_home.jpg")}
-            style={styles.heroBuildingImage}
-            resizeMode="cover"
-          />
-          {/* Subtle gradient overlay to blend into background */}
-          <LinearGradient
-            colors={[
-              colors.ivory,
-              "rgba(248, 245, 255, 0.4)",
-              "transparent",
-            ]}
-            start={{ x: 0, y: 0.5 }}
-            end={{ x: 1, y: 0.5 }}
-            style={StyleSheet.absoluteFill}
-          />
-          <LinearGradient
-            colors={[
-              "transparent",
-              colors.ivory,
-            ]}
-            start={{ x: 0.5, y: 0.5 }}
-            end={{ x: 0.5, y: 1 }}
-            style={StyleSheet.absoluteFill}
-          />
-        </View>
-
-        <Text style={styles.heroUppercaseTag}>
-          DISCOVER  ·  COMPARE  ·  VISIT  ·  OWN
-        </Text>
-        <Text style={styles.heroMainTitle}>
-          Find Your{"\n"}Next{" "}
-          <Text style={styles.heroHighlightText}>Home</Text>
-        </Text>
-        <Text style={styles.heroSubText}>
-          AI-powered property discovery, comparison and buying journey.
-        </Text>
-      </View>
-
-      {/* ======================================================
-          4. PILL SEARCH BAR (With Glow & Mic Icon)
-      ====================================================== */}
-      <View style={styles.searchBarWrapper}>
-        <View style={styles.searchPill}>
-          <Ionicons name="sparkles" size={19} color="#8B5CF6" style={{ marginLeft: 6, marginRight: 8 }} />
-          <TextInput
-            style={styles.searchInput}
-            placeholder="Search location, project, builder..."
-            placeholderTextColor="#8F83A8"
-            value={searchedText}
-            onChangeText={setSearchedText}
-            onSubmitEditing={onSubmitSearch}
-            returnKeyType="search"
-          />
-          <TouchableOpacity
-            onPress={onSubmitSearch}
-            style={styles.micBtn}
-            accessibilityLabel="Voice search"
-          >
-            <Ionicons name="mic-outline" size={21} color="#6D28D9" />
-          </TouchableOpacity>
-        </View>
-      </View>
-
-      {/* ======================================================
-          5. CATEGORY CIRCULAR BUTTONS ROW (Buy, Rent, Projects, Commercial, Invest)
-      ====================================================== */}
-      <View style={styles.categoriesRow}>
-        {CATEGORIES.map((cat) => {
-          const isActive = activeCategory === cat.id;
-          return (
-            <PressableScale
-              key={cat.id}
-              to={0.92}
-              onPress={() => handleSelectCategory(cat.id)}
-              style={styles.categoryItem}
-            >
-              {isActive ? (
-                <LinearGradient
-                  colors={["#8B5CF6", "#6D28D9"]}
-                  start={{ x: 0, y: 0 }}
-                  end={{ x: 1, y: 1 }}
-                  style={[styles.categoryCircleActive, glowSubtle]}
-                >
-                  <Ionicons name={cat.icon} size={24} color="#FFFFFF" />
-                </LinearGradient>
-              ) : (
-                <View style={styles.categoryCircleInactive}>
-                  <Ionicons name={cat.icon} size={23} color="#4C1D95" />
-                </View>
-              )}
-              <Text
-                style={[
-                  styles.categoryLabel,
-                  isActive && styles.categoryLabelActive,
-                ]}
-              >
-                {cat.label}
-              </Text>
-            </PressableScale>
-          );
-        })}
-      </View>
-
-      {/* ======================================================
-          6. SEARCH HISTORY SECTION & RECENT SEARCH CHIPS
-          (Displays properties based on user's recent searches)
-      ====================================================== */}
-      {searchHistory.length > 0 ? (
-        <View style={styles.historySection}>
-          <View style={styles.historyHeaderRow}>
-            <View style={{ flexDirection: "row", alignItems: "center" }}>
-              <Ionicons name="time-outline" size={17} color="#6D28D9" style={{ marginRight: 6 }} />
-              <Text style={styles.historySectionTitle}>Based on Your Search History</Text>
-            </View>
-            <TouchableOpacity onPress={clearSearchHistory}>
-              <Text style={styles.clearHistoryLink}>Clear</Text>
-            </TouchableOpacity>
-          </View>
-
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={styles.historyChipsScroll}
-          >
-            {searchHistory.slice(0, 6).map((item) => (
-              <PressableScale
-                key={item.id}
-                to={0.94}
-                onPress={() => handleRecentSearchTap(item)}
-                style={styles.historyChip}
-              >
-                <Ionicons name="search" size={12} color="#7C3AED" style={{ marginRight: 5 }} />
-                <Text style={styles.historyChipText} numberOfLines={1}>
-                  {item.label}
-                </Text>
-              </PressableScale>
-            ))}
-          </ScrollView>
-
-          {/* Property carousel tailored to search history */}
-          {data?.historyProps?.items?.length > 0 ? (
-            <View style={{ marginTop: 14 }}>
-              <FlatList
-                horizontal
-                data={data.historyProps.items}
-                keyExtractor={(i) => `hist_${i.id}`}
-                showsHorizontalScrollIndicator={false}
-                contentContainerStyle={{ paddingHorizontal: 20, gap: 14 }}
-                renderItem={({ item, index }) => (
-                  <PropertyCard property={item} variant="hero" index={index} />
-                )}
-              />
-            </View>
-          ) : null}
-        </View>
-      ) : null}
-
-      {/* ======================================================
-          9. PROPERTY RAILS (Location based, New Launches, Top Rated)
-      ====================================================== */}
       {loading && !data ? (
-        <View style={{ padding: 20, paddingTop: 28 }}>
+        <View style={{ paddingHorizontal: 20, paddingTop: 24 }}>
           <LoadingState rows={3} />
         </View>
       ) : error && !data ? (
-        <ErrorState
-          title="Unable to load properties"
-          error={error}
-          onRetry={reload}
-        />
+        <ErrorState title="Unable to load properties" error={error} onRetry={reload} />
       ) : (
         <>
-          {/* Featured in current Location */}
-          {rail(
-            selectedLocality
-              ? `Featured in ${selectedLocality}`
-              : city
-              ? `Featured in ${city}`
-              : "Featured Properties",
-            "Hand-picked for your lifestyle",
-            data.featured,
-            "See all",
-            () =>
-              navigation.navigate("Search", {
-                city: city || "",
-                locality: selectedLocality || "",
-                featured: true,
-              }),
-          )}
+          {featuredItems.length ? (
+            <View style={styles.section}>
+              <SectionTitle title={featuredTitle} action="View All" onAction={() => runSearch(data?.featured?.items?.length ? { featured: true } : {})} />
+              <FlatList
+                horizontal
+                data={featuredItems}
+                keyExtractor={(i) => i.id}
+                showsHorizontalScrollIndicator={false}
+                // Settle on a whole card after a swipe (card width + the rail's 12pt gap).
+                snapToInterval={cardW + 12}
+                decelerationRate="fast"
+                contentContainerStyle={styles.rail}
+                renderItem={({ item }) => <FeaturedCard p={item} width={cardW} onOpen={openProperty} />}
+              />
+            </View>
+          ) : null}
 
-          {/* New Launches */}
-          {rail(
-            "New Launches",
-            city ? `Fresh projects in ${city}` : "Fresh projects in the market",
-            data.launch,
-            "Explore",
-            () => navigation.navigate("NewProject"),
-          )}
-
-          {/* Top Rated */}
-          {data.top?.items?.length
-            ? rail(
-                "Top Rated Projects",
-                "Loved by buyers on Compare Project",
-                data.top,
-                "See all",
-                () =>
-                  navigation.navigate("Search", {
-                    city: city || "",
-                    sort: "rating",
-                  }),
-              )
-            : null}
-
-          {/* Upcoming */}
-          {rail(
-            "Upcoming Projects",
-            "Plan ahead and invest early",
-            data.upcoming,
-            "Explore",
-            () => navigation.navigate("NewProject"),
-          )}
-
-          {/* Post Property Banner */}
-          <PressableScale
-            to={0.98}
-            onPress={() => navigation.navigate("Post")}
-            style={styles.postCtaContainer}
-          >
+          {/* Home loan banner: opens the eligibility calculator (estimates, no lender offers). */}
+          <PressableScale to={0.99} onPress={() => setLoanSheet("eligibility")} style={styles.loan} accessibilityRole="button" accessibilityLabel="Get your home loan easily. Check eligibility">
+            <LinearGradient colors={["#F4EDFF", "#EADFFF"]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={StyleSheet.absoluteFill} />
+            <Image source={HERO_IMAGE} style={styles.loanImage} resizeMode="cover" />
             <LinearGradient
-              colors={["#2A1060", colors.ink]}
-              start={{ x: 0, y: 0 }}
-              end={{ x: 1, y: 1 }}
+              colors={["#F2EAFF", "rgba(242,234,255,0.7)", "rgba(242,234,255,0)"]}
+              locations={[0, 0.4, 0.75]}
+              start={{ x: 0, y: 0.5 }}
+              end={{ x: 1, y: 0.5 }}
               style={StyleSheet.absoluteFill}
             />
-            <View style={{ flex: 1, zIndex: 1 }}>
-              <Text style={styles.postCtaTitle}>Have a property to sell?</Text>
-              <Text style={styles.postCtaSub}>
-                Post it in minutes and reach thousands of verified buyers.
+            <View style={styles.loanText}>
+              <Text style={styles.loanTitle}>
+                Get Your{"\n"}
+                <Text style={{ color: brand.violet }}>Home Loan Easily</Text>
               </Text>
+              <Text style={styles.loanSub}>Estimate your EMI and how much you could borrow — in seconds.</Text>
             </View>
-            <View style={[styles.postCtaAddBtn, glow]}>
-              <Ionicons name="add" size={28} color="#FFFFFF" />
+            <View style={styles.loanSide}>
+              <GlassView level="strong" borderRadius={12} style={styles.loanChip}>
+                <Text style={styles.loanChipSmall}>Free estimate</Text>
+                <Text style={styles.loanChipBig}>No sign-up</Text>
+              </GlassView>
+              <View style={styles.loanBtn}>
+                <Text style={styles.loanBtnText}>Check Eligibility</Text>
+                <Ionicons name="arrow-forward" size={13} color={brand.ink} />
+              </View>
             </View>
           </PressableScale>
+
+          {upcomingItems.length ? (
+            <View style={styles.section}>
+              <SectionTitle title="Upcoming Properties" action="View All" onAction={() => navigation.navigate("NewProject")} />
+              <FlatList
+                horizontal
+                data={upcomingItems}
+                keyExtractor={(i) => `u_${i.id}`}
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={styles.rail}
+                renderItem={({ item }) => <UpcomingCard p={item} onOpen={openProperty} />}
+              />
+            </View>
+          ) : null}
+
+          <PressableScale to={0.99} onPress={() => setLoanSheet("emi")} style={styles.emiCard} accessibilityRole="button" accessibilityLabel="EMI calculator. Calculate your monthly EMI">
+            <LinearGradient colors={gradients.cta} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.emiIcon}>
+              <Ionicons name="calculator" size={22} color="#FFFFFF" />
+            </LinearGradient>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.emiTitle}>EMI Calculator</Text>
+              <Text style={styles.emiSub}>Calculate your monthly EMI and plan your budget.</Text>
+            </View>
+            <View style={styles.emiBtn}>
+              <Text style={styles.emiBtnText}>Calculate EMI</Text>
+              <Ionicons name="arrow-forward" size={13} color={brand.violet} />
+            </View>
+          </PressableScale>
+
+          {priceData.length || stageData.some((s) => s.value > 0) ? (
+            <View style={styles.section}>
+              <View style={styles.sectionHead}>
+                <Text style={styles.sectionTitle} accessibilityRole="header">
+                  Market Analytics
+                </Text>
+                <PressableScale onPress={() => navigation.navigate("Location")} style={styles.marketCity} accessibilityRole="button" accessibilityLabel={`Market: ${city || "All India"}. Change city`}>
+                  <Text style={styles.marketCityText}>{city || "All India"}</Text>
+                  <Ionicons name="chevron-down" size={12} color={brand.ink} />
+                </PressableScale>
+              </View>
+              <View style={styles.chartsRow}>
+                {priceData.length ? (
+                  <View style={styles.chartCard}>
+                    <Text style={styles.chartTitle}>Price by BHK</Text>
+                    <Text style={styles.chartSub}>Median asking price</Text>
+                    <MiniLineChart key={`p_${city}`} data={priceData} formatValue={formatInr} />
+                  </View>
+                ) : null}
+                {stageData.some((s) => s.value > 0) ? (
+                  <View style={styles.chartCard}>
+                    <Text style={styles.chartTitle}>Listings by Stage</Text>
+                    <Text style={styles.chartSub}>Active listings</Text>
+                    <MiniBarChart key={`s_${city}`} data={stageData} formatValue={(v) => v.toLocaleString("en-IN")} unit="" />
+                  </View>
+                ) : null}
+              </View>
+              <Text style={styles.chartNote}>
+                Based on {insights.listings.toLocaleString("en-IN")} active listings{city ? ` in ${city}` : ""}. Tap a point or bar for its value.
+              </Text>
+            </View>
+          ) : null}
         </>
       )}
 
-      {/* City Picker Modal */}
-      <CityPicker
-        visible={pickCity}
-        onClose={() => setPickCity(false)}
-        cities={cities}
-        value={city}
-        onSelect={(c) => {
-          setCity(c);
-          setSelectedLocality("");
-        }}
-      />
+      <LoanCalculatorSheet visible={!!loanSheet} initialTab={loanSheet || "emi"} onClose={() => setLoanSheet(null)} />
+
+      <BottomSheet visible={recentOpen} onClose={() => setRecentOpen(false)} title="Recent Searches">
+        {searchHistory.length ? (
+          <>
+            {searchHistory.slice(0, 10).map((item) => (
+              <PressableScale
+                key={item.id}
+                onPress={() => {
+                  setRecentOpen(false);
+                  rerunSearch(item);
+                }}
+                style={styles.recentRow}
+                accessibilityRole="button"
+              >
+                <Ionicons name="time-outline" size={18} color={brand.violet} />
+                <Text style={styles.recentText} numberOfLines={1}>
+                  {item.label || item.query}
+                </Text>
+                <Ionicons name="chevron-forward" size={16} color={brand.inkSoft} />
+              </PressableScale>
+            ))}
+            <PressableScale onPress={clearSearchHistory} style={styles.clearBtn} accessibilityRole="button">
+              <Text style={styles.clearText}>Clear search history</Text>
+            </PressableScale>
+          </>
+        ) : (
+          <Text style={styles.emptyRecent}>Your searches will appear here.</Text>
+        )}
+      </BottomSheet>
     </Screen>
   );
 }
 
+const cardShadow = {
+  shadowColor: brand.deep,
+  shadowOpacity: 0.08,
+  shadowRadius: 12,
+  shadowOffset: { width: 0, height: 5 },
+  elevation: 3,
+};
+
 const styles = StyleSheet.create({
-  // 1. Top Header
-  topHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    paddingHorizontal: 20,
-    paddingTop: 8,
-    paddingBottom: 6,
-  },
-  brandRow: {
-    flexDirection: "row",
-    alignItems: "center",
-  },
-  logoBadge: {
-    width: 38,
-    height: 38,
-    borderRadius: 12,
+  heroImageWrap: { position: "absolute", top: 0, right: 0, height: 270, overflow: "hidden" },
+  heroImage: { width: "100%", height: "100%" },
+  heroWash: { backgroundColor: "rgba(190,160,255,0.22)" },
+  header: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: 20, minHeight: 48 },
+  headerRight: { flexDirection: "row", alignItems: "center", gap: 10 },
+  cityPill: { flexDirection: "row", alignItems: "center", gap: 6, paddingHorizontal: 12, height: 38, maxWidth: 150 },
+  cityText: { fontSize: 13.5, fontWeight: "700", color: brand.ink, flexShrink: 1 },
+  bell: { width: 42, height: 42, alignItems: "center", justifyContent: "center" },
+  bellBadge: {
+    position: "absolute",
+    top: 6,
+    right: 6,
+    minWidth: 16,
+    height: 16,
+    borderRadius: 8,
+    paddingHorizontal: 3,
+    backgroundColor: "#E5484D",
     alignItems: "center",
     justifyContent: "center",
-    shadowColor: "#7C3AED",
-    shadowOpacity: 0.35,
-    shadowRadius: 8,
-    shadowOffset: { width: 0, height: 3 },
-    elevation: 4,
+    borderWidth: 1.5,
+    borderColor: "#FFFFFF",
   },
-  logoBadgeText: {
-    color: "#FFFFFF",
-    fontSize: 18,
-    fontWeight: "900",
-    letterSpacing: -0.5,
+  bellBadgeText: { color: "#FFFFFF", fontSize: 9, fontWeight: "800" },
+  hero: { paddingHorizontal: 20, marginTop: 22 },
+  h1: { fontFamily: fonts.serif, fontSize: 34, lineHeight: 40, fontWeight: "700", color: brand.ink, letterSpacing: -0.8 },
+  heroSub: { fontSize: 14.5, lineHeight: 21, color: brand.inkSoft, marginTop: 10 },
+  searchBlock: { marginHorizontal: 20, marginTop: 20 },
+  searchTabs: {
+    ...surfaces.glassStrong,
+    alignSelf: "flex-start",
+    flexDirection: "row",
+    alignItems: "center",
+    borderBottomWidth: 0,
+    borderTopLeftRadius: 14,
+    borderTopRightRadius: 14,
+    paddingHorizontal: 4,
   },
-  brandTitle: {
-    fontSize: 15,
-    fontWeight: "800",
-    color: "#180D33",
-    lineHeight: 17,
-    letterSpacing: -0.3,
-  },
-  brandTitleSub: {
-    fontSize: 15,
-    fontWeight: "800",
-    color: "#6D28D9",
-    lineHeight: 17,
-    letterSpacing: -0.3,
-  },
-  headerRightActions: {
+  searchTab: { flexDirection: "row", alignItems: "center", gap: 5, paddingHorizontal: 12, minHeight: 44 },
+  searchTabDivider: { width: 1, height: 16, backgroundColor: colors.line },
+  searchTabText: { fontSize: 13, fontWeight: "700", color: brand.ink },
+  search: { flexDirection: "row", alignItems: "center", paddingHorizontal: 12, paddingVertical: 6, gap: 8 },
+  searchAttached: { borderTopLeftRadius: 0 },
+  searchSeam: { position: "absolute", top: -1, left: -1, height: 2, backgroundColor: surfaces.glassStrong.backgroundColor },
+  searchInput: { flex: 1, fontSize: 14, color: brand.ink, minHeight: 44 },
+  // 2 x 2 grid of wide shortcut cards: tinted icon tile + one-line label.
+  quickRow: { flexDirection: "row", flexWrap: "wrap", gap: 10, paddingHorizontal: 20, marginTop: 16 },
+  quickTile: {
     flexDirection: "row",
     alignItems: "center",
     gap: 10,
+    minHeight: 58,
+    paddingHorizontal: 10,
+    paddingVertical: 10,
+    borderRadius: 18,
+    backgroundColor: "#FFFFFF",
+    borderWidth: 1,
+    borderColor: "#EFE8FB",
+    ...cardShadow,
   },
-  headerActionBtn: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: "rgba(255, 255, 255, 0.95)",
-    borderWidth: 1.2,
-    borderColor: "rgba(224, 215, 248, 0.9)",
-    alignItems: "center",
-    justifyContent: "center",
-    ...shadow.glass,
-  },
-  notificationDot: {
-    position: "absolute",
-    width: 14,
-    height: 14,
-    borderRadius: 7,
-    top: 4,
-    right: 4,
-    backgroundColor: "#EF4444",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  notificationDotText: {
-    color: "#FFFFFF",
-    fontSize: 8,
-    fontWeight: "bold",
-  },
-  headerProfileBtn: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    overflow: "hidden",
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: "rgba(255, 255, 255, 0.95)",
-    borderWidth: 1.2,
-    borderColor: "rgba(224, 215, 248, 0.9)",
-    ...shadow.glass,
-  },
-  avatarCircle: {
-    width: "100%",
-    height: "100%",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  avatarText: {
-    color: "#FFFFFF",
-    fontSize: 15,
-    fontWeight: "800",
-  },
-  avatarPlaceholder: {
-    width: "100%",
-    height: "100%",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-
-  // 2. Location Bar
-  locationBarWrapper: {
-    paddingHorizontal: 20,
-    marginTop: 10,
-  },
-  locationPill: {
+  quickIcon: { width: 38, height: 38, borderRadius: 12, alignItems: "center", justifyContent: "center" },
+  quickLabel: { flex: 1, fontSize: 13.5, fontWeight: "700", color: brand.ink },
+  section: { marginTop: 26 },
+  sectionHead: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: 20, marginBottom: 12 },
+  sectionTitle: { fontFamily: fonts.serif, fontSize: 21, fontWeight: "700", color: brand.ink, letterSpacing: -0.3 },
+  viewAll: { flexDirection: "row", alignItems: "center", gap: 4, minHeight: 32 },
+  viewAllText: { fontSize: 13, fontWeight: "800", color: brand.violet },
+  rail: { paddingHorizontal: 20, gap: 12, paddingBottom: 6 },
+  fCard: { backgroundColor: "#FFFFFF", borderRadius: 26, padding: 8, borderWidth: 1, borderColor: "#F0EAFB", ...cardShadow },
+  // Inset photo with its own rounded corners (the card's padding shows around it).
+  fImageWrap: { borderRadius: 20, overflow: "hidden", backgroundColor: brand.lavender },
+  fHeart: { position: "absolute", top: 8, right: 8 },
+  fBody: { paddingHorizontal: 6, paddingTop: 12, paddingBottom: 4 },
+  fNameRow: { flexDirection: "row", alignItems: "center", gap: 5 },
+  fTitle: { flexShrink: 1, fontSize: 15.5, fontWeight: "800", color: brand.ink },
+  fDesc: { fontSize: 12.5, lineHeight: 18, color: brand.inkSoft, marginTop: 4, minHeight: 36 },
+  fPrice: { fontSize: 13, fontWeight: "800", color: brand.ink },
+  fFoot: { flexDirection: "row", alignItems: "center", gap: 10, marginTop: 12 },
+  fStat: { flexDirection: "row", alignItems: "center", gap: 3, flexShrink: 1 },
+  fStatText: { fontSize: 11.5, fontWeight: "600", color: brand.inkSoft },
+  fPill: { flexDirection: "row", alignItems: "center", gap: 4, height: 32, paddingHorizontal: 12, borderRadius: radius.pill, backgroundColor: brand.lavender },
+  fPillText: { fontSize: 12.5, fontWeight: "800", color: brand.ink },
+  loan: { marginHorizontal: 20, marginTop: 24, borderRadius: radius.xl, overflow: "hidden", flexDirection: "row", padding: 16, minHeight: 150, borderWidth: 1, borderColor: "#E6DAFF" },
+  loanImage: { position: "absolute", right: 0, top: 0, bottom: 0, width: "58%", opacity: 0.9 },
+  loanText: { flex: 1.25, justifyContent: "center", paddingRight: 8 },
+  loanTitle: { fontFamily: fonts.serif, fontSize: 21, lineHeight: 26, fontWeight: "700", color: brand.ink },
+  loanSub: { fontSize: 12, lineHeight: 17, color: brand.inkSoft, marginTop: 6 },
+  loanSide: { flex: 1, justifyContent: "space-between", alignItems: "flex-end" },
+  loanChip: { paddingHorizontal: 10, paddingVertical: 6 },
+  loanChipSmall: { fontSize: 10.5, color: brand.inkSoft, fontWeight: "600" },
+  loanChipBig: { fontSize: 13, color: brand.violet, fontWeight: "800" },
+  loanBtn: { flexDirection: "row", alignItems: "center", gap: 4, backgroundColor: brand.goldBright, paddingHorizontal: 12, height: 36, borderRadius: radius.pill },
+  loanBtnText: { fontSize: 12.5, fontWeight: "800", color: brand.ink },
+  uCard: { width: 236, flexDirection: "row", gap: 10, padding: 8, backgroundColor: "#FFFFFF", borderRadius: radius.lg, borderWidth: 1, borderColor: "#EFE8FB", ...cardShadow },
+  uImage: { width: 72, height: 84, borderRadius: 12 },
+  uBody: { flex: 1, justifyContent: "center" },
+  uBadge: { alignSelf: "flex-start", paddingHorizontal: 8, paddingVertical: 2, borderRadius: radius.pill, marginBottom: 4 },
+  uBadgeText: { fontSize: 10, fontWeight: "800" },
+  uTitle: { fontSize: 13.5, fontWeight: "800", color: brand.ink },
+  uMeta: { fontSize: 11.5, color: brand.inkSoft, marginTop: 1 },
+  emiCard: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: "rgba(255, 255, 255, 0.94)",
-    borderWidth: 1.2,
-    borderColor: "rgba(215, 200, 248, 0.85)",
-    paddingVertical: 5,
-    paddingLeft: 8,
-    paddingRight: 6,
-    borderRadius: radius.pill,
-    ...shadow.glass,
-  },
-  locationMainPressable: {
-    flex: 1,
-    flexDirection: "row",
-    alignItems: "center",
-    paddingVertical: 3,
-  },
-  locationPinIconBox: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
-    backgroundColor: "#7C3AED",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  locationTextBox: {
-    flex: 1,
-    marginLeft: 8,
-    marginRight: 4,
-    justifyContent: "center",
-  },
-  locationSubText: {
-    fontSize: 9,
-    fontWeight: "800",
-    color: "#8B5CF6",
-    letterSpacing: 0.8,
-  },
-  locationMainText: {
-    fontSize: 13.5,
-    fontWeight: "700",
-    color: "#180D33",
-    marginTop: 1,
-  },
-  locationChevron: {
-    marginRight: 6,
-    marginLeft: 2,
-  },
-  locationDivider: {
-    width: 1,
-    height: 22,
-    backgroundColor: "rgba(215, 200, 248, 0.7)",
-    marginRight: 4,
-  },
-  gpsInsideBtn: {
-    width: 34,
-    height: 34,
-    borderRadius: 17,
-    backgroundColor: "rgba(139, 92, 246, 0.1)",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-
-  // 3. Hero Section
-  heroSection: {
-    paddingHorizontal: 20,
-    marginTop: 16,
-    position: "relative",
-    minHeight: 125,
-    justifyContent: "center",
-  },
-  heroImageWrapper: {
-    position: "absolute",
-    right: 0,
-    top: -10,
-    width: 175,
-    height: 155,
-    borderRadius: 20,
-    overflow: "hidden",
-  },
-  heroBuildingImage: {
-    width: "100%",
-    height: "100%",
-  },
-  heroUppercaseTag: {
-    fontSize: 10.5,
-    fontWeight: "800",
-    color: "#7E7398",
-    letterSpacing: 1.8,
-  },
-  heroMainTitle: {
-    fontSize: 32,
-    fontWeight: "900",
-    color: "#180D33",
-    lineHeight: 37,
-    marginTop: 4,
-    maxWidth: 240,
-    letterSpacing: -0.5,
-  },
-  heroHighlightText: {
-    color: "#8B5CF6",
-  },
-  heroSubText: {
-    fontSize: 13,
-    color: "#6E6285",
-    lineHeight: 18,
-    marginTop: 6,
-    maxWidth: 220,
-  },
-
-  // 4. Search Bar
-  searchBarWrapper: {
-    paddingHorizontal: 20,
-    marginTop: 16,
-  },
-  searchPill: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: "rgba(255, 255, 255, 0.96)",
-    borderWidth: 1.5,
-    borderColor: "#D8B4FE",
-    borderRadius: radius.pill,
-    paddingHorizontal: 12,
-    paddingVertical: 9,
-    shadowColor: "#8B5CF6",
-    shadowOpacity: 0.16,
-    shadowRadius: 10,
-    shadowOffset: { width: 0, height: 3 },
-    elevation: 3,
-  },
-  searchInput: {
-    flex: 1,
-    fontSize: 14,
-    color: "#180D33",
-    fontWeight: "500",
-    paddingVertical: 2,
-  },
-  micBtn: {
-    padding: 4,
-    marginLeft: 6,
-  },
-
-  // 5. Category Icons Row
-  categoriesRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    paddingHorizontal: 20,
-    marginTop: 20,
-  },
-  categoryItem: {
-    alignItems: "center",
-    width: 62,
-  },
-  categoryCircleActive: {
-    width: 54,
-    height: 54,
-    borderRadius: 27,
-    alignItems: "center",
-    justifyContent: "center",
-    shadowColor: "#7C3AED",
-    shadowOpacity: 0.4,
-    shadowRadius: 8,
-    shadowOffset: { width: 0, height: 4 },
-    elevation: 5,
-  },
-  categoryCircleInactive: {
-    width: 54,
-    height: 54,
-    borderRadius: 27,
-    backgroundColor: "rgba(255, 255, 255, 0.94)",
-    borderWidth: 1.2,
-    borderColor: "rgba(215, 200, 248, 0.9)",
-    alignItems: "center",
-    justifyContent: "center",
-    ...shadow.glass,
-  },
-  categoryLabel: {
-    fontSize: 12,
-    color: "#5B4F73",
-    fontWeight: "600",
-    marginTop: 6,
-    textAlign: "center",
-  },
-  categoryLabelActive: {
-    color: "#6D28D9",
-    fontWeight: "800",
-  },
-
-  // 6. Search History Section
-  historySection: {
-    marginTop: 26,
-  },
-  historyHeaderRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    paddingHorizontal: 20,
-    marginBottom: 10,
-  },
-  historySectionTitle: {
-    fontSize: 15,
-    fontWeight: "800",
-    color: "#180D33",
-  },
-  clearHistoryLink: {
-    fontSize: 12,
-    color: "#8B5CF6",
-    fontWeight: "700",
-  },
-  historyChipsScroll: {
-    paddingHorizontal: 20,
-    gap: 8,
-  },
-  historyChip: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: "rgba(255, 255, 255, 0.94)",
-    borderWidth: 1.2,
-    borderColor: "rgba(196, 181, 253, 0.7)",
-    paddingHorizontal: 12,
-    paddingVertical: 7,
-    borderRadius: radius.pill,
-    ...shadow.glass,
-  },
-  historyChipText: {
-    fontSize: 12,
-    fontWeight: "700",
-    color: "#3B2667",
-    maxWidth: 150,
-  },
-
-  // Post Property CTA
-  postCtaContainer: {
-    flexDirection: "row",
-    alignItems: "center",
+    gap: 12,
     marginHorizontal: 20,
-    marginTop: 28,
-    borderRadius: radius.xl,
-    padding: 20,
-    borderWidth: 1.2,
-    borderColor: "rgba(199, 125, 255, 0.45)",
-    overflow: "hidden",
-    position: "relative",
-    ...shadow.glassFloat,
+    marginTop: 22,
+    padding: 14,
+    borderRadius: radius.lg,
+    ...surfaces.glassStrong,
+    ...cardShadow,
   },
-  postCtaTitle: {
-    color: colors.ivory,
-    fontFamily: fonts.serif,
-    fontSize: 19,
-  },
-  postCtaSub: {
-    color: "rgba(255,255,255,0.75)",
-    fontSize: 12.5,
-    marginTop: 4,
-  },
-  postCtaAddBtn: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    backgroundColor: "#7C3AED",
-    alignItems: "center",
-    justifyContent: "center",
-    zIndex: 1,
-    marginLeft: 12,
-  },
+  emiIcon: { width: 46, height: 46, borderRadius: 14, alignItems: "center", justifyContent: "center" },
+  emiTitle: { fontSize: 15, fontWeight: "800", color: brand.ink },
+  emiSub: { fontSize: 11.5, lineHeight: 16, color: brand.inkSoft, marginTop: 2 },
+  emiBtn: { flexDirection: "row", alignItems: "center", gap: 4, borderWidth: 1.4, borderColor: brand.violet, paddingHorizontal: 11, height: 36, borderRadius: radius.pill },
+  emiBtnText: { fontSize: 12, fontWeight: "800", color: brand.violet },
+  marketCity: { flexDirection: "row", alignItems: "center", gap: 4, backgroundColor: "#FFFFFF", borderWidth: 1, borderColor: "#E6DAFF", paddingHorizontal: 10, height: 32, borderRadius: radius.pill },
+  marketCityText: { fontSize: 12.5, fontWeight: "700", color: brand.ink },
+  // Charts stacked one under the other, each full width.
+  chartsRow: { gap: 14, paddingHorizontal: 20 },
+  chartCard: { backgroundColor: "#FFFFFF", borderRadius: radius.lg, padding: 16, borderWidth: 1, borderColor: "#EFE8FB", ...cardShadow },
+  chartTitle: { fontSize: 15, fontWeight: "800", color: brand.ink },
+  chartSub: { fontSize: 12, color: brand.inkSoft, marginBottom: 10 },
+  chartNote: { fontSize: 11.5, color: brand.inkSoft, paddingHorizontal: 20, marginTop: 10 },
+  recentRow: { flexDirection: "row", alignItems: "center", gap: 12, minHeight: 50, borderBottomWidth: 1, borderBottomColor: "#F1ECFB" },
+  recentText: { flex: 1, fontSize: 14.5, color: brand.ink, fontWeight: "600" },
+  clearBtn: { alignSelf: "center", marginTop: 16, padding: 10 },
+  clearText: { color: colors.error, fontWeight: "700", fontSize: 13.5 },
+  emptyRecent: { color: brand.inkSoft, fontSize: 14, textAlign: "center", paddingVertical: 24 },
 });

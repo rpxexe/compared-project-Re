@@ -1,18 +1,12 @@
 import React, { useEffect, useRef } from "react";
-import {
-  Animated,
-  Dimensions,
-  Easing,
-  StyleSheet,
-  Text,
-  View,
-} from "react-native";
+import { Animated, Dimensions, Easing, StyleSheet, View } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import { StatusBar } from "expo-status-bar";
 import { LogoMark } from "../components/Logo";
 import { useAuth } from "../context/AuthContext";
 import exitAuthFlow from "../navigation/exitAuthFlow";
 import { colors, fonts } from "../theme";
+import Text, { AnimatedText } from "../components/AppText";
 
 const { width: W } = Dimensions.get("window");
 const TOWERS = [0.12, 0.3, 0.48, 0.66, 0.84];
@@ -100,7 +94,7 @@ export default function AuthWelcomeScreen({ navigation, route }) {
         <Animated.View style={{ opacity: mark, transform: [{ scale: mark }] }}>
           <LogoMark size={76} />
         </Animated.View>
-        <Animated.Text
+        <AnimatedText
           style={[
             styles.welcome,
             {
@@ -117,8 +111,8 @@ export default function AuthWelcomeScreen({ navigation, route }) {
           ]}
         >
           Welcome to
-        </Animated.Text>
-        <Animated.Text
+        </AnimatedText>
+        <AnimatedText
           style={[
             styles.brand,
             {
@@ -135,11 +129,11 @@ export default function AuthWelcomeScreen({ navigation, route }) {
           ]}
         >
           Compare Projects
-        </Animated.Text>
+        </AnimatedText>
         {user?.name ? (
-          <Animated.Text style={[styles.name, { opacity: t2 }]}>
+          <AnimatedText style={[styles.name, { opacity: t2 }]}>
             {user.name.split(" ")[0]}
-          </Animated.Text>
+          </AnimatedText>
         ) : null}
       </View>
     </View>

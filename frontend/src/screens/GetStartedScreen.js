@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
-import { Animated, AppState, ScrollView, StyleSheet, Text, View } from "react-native";
+import { Animated, AppState, ScrollView, StyleSheet, View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import { StatusBar } from "expo-status-bar";
@@ -20,6 +20,7 @@ import {
   requestNotifications,
 } from "../services/permissionService";
 import { brand, fonts, gradients, radius } from "../theme";
+import Text from "../components/AppText";
 
 const STATUS_NOTE = {
   blocked: "Turned off in system settings. Tap the switch to open Settings.",

@@ -1,9 +1,10 @@
 import React, { useEffect, useRef } from 'react';
-import { Animated, StyleSheet, Text, View } from 'react-native';
+import { Animated, StyleSheet, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import Button from './Button';
 import { isReducedMotion } from '../hooks/useReducedMotion';
 import { brand, colors, radius, type } from '../theme';
+import Text from "./AppText";
 
 export function Skeleton({ style }) {
   const v = useRef(new Animated.Value(0.45)).current;

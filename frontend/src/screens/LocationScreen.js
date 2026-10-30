@@ -1,15 +1,5 @@
 import React, { useEffect, useMemo, useState } from "react";
-import {
-  ActivityIndicator,
-  FlatList,
-  Keyboard,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  View,
-} from "react-native";
+import { ActivityIndicator, FlatList, Keyboard, ScrollView, StyleSheet, TouchableOpacity, View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { colors, fonts, radius, shadow, glass } from "../theme";
@@ -20,6 +10,7 @@ import {
   POPULAR_CITIES,
   searchIndiaLocations,
 } from "../services/locationService";
+import Text, { AppTextInput as TextInput } from "../components/AppText";
 
 export default function LocationScreen({ navigation }) {
   const insets = useSafeAreaInsets();

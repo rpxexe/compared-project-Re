@@ -7,6 +7,9 @@ const router = express.Router();
 // GET /api/properties – search / filter / sort / paginate. Everything is done in MongoDB.
 router.get("/", Property.getProperties);
 
+// GET /api/properties/count – total for the same filters (live "Show N results").
+router.get("/count", Property.getPropertyCount);
+
 // GET /api/properties/categories – which "New Project" categories actually have data.
 router.get("/categories", Property.getPropertyCategories);
 
@@ -14,6 +17,9 @@ router.get("/categories", Property.getPropertyCategories);
 router.get("/facets", Property.getFacets);
 
 router.get("/locations", Property.getLocations);
+
+// Must stay above "/:id".
+router.get("/insights", Property.getInsights);
 
 router.get("/top-rated", Property.getTopRatedProperties);
 

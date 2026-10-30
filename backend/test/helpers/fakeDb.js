@@ -8,6 +8,7 @@ const { ObjectId } = mongoose.Types;
 const eqId = (a, b) => String(a) === String(b);
 const getPath = (obj, path) => path.split('.').reduce((o, k) => (o == null ? undefined : o[k]), obj);
 const isRe = (v) => v instanceof RegExp;
+const comparable = (val, arg) => (typeof val === 'number' && typeof arg === 'number') || (val instanceof Date && arg instanceof Date);
 
 function matchValue(val, cond) {
   if (cond && typeof cond === 'object' && !isRe(cond) && !(cond instanceof ObjectId) && !(cond instanceof Date) && !Array.isArray(cond)) {
@@ -15,10 +16,11 @@ function matchValue(val, cond) {
       switch (op) {
         case '$in': return arg.some((a) => matchValue(val, a));
         case '$nin': return !arg.some((a) => matchValue(val, a));
-        case '$gte': return typeof val === 'number' && val >= arg;
-        case '$gt': return typeof val === 'number' && val > arg;
-        case '$lte': return typeof val === 'number' && val <= arg;
-        case '$lt': return typeof val === 'number' && val < arg;
+        case '$all': return Array.isArray(val) && arg.every((a) => val.includes(a));
+        case '$gte': return comparable(val, arg) && val >= arg;
+        case '$gt': return comparable(val, arg) && val > arg;
+        case '$lte': return comparable(val, arg) && val <= arg;
+        case '$lt': return comparable(val, arg) && val < arg;
         case '$ne': return !matchValue(val, arg);
         case '$exists': return (val !== undefined) === arg;
         default: throw new Error(`fakeDb: unsupported operator ${op}`);
@@ -36,6 +38,7 @@ function matches(doc, filter = {}) {
   return Object.entries(filter).every(([k, v]) => {
     if (k === '$and') return v.every((f) => matches(doc, f));
     if (k === '$or') return v.some((f) => matches(doc, f));
+    if (k === '$nor') return !v.some((f) => matches(doc, f));
     return matchValue(getPath(doc, k), v);
   });
 }
@@ -52,8 +55,9 @@ function applyUpdate(doc, update, inserting) {
 
 function cmp(a, b) {
   if (a === b) return 0;
-  if (a === undefined || a === null) return 1;
-  if (b === undefined || b === null) return -1;
+  // MongoDB orders missing/null below every value (first ascending, last descending).
+  if (a === undefined || a === null) return b === undefined || b === null ? 0 : -1;
+  if (b === undefined || b === null) return 1;
   if (a instanceof ObjectId || b instanceof ObjectId) return String(a) < String(b) ? -1 : 1;
   return a < b ? -1 : 1;
 }
@@ -73,6 +77,7 @@ function makeModel(name, defaults = () => ({})) {
     limit(n) { this._limit = n; return this; }
     lean() { return this; }
     select() { return this; } // projection is a no-op for the in-memory fake
+    cursor() { const q = this; return { async *[Symbol.asyncIterator]() { yield* await q; } }; }
     then(res, rej) {
       try {
         let out = this.fn();
@@ -104,6 +109,8 @@ function makeModel(name, defaults = () => ({})) {
       } else if (r) applyUpdate(r, u, false);
       return r ? structuredCloneKeepIds(r) : null;
     }),
+    async bulkWrite(ops) { for (const o of ops) await Model.updateOne(o.updateOne.filter, o.updateOne.update); return {}; },
+    collection: { createIndex: async () => 'ok', bulkWrite: (ops) => Model.bulkWrite(ops) },
     async deleteOne(f) { const i = rows.findIndex((r) => matches(r, f)); if (i >= 0) rows.splice(i, 1); return { deletedCount: i >= 0 ? 1 : 0 }; },
     async deleteMany(f) { for (let i = rows.length - 1; i >= 0; i -= 1) if (matches(rows[i], f)) rows.splice(i, 1); return {}; },
   };

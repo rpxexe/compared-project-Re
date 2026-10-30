@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { StyleSheet, Text, TextInput, View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
 import { Stars, StarPicker } from './Stars';
 import BottomSheet from './BottomSheet';
 import Button from './Button';
@@ -8,6 +8,7 @@ import { api } from '../services/api';
 import { useToast } from '../context/ToastContext';
 import { colors, fonts, radius, shadow, glass } from '../theme';
 import { timeAgo } from '../utils/format';
+import Text, { AppTextInput as TextInput } from "./AppText";
 
 const WORDS = ['', 'Poor', 'Fair', 'Good', 'Very good', 'Excellent'];
 

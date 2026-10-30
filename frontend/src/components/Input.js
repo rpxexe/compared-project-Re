@@ -4,8 +4,9 @@ import React, {
   useRef,
   useState,
 } from "react";
-import { Pressable, StyleSheet, Text, TextInput, View } from "react-native";
+import { Pressable, StyleSheet, View } from "react-native";
 import { colors, radius } from "../theme";
+import Text, { AppTextInput as TextInput } from "./AppText";
 
 const Input = forwardRef(function Input(
   {

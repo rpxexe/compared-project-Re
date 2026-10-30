@@ -1,9 +1,10 @@
 import React from "react";
-import { ActivityIndicator, StyleSheet, Text, View } from "react-native";
+import { ActivityIndicator, StyleSheet, View } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
 import PressableScale from "./PressableScale";
 import { brand, colors, gradients, radius } from "../theme";
+import Text from "./AppText";
 
 export default function Button({
   title,

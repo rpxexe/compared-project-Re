@@ -1,5 +1,5 @@
 import React, { memo, useState } from "react";
-import { Animated, Image, StyleSheet, Text, View } from "react-native";
+import { Animated, Image, StyleSheet, View } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import { BlurView } from "expo-blur";
 import { Ionicons } from "@expo/vector-icons";
@@ -10,6 +10,7 @@ import { useCompare } from "../context/CompareContext";
 import { useEntrance } from "../hooks/useEntrance";
 import { colors, fonts, radius, shadow } from "../theme";
 import { propertyFacts, ratingLabel } from "../utils/format";
+import Text from "./AppText";
 
 export function badgeFor(p) {
   if (p.featured) return "Featured";
@@ -19,7 +20,17 @@ export function badgeFor(p) {
   return "";
 }
 
-export function Cover({ uri, style, iconSize = 34 }) {
+// Listing photos are full-size Cloudinary PNGs (~1.4 MB each). Cards ask Cloudinary for a
+// resized, auto-format (WebP) copy instead - ~25x smaller, so rails scroll without decode stalls.
+// `full` keeps the original (e.g. the details gallery). Non-Cloudinary or already-transformed
+// URLs pass through unchanged.
+export function sizedImage(uri, width = 640) {
+  if (typeof uri !== "string") return uri;
+  const m = uri.match(/^(https:\/\/res\.cloudinary\.com\/[^/]+\/image\/upload\/)(v\d+\/.*)$/);
+  return m ? `${m[1]}f_auto,q_auto,w_${width}/${m[2]}` : uri;
+}
+
+export function Cover({ uri, style, iconSize = 34, full = false }) {
   const [failed, setFailed] = useState(false);
   if (!uri || failed) {
     return (
@@ -37,7 +48,7 @@ export function Cover({ uri, style, iconSize = 34 }) {
   }
   return (
     <Image
-      source={{ uri }}
+      source={{ uri: full ? uri : sizedImage(uri) }}
       style={style}
       resizeMode="cover"
       onError={() => setFailed(true)}

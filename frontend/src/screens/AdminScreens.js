@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { ScrollView, StyleSheet, Text, View } from 'react-native';
+import { ScrollView, StyleSheet, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import Screen from '../components/Screen';
 import ScreenHeader from '../components/ScreenHeader';
@@ -15,6 +15,7 @@ import { useAuth } from '../context/AuthContext';
 import { api } from '../services/api';
 import { formatPhone, timeAgo } from '../utils/format';
 import { colors, fonts, radius, shadow } from '../theme';
+import Text from "../components/AppText";
 
 // Security note: these screens are only reachable for admin/superadmin, but the real protection
 // is server-side – every /api/admin/* request is verified against the JWT and the role in MongoDB.

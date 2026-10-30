@@ -1,5 +1,5 @@
 import React from 'react';
-import { RefreshControl, StyleSheet, Text, View } from 'react-native';
+import { RefreshControl, StyleSheet, View } from 'react-native';
 import Screen from '../components/Screen';
 import ScreenHeader from '../components/ScreenHeader';
 import PropertyCard from '../components/PropertyCard';
@@ -8,6 +8,7 @@ import { useApi } from '../hooks/useApi';
 import { api } from '../services/api';
 import { timeAgo } from '../utils/format';
 import { colors, radius } from '../theme';
+import Text from "../components/AppText";
 
 const STATUS = { pending: ['Pending review', '#6D28D9', '#EBE2FF'], approved: ['Live', '#3F7D5C', '#E4F1E9'], rejected: ['Rejected', '#C96B6B', '#F6E3E3'] };
 

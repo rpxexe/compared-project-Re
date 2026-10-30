@@ -11,6 +11,8 @@ import AppNavigator from './src/navigation/AppNavigator';
 import SplashScreen from './src/screens/SplashScreen';
 import LoginRequiredDialog from './src/components/LoginRequiredDialog';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { useFonts } from 'expo-font';
+import { FONT_FILES } from './src/components/AppText';
 import { colors } from './src/theme';
 
 const navigationRef = createNavigationContainerRef();
@@ -34,6 +36,8 @@ function Root() {
   // null = still reading storage; the splash stays up until we know.
   const [hasStarted, setHasStarted] = useState(null);
   const [timedOut, setTimedOut] = useState(false);
+  // App font. A load error falls back to the system font rather than blocking start-up.
+  const [fontsLoaded, fontError] = useFonts(FONT_FILES);
 
   useEffect(() => {
     AsyncStorage.getItem('cp_has_started')
@@ -48,7 +52,7 @@ function Root() {
     return () => clearTimeout(h);
   }, []);
 
-  const appReady = (ready && hasStarted !== null) || timedOut;
+  const appReady = (ready && hasStarted !== null && (fontsLoaded || !!fontError)) || timedOut;
 
   return (
     <View style={{ flex: 1, backgroundColor: colors.ivory }}>

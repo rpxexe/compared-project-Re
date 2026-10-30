@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { formatInr, orNA, timeAgo, formatPhone, formatMobileInput, ratingLabel } from '../src/utils/format.js';
-import { phoneError, isValidIndianMobile, otpDigits, validatePost } from '../src/utils/validators.js';
+import { phoneError, isValidIndianMobile, otpDigits, validatePost, nameError, cleanName } from '../src/utils/validators.js';
 import { normalizeError } from '../src/utils/errors.js';
 import { buildCompareTable, lowestPriceIndex, COMPARE_MAX } from '../src/utils/compare.js';
 
@@ -79,4 +79,17 @@ test('formatMobileInput groups partial and full mobile numbers', () => {
   assert.equal(formatMobileInput('987654'), '98765 4');
   assert.equal(formatMobileInput('98765 43210'), '98765 43210');
   assert.equal(formatMobileInput('9876543210999'), '98765 43210');
+});
+
+test('optional sign-in name validation', () => {
+  assert.equal(nameError(''), '', 'empty is allowed');
+  assert.equal(nameError('   '), '');
+  assert.equal(nameError('Asha Rao'), '');
+  assert.equal(nameError("D'Souza-Pinto Jr."), '');
+  assert.equal(nameError('अनिल कुमार'), '', 'Indic scripts are letters');
+  assert.equal(nameError('A'), 'Enter at least 2 characters');
+  assert.match(nameError('a'.repeat(61)), /60 characters/);
+  assert.match(nameError('Asha123'), /letters/);
+  assert.match(nameError('<script>'), /letters/);
+  assert.equal(cleanName('  Asha   Rao '), 'Asha Rao');
 });

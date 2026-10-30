@@ -166,11 +166,15 @@ export const api = {
   notifications: () => call(client.get("/notifications")),
   markNotificationRead: (id) => call(client.patch(`/notifications/${id}/read`)),
   markAllNotificationsRead: () => call(client.patch("/notifications/read-all")),
-  properties: (params) =>
-    call(client.get("/properties", { params: clean(params) })),
+  // `signal` (AbortController) lets the caller cancel a superseded search.
+  properties: (params, { signal } = {}) =>
+    call(client.get("/properties", { params: clean(params), signal })),
+  propertyCount: (params, { signal } = {}) =>
+    call(client.get("/properties/count", { params: clean(params), signal })),
   property: (id) => call(client.get(`/properties/${id}`)),
   categories: () => call(client.get("/properties/categories")),
   facets: () => call(client.get("/properties/facets")),
+  insights: (city) => call(client.get("/properties/insights", { params: clean({ city }) })),
   locations: async (params = {}) => {
     try {
       const res = await call(

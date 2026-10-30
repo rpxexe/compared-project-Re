@@ -1,10 +1,11 @@
 import React from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
 import PressableScale from './PressableScale';
 import GlassView from './GlassView';
 import { colors, type } from '../theme';
+import Text from "./AppText";
 
 export default function ScreenHeader({ title, subtitle, back, right, style }) {
   const nav = useNavigation();

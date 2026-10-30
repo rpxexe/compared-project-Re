@@ -1,6 +1,7 @@
 const env = require("../config/env");
 const { Property } = require("../models");
 const { bad } = require("../utils/errors");
+const { withFilterFields } = require("../utils/filterFields");
 
 const postProperty = async (req, res) => {
   const { d, opt, errors } = req.postPropertyParsed || {};
@@ -29,7 +30,7 @@ const postProperty = async (req, res) => {
     ownerRole: req.user.role,
     createdAt: new Date(),
   };
-  const created = await Property.create(doc);
+  const created = await Property.create(withFilterFields(doc));
   res.status(201).json({
     property: { id: String(created._id), title: d.title, approvalStatus },
     message:

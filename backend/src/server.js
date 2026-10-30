@@ -5,6 +5,7 @@ const mongoose = require("mongoose");
 const env = require("./config/env");
 const { connectDb } = require("./config/db");
 const { createApp } = require("./app");
+const { startFilterSync } = require("./utils/filterSync");
 
 async function start() {
   const problems = env.validate();
@@ -14,6 +15,7 @@ async function start() {
   }
   await connectDb();
   console.log("MongoDB connected");
+  startFilterSync(env.filterSyncMinutes);
   if (env.otpMode === "development") {
     console.warn(
       "WARNING: OTP_MODE=development returns login codes in API responses. Anyone who can reach " +

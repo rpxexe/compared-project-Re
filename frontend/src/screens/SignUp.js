@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { Pressable, StyleSheet, Text, View, Animated } from "react-native";
+import { Pressable, StyleSheet, View, Animated } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import Screen from "../components/Screen";
 import ScreenHeader from "../components/ScreenHeader";
@@ -12,6 +12,7 @@ import { api } from "../services/api";
 import { cleanDigits, isValidIndianMobile, EMAIL } from "../utils/validators";
 import { colors, fonts } from "../theme";
 import { useAuth } from "../context/AuthContext";
+import Text, { AnimatedText } from "../components/AppText";
 
 export default function SignUpScreen({ navigation }) {
   const [phone, setPhone] = useState("");
@@ -98,10 +99,10 @@ export default function SignUpScreen({ navigation }) {
         <Animated.View style={a}>
           <LogoMark size={60} tone="dark" />
         </Animated.View>
-        <Animated.Text style={[styles.h1, b]}>
+        <AnimatedText style={[styles.h1, b]}>
           {isSignin ? "Welcome back" : "Welcome Sign Up"}
           {"\n"}to Compare Project
-        </Animated.Text>
+        </AnimatedText>
 
         <Pressable
           onPress={() => {

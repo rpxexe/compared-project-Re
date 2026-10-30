@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useContext } from "react";
 import {
   ScrollView,
   StyleSheet,
@@ -9,6 +9,7 @@ import {
 import { LinearGradient } from "expo-linear-gradient";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { StatusBar } from "expo-status-bar";
+import { BottomTabBarHeightContext } from "@react-navigation/bottom-tabs";
 import { colors } from "../theme";
 
 // Standard screen frame: safe-area aware, optional scrolling, keyboard avoiding with clean sleek background.
@@ -25,6 +26,8 @@ export default function Screen({
   scrollRef,
 }) {
   const insets = useSafeAreaInsets();
+  // Inside the tabs the floating bottom bar overlaps the screen (its height includes the bottom inset).
+  const bottom = Math.max(insets.bottom, useContext(BottomTabBarHeightContext) || 0);
 
   const body = scroll ? (
     <ScrollView
@@ -34,7 +37,7 @@ export default function Screen({
       contentContainerStyle={[
         {
           paddingTop: padTop ? insets.top + 8 : 0,
-          paddingBottom: padBottom ? insets.bottom + 24 : 0,
+          paddingBottom: padBottom ? bottom + 24 : 0,
           // Keep content a comfortable width on tablets / landscape / web.
           width: "100%",
           maxWidth: 760,
@@ -54,7 +57,7 @@ export default function Screen({
         {
           flex: 1,
           paddingTop: padTop ? insets.top + 8 : 0,
-          paddingBottom: padBottom ? insets.bottom : 0,
+          paddingBottom: padBottom ? bottom : 0,
         },
         contentStyle,
       ]}

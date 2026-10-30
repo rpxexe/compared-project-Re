@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { ScrollView, StyleSheet, Text, View } from "react-native";
+import { ScrollView, StyleSheet, View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import Screen from "../components/Screen";
 import ScreenHeader from "../components/ScreenHeader";
@@ -17,6 +17,7 @@ import {
   lowestPriceIndex,
 } from "../utils/compare";
 import { colors, radius, shadow, glass } from "../theme";
+import Text from "../components/AppText";
 
 const LABEL_W = 96;
 

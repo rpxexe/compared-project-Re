@@ -1,0 +1,386 @@
+{
+  "version": 2,
+  "definitions": {
+    "budget": {
+      "label": "Budget range",
+      "type": "range",
+      "queryKeys": ["minPrice", "maxPrice"],
+      "format": "inr",
+      "steps": [500000, 1000000, 2000000, 3000000, 4000000, 5000000, 6000000, 7500000, 10000000, 15000000, 20000000, 30000000, 50000000, 100000000, 200000000]
+    },
+    "rentBudget": {
+      "label": "Monthly rent",
+      "type": "range",
+      "queryKeys": ["minPrice", "maxPrice"],
+      "format": "inr",
+      "steps": [3000, 5000, 7500, 10000, 15000, 20000, 25000, 30000, 40000, 50000, 75000, 100000, 150000, 200000]
+    },
+    "propertyType": {
+      "label": "Property type",
+      "type": "multi_select",
+      "display": "tiles",
+      "queryKey": "propertyTypes",
+      "options": [
+        { "value": "apartment", "label": "Flat", "icon": "business-outline", "aliases": ["Flats/Apartments", "Flat / Apartment", "Apartment"] },
+        { "value": "house_villa", "label": "House / Villa", "icon": "home-outline", "values": ["independent_house", "villa"], "aliases": ["Villa", "Independent House"] },
+        { "value": "builder_floor", "label": "Builder floor", "icon": "layers-outline", "aliases": ["Builder Floor"] },
+        { "value": "penthouse", "label": "Penthouse", "icon": "diamond-outline", "aliases": ["Penthouse"] }
+      ]
+    },
+    "bhk": {
+      "label": "No. of bedrooms",
+      "type": "multi_select",
+      "queryKey": "bhk",
+      "unitLabel": "BHK",
+      "options": [
+        { "value": "1", "label": "1" },
+        { "value": "2", "label": "2" },
+        { "value": "3", "label": "3" },
+        { "value": "4", "label": "4" },
+        { "value": "5+", "label": "5+" }
+      ]
+    },
+    "furnishing": {
+      "label": "Furnishing status",
+      "type": "multi_select",
+      "queryKey": "furnishing",
+      "options": [
+        { "value": "furnished", "label": "Furnished" },
+        { "value": "semi", "label": "Semi-furnished" },
+        { "value": "unfurnished", "label": "Unfurnished" }
+      ]
+    },
+    "possession": {
+      "label": "Possession status",
+      "type": "multi_select",
+      "queryKey": "possession",
+      "options": [
+        { "value": "under_construction", "label": "Under construction" },
+        { "value": "ready", "label": "Ready to move" }
+      ]
+    },
+    "condition": {
+      "label": "Property status",
+      "type": "single_select",
+      "queryKey": "condition",
+      "default": "",
+      "options": [
+        { "value": "", "label": "Any" },
+        { "value": "new", "label": "New property" },
+        { "value": "resale", "label": "Resale" }
+      ]
+    },
+    "availableBy": {
+      "label": "Available from",
+      "type": "multi_select",
+      "queryKey": "availableBy",
+      "options": [
+        { "value": "immediate", "label": "Immediately" },
+        { "value": "15d", "label": "Within 15 days" },
+        { "value": "1m", "label": "Within 1 month" },
+        { "value": "later", "label": "After 1 month" }
+      ]
+    },
+    "postedBy": {
+      "label": "Posted by",
+      "type": "multi_select",
+      "queryKey": "postedBy",
+      "section": "advanced",
+      "options": [
+        { "value": "agent", "label": "Agent" },
+        { "value": "owner", "label": "Owner" },
+        { "value": "builder", "label": "Builder" }
+      ]
+    },
+    "area": {
+      "label": "Covered area",
+      "type": "range",
+      "queryKeys": ["minArea", "maxArea"],
+      "format": "area",
+      "section": "advanced",
+      "unit": {
+        "queryKey": "areaUnit",
+        "default": "sqft",
+        "options": [
+          { "value": "sqft", "label": "Sq.ft" },
+          { "value": "sqm", "label": "Sq.m" },
+          { "value": "sqyd", "label": "Sq.yd" }
+        ]
+      },
+      "stepsByUnit": {
+        "sqft": [300, 500, 750, 1000, 1250, 1500, 2000, 2500, 3000, 4000, 5000, 10000],
+        "sqm": [30, 50, 75, 100, 125, 150, 200, 250, 300, 400, 500, 1000],
+        "sqyd": [50, 100, 150, 200, 250, 300, 400, 500, 750, 1000, 2000, 5000]
+      }
+    },
+    "age": {
+      "label": "Construction age",
+      "type": "multi_select",
+      "queryKey": "age",
+      "options": [
+        { "value": "new", "label": "New" },
+        { "value": "0-1", "label": "Under 1 yr" },
+        { "value": "1-5", "label": "1–5 yrs" },
+        { "value": "5-10", "label": "5–10 yrs" },
+        { "value": "10+", "label": "10+ yrs" }
+      ]
+    },
+    "bathrooms": {
+      "label": "Bathrooms",
+      "type": "multi_select",
+      "queryKey": "bathrooms",
+      "section": "advanced",
+      "options": [
+        { "value": "1", "label": "1" },
+        { "value": "2", "label": "2" },
+        { "value": "3", "label": "3" },
+        { "value": "4+", "label": "4+" }
+      ]
+    },
+    "floor": {
+      "label": "Floors",
+      "type": "range",
+      "queryKeys": ["minFloor", "maxFloor"],
+      "format": "floor",
+      "section": "advanced",
+      "steps": [0, 1, 2, 3, 4, 5, 7, 10, 15, 20, 25, 30, 40]
+    },
+    "facing": {
+      "label": "Facing",
+      "type": "multi_select",
+      "queryKey": "facing",
+      "section": "advanced",
+      "options": [
+        { "value": "east", "label": "East" },
+        { "value": "north", "label": "North" },
+        { "value": "north-east", "label": "North-East" },
+        { "value": "north-west", "label": "North-West" },
+        { "value": "west", "label": "West" },
+        { "value": "south", "label": "South" },
+        { "value": "south-east", "label": "South-East" },
+        { "value": "south-west", "label": "South-West" }
+      ]
+    },
+    "amenities": {
+      "label": "Amenities",
+      "type": "multi_select",
+      "display": "checkbox",
+      "collapsedCount": 6,
+      "queryKey": "amenities",
+      "section": "advanced",
+      "options": [
+        { "value": "parking", "label": "Parking" },
+        { "value": "lift", "label": "Lift" },
+        { "value": "power_backup", "label": "Power backup" },
+        { "value": "security", "label": "Security / CCTV" },
+        { "value": "garden", "label": "Park / garden" },
+        { "value": "gym", "label": "Gymnasium" },
+        { "value": "pool", "label": "Swimming pool" },
+        { "value": "clubhouse", "label": "Club house" },
+        { "value": "play_area", "label": "Kids' play area" },
+        { "value": "jogging_track", "label": "Jogging track" },
+        { "value": "sports", "label": "Sports courts" },
+        { "value": "intercom", "label": "Intercom" },
+        { "value": "gated", "label": "Gated community" }
+      ]
+    },
+    "commercialAmenities": {
+      "label": "Amenities",
+      "type": "multi_select",
+      "display": "checkbox",
+      "collapsedCount": 4,
+      "queryKey": "amenities",
+      "section": "advanced",
+      "options": [
+        { "value": "parking", "label": "Parking" },
+        { "value": "lift", "label": "Lift" },
+        { "value": "power_backup", "label": "Power backup" },
+        { "value": "air_conditioning", "label": "Air conditioning" },
+        { "value": "security", "label": "Security / CCTV" },
+        { "value": "fire_safety", "label": "Fire safety" },
+        { "value": "cafeteria", "label": "Cafeteria" },
+        { "value": "conference_room", "label": "Conference room" },
+        { "value": "internet", "label": "High-speed internet" }
+      ]
+    },
+    "verified": { "label": "Verified properties", "type": "toggle", "queryKey": "verified", "section": "advanced", "hidden": true },
+    "withPhotos": { "label": "Properties with photos", "type": "toggle", "queryKey": "withPhotos", "section": "advanced" },
+    "rera": { "label": "RERA registered", "type": "toggle", "queryKey": "rera", "section": "advanced" },
+    "featured": { "label": "Featured only", "type": "toggle", "queryKey": "featured", "section": "advanced" },
+    "postedSince": {
+      "label": "Posted",
+      "type": "single_select",
+      "queryKey": "postedSince",
+      "section": "advanced",
+      "default": "",
+      "options": [
+        { "value": "", "label": "Any time" },
+        { "value": "1d", "label": "Last 24 hours" },
+        { "value": "7d", "label": "Last week" },
+        { "value": "30d", "label": "Last month" },
+        { "value": "90d", "label": "Last 3 months" }
+      ]
+    },
+    "sort": {
+      "label": "Sort by",
+      "type": "single_select",
+      "queryKey": "sort",
+      "default": "relevance",
+      "role": "sort",
+      "hidden": true,
+      "options": [
+        { "value": "relevance", "label": "Relevance" },
+        { "value": "newest", "label": "Newest first" },
+        { "value": "price_asc", "label": "Price: low to high" },
+        { "value": "price_desc", "label": "Price: high to low" },
+        { "value": "rating", "label": "Top rated" }
+      ]
+    }
+  },
+  "contexts": {
+    "buy_residential": {
+      "label": "Buy",
+      "icon": "key-outline",
+      "filters": [
+        { "id": "budget", "quick": true },
+        { "id": "propertyType", "quick": true },
+        { "id": "bhk", "quick": true },
+        { "id": "possession", "quick": true },
+        "condition",
+        "age",
+        "area",
+        { "id": "postedBy", "quick": true },
+        "furnishing", "amenities", "facing", "floor", "bathrooms",
+        "verified", "withPhotos", "rera", "featured", "postedSince", "sort"
+      ],
+      "sidebar": [
+        { "id": "location", "label": "City / Location / Project", "short": "Location", "icon": "location-outline", "panel": "location" },
+        { "id": "budget", "label": "Budget Range", "short": "Budget", "icon": "wallet-outline", "filters": ["budget"] },
+        { "id": "propertyType", "label": "Property Type", "short": "Type", "icon": "business-outline", "filters": ["propertyType"] },
+        { "id": "bhk", "label": "BHK Configuration", "short": "BHK", "icon": "bed-outline", "filters": ["bhk"] },
+        { "id": "area", "label": "Area Range", "short": "Area", "icon": "resize-outline", "filters": ["area"] },
+        { "id": "furnishing", "label": "Furnishing Status", "short": "Furnishing", "icon": "cube-outline", "filters": ["furnishing"] },
+        { "id": "status", "label": "Property Status", "short": "Status", "icon": "pricetag-outline", "filters": ["condition", "age"] },
+        { "id": "possession", "label": "Possession Status", "short": "Possession", "icon": "key-outline", "filters": ["possession"] },
+        { "id": "amenities", "label": "Amenities", "short": "Amenities", "icon": "sparkles-outline", "filters": ["amenities"] },
+        { "id": "more", "label": "More Filters", "short": "More", "icon": "options-outline", "panel": "more" }
+      ]
+    },
+    "rent_residential": {
+      "label": "Rent / PG",
+      "icon": "home-outline",
+      "filters": [
+        { "id": "budget", "base": "rentBudget", "quick": true },
+        {
+          "id": "propertyType",
+          "quick": true,
+          "options": [
+            { "value": "apartment", "label": "Flat", "icon": "business-outline", "aliases": ["Flats/Apartments", "Flat / Apartment", "Apartment"] },
+            { "value": "house_villa", "label": "House / Villa", "icon": "home-outline", "values": ["independent_house", "villa"], "aliases": ["Villa", "Independent House"] },
+            { "value": "builder_floor", "label": "Builder floor", "icon": "layers-outline", "aliases": ["Builder Floor"] },
+            { "value": "pg", "label": "PG / Co-living", "icon": "bed-outline", "aliases": ["PG", "PG/Co-living", "Co-living"] }
+          ]
+        },
+        { "id": "bhk", "quick": true },
+        { "id": "postedBy", "quick": true },
+        { "id": "furnishing", "quick": true, "section": "advanced" },
+        "availableBy",
+        "amenities", "area", "floor", "facing", "bathrooms",
+        "verified", "withPhotos", "postedSince", "sort"
+      ],
+      "sidebar": [
+        { "id": "location", "label": "City / Location / Project", "short": "Location", "icon": "location-outline", "panel": "location" },
+        { "id": "budget", "label": "Monthly Rent Range", "short": "Rent", "icon": "wallet-outline", "filters": ["budget"] },
+        { "id": "propertyType", "label": "Property Type", "short": "Type", "icon": "business-outline", "filters": ["propertyType"] },
+        { "id": "bhk", "label": "BHK Configuration", "short": "BHK", "icon": "bed-outline", "filters": ["bhk"] },
+        { "id": "area", "label": "Area Range", "short": "Area", "icon": "resize-outline", "filters": ["area"] },
+        { "id": "furnishing", "label": "Furnishing Status", "short": "Furnishing", "icon": "cube-outline", "filters": ["furnishing"] },
+        { "id": "availableBy", "label": "Available From", "short": "Move-in", "icon": "calendar-outline", "filters": ["availableBy"] },
+        { "id": "amenities", "label": "Amenities", "short": "Amenities", "icon": "sparkles-outline", "filters": ["amenities"] },
+        { "id": "more", "label": "More Filters", "short": "More", "icon": "options-outline", "panel": "more" }
+      ]
+    },
+    "new_projects": {
+      "label": "Projects",
+      "icon": "business-outline",
+      "filters": [
+        { "id": "budget", "quick": true },
+        { "id": "propertyType", "quick": true },
+        { "id": "bhk", "quick": true },
+        {
+          "id": "possession",
+          "label": "Project status",
+          "quick": true,
+          "options": [
+            { "value": "under_construction", "label": "Under construction" },
+            { "value": "new_launch", "label": "New launch" },
+            { "value": "upcoming", "label": "Upcoming" }
+          ]
+        },
+        "amenities", "area", "rera", "withPhotos", "featured", "sort"
+      ],
+      "sidebar": [
+        { "id": "location", "label": "City / Location", "short": "Location", "icon": "location-outline", "panel": "location" },
+        { "id": "project", "label": "Project Name", "short": "Project", "icon": "business-outline", "panel": "project" },
+        { "id": "developer", "label": "Developer", "short": "Developer", "icon": "construct-outline", "panel": "developer" },
+        { "id": "budget", "label": "Project Budget", "short": "Budget", "icon": "wallet-outline", "filters": ["budget"] },
+        { "id": "propertyType", "label": "Property Type", "short": "Type", "icon": "home-outline", "filters": ["propertyType"] },
+        { "id": "bhk", "label": "BHK Configuration", "short": "BHK", "icon": "bed-outline", "filters": ["bhk"] },
+        { "id": "status", "label": "Project Status", "short": "Status", "icon": "flag-outline", "filters": ["possession"] },
+        { "id": "amenities", "label": "Amenities", "short": "Amenities", "icon": "sparkles-outline", "filters": ["amenities"] },
+        { "id": "more", "label": "More Filters", "short": "More", "icon": "options-outline", "panel": "more" }
+      ]
+    },
+    "commercial": {
+      "label": "Commercial",
+      "icon": "briefcase-outline",
+      "filters": [
+        {
+          "id": "deal",
+          "label": "Looking to",
+          "type": "single_select",
+          "display": "segmented",
+          "queryKey": "deal",
+          "default": "sale",
+          "quick": true,
+          "options": [
+            { "value": "sale", "label": "Buy" },
+            { "value": "rent", "label": "Lease" }
+          ]
+        },
+        { "id": "budget", "quick": true },
+        {
+          "id": "propertyType",
+          "quick": true,
+          "options": [
+            { "value": "office", "label": "Office space", "icon": "briefcase-outline", "aliases": ["Office Space", "Office"] },
+            { "value": "coworking", "label": "Co-working space", "icon": "people-outline", "aliases": ["Co-working Space"] },
+            { "value": "shop", "label": "Shop / Showroom", "icon": "storefront-outline", "aliases": ["Shop/Showroom", "Shop", "Showroom"] },
+            { "value": "warehouse", "label": "Warehouse", "icon": "cube-outline", "aliases": ["Industrial Warehouse/Godown", "Warehouse"] },
+            { "value": "commercial_land", "label": "Commercial land", "icon": "map-outline", "aliases": ["Commercial Land"] }
+          ]
+        },
+        { "id": "area", "section": "main" },
+        { "id": "postedBy", "quick": true },
+        { "id": "furnishing", "quick": true, "section": "advanced" },
+        { "id": "possession", "section": "advanced" },
+        { "id": "amenities", "base": "commercialAmenities" },
+        "floor", "verified", "withPhotos", "rera", "postedSince", "sort"
+      ]
+    },
+    "plots": {
+      "label": "Plots",
+      "icon": "map-outline",
+      "filters": [
+        { "id": "budget", "quick": true },
+        { "id": "area", "quick": true, "section": "main", "unit": { "queryKey": "areaUnit", "default": "sqyd", "options": [
+          { "value": "sqyd", "label": "Sq.yd" },
+          { "value": "sqft", "label": "Sq.ft" },
+          { "value": "sqm", "label": "Sq.m" }
+        ] } },
+        { "id": "postedBy", "quick": true },
+        "rera", "withPhotos", "postedSince", "sort"
+      ]
+    }
+  }
+}

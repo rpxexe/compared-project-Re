@@ -1,16 +1,5 @@
 import React, { useEffect, useRef, useState } from "react";
-import {
-  Animated,
-  Keyboard,
-  KeyboardAvoidingView,
-  Platform,
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TextInput,
-  View,
-} from "react-native";
+import { Animated, Keyboard, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { LinearGradient } from "expo-linear-gradient";
@@ -30,9 +19,13 @@ import {
   cleanDigits,
   isValidIndianMobile,
   phoneError,
+  nameError,
+  cleanName,
+  NAME_MAX,
 } from "../utils/validators";
 import { formatMobileInput } from "../utils/format";
 import { brand, colors, fonts, gradients, radius, surfaces } from "../theme";
+import Text, { AppTextInput as TextInput } from "../components/AppText";
 
 // `id` is what the rest of the flow expects: Owner/Broker sign in with a phone OTP
 // (and become the matching `purpose` after verification); Developer uses the
@@ -87,10 +80,13 @@ function RoleCard({ role, active, onPress }) {
   );
 }
 
-function Field({ label, error, focused, children }) {
+function Field({ label, optional, error, focused, children }) {
   return (
     <View>
-      <Text style={styles.fieldLabel}>{label}</Text>
+      <Text style={styles.fieldLabel}>
+        {label}
+        {optional ? <Text style={styles.fieldOptional}>  (optional)</Text> : null}
+      </Text>
       <View style={[styles.field, focused && styles.fieldFocused, !!error && styles.fieldError]}>{children}</View>
       {error ? (
         <Text style={styles.fieldErrorText} accessibilityLiveRegion="polite">
@@ -110,6 +106,11 @@ export default function LoginScreen({ navigation }) {
   const [phone, setPhone] = useState("");
   const [phoneTouched, setPhoneTouched] = useState(false);
   const [phoneFocused, setPhoneFocused] = useState(false);
+  // Optional name for Owner / Broker; saved to the profile after OTP verification.
+  const [name, setName] = useState("");
+  const [nameTouched, setNameTouched] = useState(false);
+  const [nameFocused, setNameFocused] = useState(false);
+  const phoneRef = useRef(null);
 
   // Developer email & password state
   const [email, setEmail] = useState("");
@@ -135,6 +136,7 @@ export default function LoginScreen({ navigation }) {
   const canGoBack = navigation.canGoBack();
 
   const phoneErrText = phoneTouched ? phoneError(phone) : "";
+  const nameErrText = nameTouched ? nameError(name) : "";
   const isPhoneValid = isValidIndianMobile(phone);
 
   const isEmailValid = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim());
@@ -146,7 +148,7 @@ export default function LoginScreen({ navigation }) {
   // The KeyboardAvoidingView below shrinks the viewport; once the keyboard is fully open we
   // bring the verification panel (and the focused field inside it) to the top of what's visible.
   const scrollToPanel = () =>
-    scrollRef.current?.scrollTo({ y: Math.max(panelY.current - 8, 0), animated: true });
+    scrollRef.current?.scrollTo({ y: Math.max(panelY.current - insets.top - 20, 0), animated: true });
 
   useEffect(() => {
     const evt = Platform.OS === "ios" ? "keyboardWillShow" : "keyboardDidShow";
@@ -184,17 +186,20 @@ export default function LoginScreen({ navigation }) {
 
   const submitPhoneOtp = async () => {
     setPhoneTouched(true);
-    if (!isPhoneValid || inFlight.current) return;
+    setNameTouched(true);
+    if (!isPhoneValid || nameError(name) || inFlight.current) return;
     inFlight.current = true;
     setLoading(true);
     setApiError("");
     const digits = cleanDigits(phone);
     const role = selectedRole.toLowerCase();
+    const displayName = cleanName(name);
     try {
       const r = await api.sendOtp(digits);
       navigation.navigate("Otp", {
         phone: digits,
         role,
+        name: displayName,
         devOtp: r.devOtp || null,
         resendIn: r.resendInSeconds ?? 30,
         expiresIn: r.expiresInSeconds ?? 300,
@@ -202,7 +207,7 @@ export default function LoginScreen({ navigation }) {
     } catch (e) {
       // A resend cooldown means a still-valid code was sent moments ago, so continue to it.
       if (e.status === 429 && e.retryAfterSeconds) {
-        navigation.navigate("Otp", { phone: digits, role, devOtp: null, resendIn: e.retryAfterSeconds, expiresIn: 300 });
+        navigation.navigate("Otp", { phone: digits, role, name: displayName, devOtp: null, resendIn: e.retryAfterSeconds, expiresIn: 300 });
       } else {
         setApiError(e.message || "Failed to send verification code");
       }
@@ -393,40 +398,74 @@ export default function LoginScreen({ navigation }) {
                   ) : null}
                 </View>
               ) : (
-                <Field label="Mobile Number" error={phoneErrText} focused={phoneFocused}>
-                  <View style={styles.country} accessible accessibilityLabel="Country code India, plus 91">
-                    <IndiaFlag width={24} />
-                    <Text style={styles.countryText}>+91</Text>
-                  </View>
-                  <View style={styles.divider} />
-                  <TextInput
-                    style={styles.input}
-                    value={formatMobileInput(phone)}
-                    onChangeText={(t) => {
-                      setPhone(cleanDigits(t).slice(0, 10));
-                      setApiError("");
-                    }}
-                    onFocus={() => {
-                      setPhoneFocused(true);
-                      revealForm();
-                    }}
-                    onBlur={() => {
-                      setPhoneFocused(false);
-                      fieldBlurred();
-                      if (phone.length > 0) setPhoneTouched(true);
-                    }}
-                    keyboardType="number-pad"
-                    maxLength={11}
-                    placeholder="Enter 10-digit mobile number"
-                    placeholderTextColor={brand.placeholder}
-                    textContentType="telephoneNumber"
-                    autoComplete="tel"
-                    returnKeyType="done"
-                    onSubmitEditing={submitPhoneOtp}
-                    accessibilityLabel="Mobile number"
-                    editable={!loading}
-                  />
-                </Field>
+                <View style={{ gap: 14 }}>
+                  <Field label="Full Name" optional error={nameErrText} focused={nameFocused}>
+                    <Ionicons name="person-outline" size={19} color={brand.inkSoft} style={{ marginRight: 10 }} />
+                    <TextInput
+                      style={styles.input}
+                      value={name}
+                      onChangeText={(t) => {
+                        setName(t.slice(0, NAME_MAX + 5));
+                        setApiError("");
+                      }}
+                      onFocus={() => {
+                        setNameFocused(true);
+                        revealForm();
+                      }}
+                      onBlur={() => {
+                        setNameFocused(false);
+                        fieldBlurred();
+                        if (name.trim()) setNameTouched(true);
+                      }}
+                      placeholder="e.g. Asha Rao"
+                      placeholderTextColor={brand.placeholder}
+                      autoCapitalize="words"
+                      autoCorrect={false}
+                      autoComplete="name"
+                      textContentType="name"
+                      returnKeyType="next"
+                      blurOnSubmit={false}
+                      onSubmitEditing={() => phoneRef.current?.focus()}
+                      accessibilityLabel="Full name, optional"
+                      editable={!loading}
+                    />
+                  </Field>
+                  <Field label="Mobile Number" error={phoneErrText} focused={phoneFocused}>
+                    <View style={styles.country} accessible accessibilityLabel="Country code India, plus 91">
+                      <IndiaFlag width={24} />
+                      <Text style={styles.countryText}>+91</Text>
+                    </View>
+                    <View style={styles.divider} />
+                    <TextInput
+                      ref={phoneRef}
+                      style={styles.input}
+                      value={formatMobileInput(phone)}
+                      onChangeText={(t) => {
+                        setPhone(cleanDigits(t).slice(0, 10));
+                        setApiError("");
+                      }}
+                      onFocus={() => {
+                        setPhoneFocused(true);
+                        revealForm();
+                      }}
+                      onBlur={() => {
+                        setPhoneFocused(false);
+                        fieldBlurred();
+                        if (phone.length > 0) setPhoneTouched(true);
+                      }}
+                      keyboardType="number-pad"
+                      maxLength={11}
+                      placeholder="10-digit mobile number"
+                      placeholderTextColor={brand.placeholder}
+                      textContentType="telephoneNumber"
+                      autoComplete="tel"
+                      returnKeyType="done"
+                      onSubmitEditing={submitPhoneOtp}
+                      accessibilityLabel="Mobile number"
+                      editable={!loading}
+                    />
+                  </Field>
+                </View>
               )}
 
               {apiError ? (
@@ -464,9 +503,10 @@ export default function LoginScreen({ navigation }) {
       {/* Edge-to-edge: fade content out under the status bar so it never collides with the clock. */}
       <LinearGradient
         pointerEvents="none"
-        colors={["#FBF9FF", "rgba(251,249,255,0.92)", "rgba(251,249,255,0)"]}
-        locations={[0, 0.6, 1]}
-        style={[styles.statusScrim, { height: insets.top + 28 }]}
+        colors={["#FBF9FF", "rgba(251,249,255,0.9)", "rgba(251,249,255,0)"]}
+        locations={[0, 0.75, 1]}
+        // Covers the status bar only; taller fades washed out the Back/Skip buttons below it.
+        style={[styles.statusScrim, { height: insets.top + 6 }]}
       />
     </Screen>
   );
@@ -568,6 +608,7 @@ const styles = StyleSheet.create({
     borderRadius: radius.md,
     ...surfaces.field,
   },
+  fieldOptional: { fontSize: 12, fontWeight: "500", color: brand.inkSoft },
   fieldFocused: { borderColor: brand.violet, backgroundColor: "#FFFFFF" },
   fieldError: { borderColor: colors.error },
   fieldErrorText: { color: colors.error, fontSize: 12.5, fontWeight: "600", marginTop: 6 },
