@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from "react";
-import { Animated, StyleSheet, Text, View } from "react-native";
+import { Animated, StyleSheet, View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import Screen from "../components/Screen";
 import Button from "../components/Button";
@@ -8,6 +8,7 @@ import Input from "../components/Input";
 import { useEntrance } from "../hooks/useEntrance";
 import { api, session } from "../services/api";
 import { brand, colors, fonts, radius, shadow } from "../theme";
+import Text from "../components/AppText";
 
 export const PURPOSES = [
   {

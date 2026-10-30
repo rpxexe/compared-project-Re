@@ -1,5 +1,5 @@
 import React, { useRef, useState } from 'react';
-import { Animated, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Animated, ScrollView, StyleSheet, View } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -10,6 +10,7 @@ import Button from '../components/Button';
 import PressableScale from '../components/PressableScale';
 import { useEntrance } from '../hooks/useEntrance';
 import { colors, fonts, radius, shadow } from '../theme';
+import Text, { AnimatedText } from "../components/AppText";
 
 const INTENTS = [
   { key: 'buy', label: 'Buy', icon: 'key-outline', note: 'Homes to own' },
@@ -54,7 +55,7 @@ export default function IntentScreen({ navigation }) {
           <View style={styles.skyline} pointerEvents="none">
             {[44, 78, 56, 96, 64, 38].map((h, i) => <View key={i} style={{ width: 22, height: h, backgroundColor: i % 2 ? 'rgba(199,125,255,0.35)' : 'rgba(166,107,255,0.35)', borderTopLeftRadius: 5, borderTopRightRadius: 5 }} />)}
           </View>
-          <Animated.Text style={[styles.h1, title]}>Find the right property.{'\n'}<Text style={{ color: colors.gold }}>Compare before you decide.</Text></Animated.Text>
+          <AnimatedText style={[styles.h1, title]}>Find the right property.{'\n'}<Text style={{ color: colors.gold }}>Compare before you decide.</Text></AnimatedText>
         </LinearGradient>
         <View style={{ padding: 20 }}>
           <Text style={styles.q}>What are you looking for?</Text>

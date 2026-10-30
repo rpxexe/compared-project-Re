@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Pressable, StyleSheet, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import appJson from '../../app.json';
 import Screen from '../components/Screen';
@@ -14,6 +14,7 @@ import { api, API_URL } from '../services/api';
 import { formatPhone } from '../utils/format';
 import { getCurrentUserLocation } from '../services/locationService';
 import { colors, radius } from '../theme';
+import Text from "../components/AppText";
 
 export default function SettingsScreen() {
   const { user, updateUser } = useAuth();

@@ -1,8 +1,9 @@
 import React from "react";
-import { StyleSheet, Text, View } from "react-native";
+import { StyleSheet, View } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import CPMark from "./CPMark";
 import { brand, colors, gradients } from "../theme";
+import Text from "./AppText";
 
 // App-icon style tile with the CP monogram on the violet→magenta brand gradient.
 // Reads well on both the lavender onboarding canvas and the dark screens.

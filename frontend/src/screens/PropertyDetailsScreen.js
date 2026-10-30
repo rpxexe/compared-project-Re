@@ -1,17 +1,5 @@
 import React, { useRef, useState } from "react";
-import {
-  Animated,
-  Dimensions,
-  FlatList,
-  Image,
-  Linking,
-  Pressable,
-  ScrollView,
-  Share,
-  StyleSheet,
-  Text,
-  View,
-} from "react-native";
+import { Animated, Dimensions, FlatList, Image, Linking, Pressable, ScrollView, Share, StyleSheet, View } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -32,6 +20,7 @@ import { useApi } from "../hooks/useApi";
 import { api } from "../services/api";
 import { isPresent } from "../utils/format";
 import { colors, fonts, radius, shadow } from "../theme";
+import Text from "../components/AppText";
 
 const { width: W } = Dimensions.get("window");
 const GAL_H = Math.round(W * 0.82);
@@ -72,7 +61,7 @@ function Gallery({ images }) {
           setI(Math.round(e.nativeEvent.contentOffset.x / W))
         }
         renderItem={({ item }) => (
-          <Cover uri={item} style={{ width: W, height: GAL_H }} iconSize={64} />
+          <Cover uri={item} style={{ width: W, height: GAL_H }} iconSize={64} full />
         )}
         getItemLayout={(_, index) => ({ length: W, offset: W * index, index })}
       />

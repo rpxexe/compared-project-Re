@@ -1,10 +1,11 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Animated, Dimensions, KeyboardAvoidingView, Modal, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Animated, Dimensions, KeyboardAvoidingView, Modal, Pressable, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import PressableScale from './PressableScale';
 import { colors, fonts, radius, shadow } from '../theme';
+import Text from "./AppText";
 
 export default function BottomSheet({ visible, onClose, title, children, maxHeight = 0.88 }) {
   const insets = useSafeAreaInsets();

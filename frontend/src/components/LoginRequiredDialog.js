@@ -1,19 +1,12 @@
 import React, { useEffect, useRef } from "react";
-import {
-  Animated,
-  Dimensions,
-  Modal,
-  Pressable,
-  StyleSheet,
-  Text,
-  View,
-} from "react-native";
+import { Animated, Dimensions, Modal, Pressable, StyleSheet, View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import { useAuth } from "../context/AuthContext";
 import PressableScale from "./PressableScale";
 import Button from "./Button";
 import { colors, fonts, radius, shadow, glow } from "../theme";
+import Text from "./AppText";
 
 export default function LoginRequiredDialog({ navigationRef }) {
   const { loginPrompt, closeLoginPrompt } = useAuth();

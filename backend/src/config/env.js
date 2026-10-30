@@ -27,6 +27,8 @@ function load() {
     adminPhones: list(process.env.ADMIN_PHONES),
     superadminPhones: list(process.env.SUPERADMIN_PHONES),
     autoApprovePosts: String(process.env.AUTO_APPROVE_POSTS || 'false').toLowerCase() === 'true',
+    // How often the API refreshes listings' normalised filter fields (0 turns the job off).
+    filterSyncMinutes: Number(process.env.FILTER_SYNC_MINUTES ?? 10),
   };
 }
 

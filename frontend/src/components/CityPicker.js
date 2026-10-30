@@ -1,16 +1,5 @@
 import React, { useMemo, useState } from "react";
-import {
-  ActivityIndicator,
-  FlatList,
-  Keyboard,
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  View,
-} from "react-native";
+import { ActivityIndicator, FlatList, Keyboard, Pressable, ScrollView, StyleSheet, TouchableOpacity, View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import BottomSheet from "./BottomSheet";
 import { colors, fonts, radius } from "../theme";
@@ -18,6 +7,7 @@ import {
   getCurrentUserLocation,
   POPULAR_CITIES,
 } from "../services/locationService";
+import Text, { AppTextInput as TextInput } from "./AppText";
 
 export default function CityPicker({
   visible,

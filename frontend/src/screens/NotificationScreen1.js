@@ -1,15 +1,8 @@
 import React, { useMemo, useState } from "react";
-import {
-  Pressable,
-  SafeAreaView,
-  ScrollView,
-  StatusBar,
-  StyleSheet,
-  Text,
-  View,
-} from "react-native";
+import { Pressable, SafeAreaView, ScrollView, StatusBar, StyleSheet, View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { colors, fonts, radius } from "../theme";
+import Text from "../components/AppText";
 
 const INITIAL_NOTIFICATIONS = [
   {

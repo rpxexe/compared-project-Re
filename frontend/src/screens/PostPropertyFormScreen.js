@@ -1,7 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
-import {
-  ActivityIndicator, Animated, BackHandler, Image, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, View, useWindowDimensions,
-} from "react-native";
+import { ActivityIndicator, Animated, BackHandler, Image, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, View, useWindowDimensions } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { LinearGradient } from "expo-linear-gradient";
 import { StatusBar } from "expo-status-bar";
@@ -17,6 +15,7 @@ import {
   buildPayload, firstInvalidStep, isHttpUrl, needsBhk, priceLabel, sanitizeForType, showsBathrooms, showsFloor, showsFurnishing, typesFor, validateStep,
 } from "../utils/postPropertyFlow";
 import { colors, glow, radius, shadow } from "../theme";
+import Text from "../components/AppText";
 
 // Which step owns a backend field error, so server-side validation can send the user to the right place.
 const FIELD_STEP = { title: 0, propertyType: 0, city: 1, locality: 1, bhk: 2, area: 2, bathrooms: 2, furnishing: 2, price: 3, images: 5, description: 6, contactPhone: 6 };

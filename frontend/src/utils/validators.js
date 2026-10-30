@@ -10,6 +10,18 @@ export function phoneError(s) {
   return '';
 }
 
+// Optional display name for phone sign-in (Owner / Broker). Empty is valid.
+export const NAME_MAX = 60;
+export function nameError(s) {
+  const v = String(s || '').trim().replace(/\s+/g, ' ');
+  if (!v) return '';
+  if (v.length < 2) return 'Enter at least 2 characters';
+  if (v.length > NAME_MAX) return `Name must be ${NAME_MAX} characters or fewer`;
+  if (!/^\p{L}[\p{L}\p{M} .'-]*$/u.test(v)) return "Use letters, spaces and . ' - only";
+  return '';
+}
+export const cleanName = (s) => String(s || '').trim().replace(/\s+/g, ' ');
+
 // Splits pasted text into OTP digits.
 export function otpDigits(text, length = 6) {
   return cleanDigits(text).slice(0, length).split('');

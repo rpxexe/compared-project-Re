@@ -1,13 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
-import {
-  Animated,
-  Easing,
-  Pressable,
-  StyleSheet,
-  Text,
-  TextInput,
-  View,
-} from "react-native";
+import { Animated, Easing, Pressable, StyleSheet, View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import Screen from "../components/Screen";
 import ScreenHeader from "../components/ScreenHeader";
@@ -19,6 +11,7 @@ import { otpDigits } from "../utils/validators";
 import { formatPhone } from "../utils/format";
 import PressableScale from "../components/PressableScale";
 import { brand, colors, fonts, radius, shadow } from "../theme";
+import Text, { AppTextInput as TextInput } from "../components/AppText";
 
 const LEN = 6;
 
@@ -117,7 +110,7 @@ function Caret() {
 }
 
 export default function OtpScreen({ navigation, route }) {
-  const { phone, role, devOtp: initialDev, resendIn = 30 } = route.params;
+  const { phone, role, name, devOtp: initialDev, resendIn = 30 } = route.params;
   const { signIn } = useAuth();
   const [code, setCode] = useState("");
   const [state, setState] = useState("idle"); // idle | loading | error | success
@@ -161,12 +154,16 @@ export default function OtpScreen({ navigation, route }) {
         const r = await api.verifyOtp(phone, value);
         await session.save(r.token, r.user); // makes the token available to the profile update below
         let user = r.user;
-        // New accounts take their purpose from the account type chosen on the login screen
-        // (the backend grants the broker role from purpose = "broker"). Best effort: a failure
-        // here must not block sign-in; it can still be changed later in Settings.
-        if (!user.purpose && (role === "owner" || role === "broker")) {
+        // Apply what the login screen collected: the name (if typed) and, for new accounts, the
+        // purpose from the chosen account type (the backend grants the broker role from
+        // purpose = "broker"). Best effort: a failure here must not block sign-in; both can
+        // still be changed later in Profile / Settings.
+        const patch = {};
+        if (name && name !== user.name) patch.name = name;
+        if (!user.purpose && (role === "owner" || role === "broker")) patch.purpose = role;
+        if (Object.keys(patch).length) {
           try {
-            user = (await api.updateMe({ purpose: role })).user || user;
+            user = (await api.updateMe(patch)).user || user;
           } catch {
             /* keep the unmodified user */
           }
@@ -197,7 +194,7 @@ export default function OtpScreen({ navigation, route }) {
         verifying.current = false;
       }
     },
-    [phone, role, navigation, check, doShake, signIn],
+    [phone, role, name, navigation, check, doShake, signIn],
   );
 
   const onChange = (text) => {

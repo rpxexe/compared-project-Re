@@ -1,10 +1,11 @@
 import React from "react";
-import { Pressable, StyleSheet, TextInput, View } from "react-native";
+import { Pressable, StyleSheet, View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import { BlurView } from "expo-blur";
 import PressableScale from "./PressableScale";
 import { colors, radius, shadow } from "../theme";
+import { AppTextInput as TextInput } from "./AppText";
 
 // Editable by default; pass `onPress` to use it as a tappable shortcut (Home → Search).
 export default function SearchBar({

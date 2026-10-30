@@ -1,7 +1,8 @@
 import React from "react";
-import { Pressable, StyleSheet, Text, View } from "react-native";
+import { Pressable, StyleSheet, View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { colors, glow, radius, shadow } from "../theme";
+import Text from "./AppText";
 
 // Compact dropdown: a field that expands inline into a short list of options.
 // options: [{ label, value, icon?, hint? }]

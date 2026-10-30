@@ -11,11 +11,12 @@ const { normalizeProperty } = require("../utils/property");
 const {
   buildPropertyFilter,
   buildSort,
+  titleMatch,
   SECTIONS,
   PUBLIC,
 } = require("../utils/propertyQuery");
 const { summarise, publicRating } = require("../utils/rating");
-const { cached } = require("../utils/cache");
+const { cached, cachedByKey } = require("../utils/cache");
 
 // Filter lists and section counts change only when listings are added/approved; a short
 // cache turns several full-collection scans per app launch into one every couple of minutes.
@@ -65,6 +66,36 @@ const getProperties = async (req, res) => {
     });
   }
 
+  const title = sort === "relevance" ? titleMatch(req.query) : null;
+  if (title) {
+    // Title matches first, then the rest; each block keeps the relevance order.
+    const first = { $and: [filter, title] };
+    const rest = { $and: [filter, { $nor: [title] }] };
+    const [nFirst, nRest] = await Promise.all([
+      Property.countDocuments(first),
+      Property.countDocuments(rest),
+    ]);
+    const order = buildSort(sort);
+    const docs = [];
+    if (skip < nFirst)
+      docs.push(...(await Property.find(first).sort(order).skip(skip).limit(limit).lean()));
+    if (docs.length < limit)
+      docs.push(
+        ...(await Property.find(rest)
+          .sort(order)
+          .skip(Math.max(0, skip - nFirst))
+          .limit(limit - docs.length)
+          .lean()),
+      );
+    const total = nFirst + nRest;
+    return res.json({
+      items: await withRatings(docs),
+      total,
+      page,
+      pages: Math.max(1, Math.ceil(total / limit)),
+    });
+  }
+
   const [docs, total] = await Promise.all([
     Property.find(filter).sort(buildSort(sort)).skip(skip).limit(limit).lean(),
     Property.countDocuments(filter),
@@ -75,6 +106,12 @@ const getProperties = async (req, res) => {
     page,
     pages: Math.max(1, Math.ceil(total / limit)),
   });
+};
+
+// GET /api/properties/count – same filters as the list, just the total. Powers the live
+// "Show N results" button while filters are being edited.
+const getPropertyCount = async (req, res) => {
+  res.json({ total: await Property.countDocuments(buildPropertyFilter(req.query)) });
 };
 
 // GET /api/properties/categories – which "New Project" categories actually have data.
@@ -102,26 +139,81 @@ const getPropertyCategories = async (req, res) => {
 
 // Filter option lists used by the app's filter sheet (values that really exist in the data).
 const loadFacets = cached(FACETS_TTL_MS, async () => {
-  const [cities, localities, types] = await Promise.all([
+  const [cities, localities, types, developers, builders] = await Promise.all([
     Property.distinct("city", PUBLIC),
     Property.distinct("locality", PUBLIC),
     Property.distinct("propertyType", PUBLIC),
+    Property.distinct("developerName", PUBLIC),
+    Property.distinct("builderName", PUBLIC),
   ]);
-  const clean = (arr) =>
-    arr
-      .filter((v) => typeof v === "string" && v.trim())
-      .map((v) => v.trim())
-      .sort()
-      .slice(0, 100);
+  const clean = (arr, limit = 100) =>
+    [...new Set(arr.filter((v) => typeof v === "string" && v.trim()).map((v) => v.trim()))]
+      .sort((a, b) => a.localeCompare(b))
+      .slice(0, limit);
   return {
     cities: clean(cities),
     localities: clean(localities),
     propertyTypes: clean(types),
+    developers: clean([...developers, ...builders], 300),
   };
 });
 
 const getFacets = async (req, res) => {
   res.json(await loadFacets());
+};
+
+// ----- Market insights (Home "Market Analytics") ----------------------------------------
+// Real aggregates over current public listings - no time series exists in the data, so this
+// reports price by configuration and listings by construction stage for a city.
+const INSIGHT_FIELDS = {
+  price: 1, minPrice: 1, maxPrice: 1, amount: 1,
+  bhk: 1, bedrooms: 1, bedroom: 1,
+  possessionStatus: 1, possession: 1, status: 1,
+  propertyType: 1, propertyGroup: 1, city: 1, locality: 1,
+};
+const STAGES = ["Ready To Move", "Under Construction", "New Launch"];
+const median = (nums) => {
+  if (!nums.length) return 0;
+  const s = [...nums].sort((a, b) => a - b);
+  const m = Math.floor(s.length / 2);
+  return s.length % 2 ? s[m] : Math.round((s[m - 1] + s[m]) / 2);
+};
+
+const loadInsights = cachedByKey(10 * 60 * 1000, 50, async (city) => {
+  const filter = buildPropertyFilter(city ? { city } : {});
+  const docs = await Property.find(filter).select(INSIGHT_FIELDS).limit(20000).lean();
+  const items = docs.map(normalizeProperty);
+
+  const byBhk = new Map();
+  const byStage = new Map(STAGES.map((st) => [st, 0]));
+  const prices = [];
+  for (const p of items) {
+    if (p.priceValue > 0) prices.push(p.priceValue);
+    const n = parseInt(p.bhk, 10);
+    if (n >= 1 && p.priceValue > 0) {
+      const key = n >= 4 ? "4+" : String(n);
+      if (!byBhk.has(key)) byBhk.set(key, []);
+      byBhk.get(key).push(p.priceValue);
+    }
+    const status = (p.possessionStatus || "").replace(/\s+/g, " ").trim().toLowerCase();
+    const stage = STAGES.find((st) => st.toLowerCase() === status);
+    if (stage) byStage.set(stage, byStage.get(stage) + 1);
+  }
+  return {
+    city: city || "",
+    listings: items.length,
+    medianPrice: median(prices),
+    priceByBhk: ["1", "2", "3", "4+"]
+      .filter((k) => byBhk.has(k))
+      .map((k) => ({ bhk: k, medianPrice: median(byBhk.get(k)), listings: byBhk.get(k).length })),
+    listingsByStage: STAGES.map((stage) => ({ stage, listings: byStage.get(stage) })),
+    generatedAt: new Date().toISOString(),
+  };
+});
+
+const getInsights = async (req, res) => {
+  const city = str(req.query.city, 60);
+  res.json(await loadInsights(city.toLowerCase()));
 };
 
 let locationsCache = null;
@@ -401,9 +493,11 @@ const deleteReview = async (req, res) => {
 };
 
 exports.getProperties = getProperties;
+exports.getPropertyCount = getPropertyCount;
 exports.getPropertyCategories = getPropertyCategories;
 exports.getFacets = getFacets;
 exports.getLocations = getLocations;
+exports.getInsights = getInsights;
 exports.getTopRatedProperties = getTopRatedProperties;
 exports.getCompareProperties = getCompareProperties;
 exports.getSavedProperties = getSavedProperties;

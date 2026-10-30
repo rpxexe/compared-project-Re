@@ -1,18 +1,26 @@
 import React from "react";
-import { StyleSheet, Text, View } from "react-native";
+import { StyleSheet, View } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
 import PressableScale from "./PressableScale";
 import { colors, glowSubtle, radius, shadow } from "../theme";
+import Text from "./AppText";
 
-export default function FilterChip({ label, active, onPress, icon, count }) {
+// The chip is 40px tall; the 2px hit slop keeps the touch target at the 44px minimum.
+const HIT = { top: 2, bottom: 2, left: 0, right: 0 };
+
+export default function FilterChip({ label, active, onPress, icon, count, trailingIcon, role = "button", accessibilityLabel, accessibilityHint }) {
+  const fg = active ? colors.ivory : colors.ink;
   return (
     <PressableScale
       to={0.93}
       onPress={onPress}
+      hitSlop={HIT}
       style={[styles.chip, active && glowSubtle]}
-      accessibilityRole="button"
-      accessibilityState={{ selected: !!active }}
+      accessibilityRole={role}
+      accessibilityLabel={accessibilityLabel}
+      accessibilityHint={accessibilityHint}
+      accessibilityState={role === "radio" || role === "checkbox" ? { checked: !!active } : { selected: !!active }}
     >
       {active ? (
         <LinearGradient
@@ -59,6 +67,9 @@ export default function FilterChip({ label, active, onPress, icon, count }) {
         {label}
         {count != null ? `  ${count}` : ""}
       </Text>
+      {trailingIcon ? (
+        <Ionicons name={trailingIcon} size={14} color={fg} style={{ marginLeft: 6, zIndex: 1 }} />
+      ) : null}
     </PressableScale>
   );
 }

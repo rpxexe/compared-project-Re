@@ -1,10 +1,11 @@
 import React from "react";
-import { StyleSheet, Text, View } from "react-native";
+import { StyleSheet, View } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
 import { Cover } from "./PropertyCard";
 import PressableScale from "./PressableScale";
 import { colors, fonts, radius, shadow } from "../theme";
+import Text from "./AppText";
 
 export const COL_W = 168;
 

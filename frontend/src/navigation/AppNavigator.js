@@ -14,6 +14,7 @@ import HomeScreen from "../screens/HomeScreen";
 import CompareScreen from "../screens/CompareScreen";
 import NewProjectScreen from "../screens/NewProjectScreen";
 import SearchScreen from "../screens/SearchScreen";
+import SearchFiltersScreen from "../screens/SearchFiltersScreen";
 import PropertyDetailsScreen from "../screens/PropertyDetailsScreen";
 import ProfileScreen from "../screens/ProfileScreen";
 import SettingsScreen from "../screens/SettingsScreen";
@@ -38,6 +39,8 @@ import SignUpScreen from "../screens/SignUp";
 const Stack = createNativeStackNavigator();
 const Tab = createBottomTabNavigator();
 
+const EmptyTab = () => null;
+
 function Tabs() {
   const { count } = useCompare();
   return (
@@ -52,7 +55,17 @@ function Tabs() {
       screenOptions={{ headerShown: false, lazy: true, animation: "fade" }}
     >
       <Tab.Screen name="Home" component={HomeScreen} />
-      <Tab.Screen name="Explore" component={SearchScreen} />
+      {/* The bar's "Search" button opens the Search & Filters screen; this tab never shows. */}
+      <Tab.Screen
+        name="Explore"
+        component={EmptyTab}
+        listeners={({ navigation }) => ({
+          tabPress: (e) => {
+            e.preventDefault();
+            navigation.navigate("SearchFilters");
+          },
+        })}
+      />
       <Tab.Screen name="Post" component={PostPropertyScreen} />
       <Tab.Screen name="Compare" component={CompareScreen} />
       <Tab.Screen name="Profile" component={ProfileScreen} />
@@ -80,6 +93,7 @@ export default function AppNavigator({ hasStarted = true }) {
         options={{ animation: "fade" }}
       />
       <Stack.Screen name="Search" component={SearchScreen} />
+      <Stack.Screen name="SearchFilters" component={SearchFiltersScreen} options={{ animation: "slide_from_bottom" }} />
       <Stack.Screen name="NewProject" component={NewProjectScreen} />
       <Stack.Screen name="Notification" component={NotificationScreen} />
       <Stack.Screen

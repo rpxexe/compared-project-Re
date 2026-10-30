@@ -1,11 +1,6 @@
 import React, { useState, useMemo } from "react";
-import {
-  StyleSheet,
-  Text,
-  View,
-  FlatList,
-  TouchableOpacity,
-} from "react-native";
+import { StyleSheet, View, FlatList, TouchableOpacity } from "react-native";
+import Text from "./AppText";
 
 const INITIAL_DATA = [
   { id: "1", name: "John Doe", role: "Engineer", age: 28 },
