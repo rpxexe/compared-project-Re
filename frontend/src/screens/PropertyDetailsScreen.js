@@ -179,6 +179,7 @@ export default function PropertyDetailsScreen({ navigation, route }) {
     ["Balconies", p.balconies],
     ["Wing", p.wing],
     ["Age", p.ageOfProperty],
+    ["Building grade", p.buildingGrade],
     ["Units available", p.unitsAvailable],
   ].filter(([, v]) => isPresent(v));
   const inCompare = cmp.has(p.id);

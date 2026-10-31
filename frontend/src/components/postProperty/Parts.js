@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useEffect, useMemo, useRef, useState } from "react";
-import { ActivityIndicator, Animated, BackHandler, Easing, Image, Pressable, ScrollView, StyleSheet, View, useWindowDimensions } from "react-native";
+import { ActivityIndicator, Animated, BackHandler, Easing, Image, Keyboard, Pressable, ScrollView, StyleSheet, View, useWindowDimensions } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
@@ -41,11 +41,17 @@ export function WizardHeader({ title, subtitle, onBack }) {
 
 // Numbered steps joined by a line: done steps show a tick, the current one is a filled violet disc.
 export function Stepper({ steps, step, onJump }) {
+  const progress = step / (steps.length - 1);
+  const fill = useRef(new Animated.Value(progress)).current;
+  useEffect(() => {
+    if (isReducedMotion()) fill.setValue(progress);
+    else Animated.timing(fill, { toValue: progress, duration: 380, easing: Easing.out(Easing.cubic), useNativeDriver: true }).start();
+  }, [progress]); // eslint-disable-line react-hooks/exhaustive-deps
   return (
     <View style={s.stepperWrap} accessibilityLabel={`Step ${step + 1} of ${steps.length}, ${steps[step].title}`}>
       <View style={s.stepper}>
         <View style={s.stepTrack} />
-        <View style={[s.stepTrack, s.stepTrackDone, { right: `${(1 - step / (steps.length - 1)) * 100}%` }]} />
+        <Animated.View style={[s.stepTrack, s.stepTrackDone, { transformOrigin: "left", transform: [{ scaleX: fill }] }]} />
         {steps.map((st, i) => {
           const done = i < step;
           const cur = i === step;
@@ -53,7 +59,9 @@ export function Stepper({ steps, step, onJump }) {
             <Pressable key={st.key} disabled={!done} onPress={() => onJump(i)} hitSlop={6} style={s.stepSlot}
               accessibilityRole="button" accessibilityLabel={`Go to step ${i + 1}, ${st.title}`} accessibilityElementsHidden={!done}>
               {cur ? (
-                <LinearGradient colors={gradients.cta} style={s.dotCur}><Text style={s.dotCurText}>{i + 1}</Text></LinearGradient>
+                <Appear key={`cur${step}`} scale>
+                  <LinearGradient colors={gradients.cta} style={s.dotCur}><Text style={s.dotCurText}>{i + 1}</Text></LinearGradient>
+                </Appear>
               ) : done ? (
                 <View style={s.dotDone}><Ionicons name="checkmark" size={12} color={brand.violet} /></View>
               ) : (
@@ -71,8 +79,22 @@ export function Stepper({ steps, step, onJump }) {
   );
 }
 
-export function Card({ children, style }) {
-  return <View style={[s.card, style]}>{children}</View>;
+// Fades and lifts its content in when it mounts (`scale` pops it instead). Everything that shows up
+// in the form goes through this, so it all moves the same way and stays still under reduced motion.
+export function Appear({ children, style, delay = 0, from = 10, scale, ...props }) {
+  const v = useRef(new Animated.Value(isReducedMotion() ? 1 : 0)).current;
+  useEffect(() => {
+    Animated.timing(v, { toValue: 1, duration: 260, delay, easing: Easing.out(Easing.cubic), useNativeDriver: true }).start();
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  const move = scale
+    ? { scale: v.interpolate({ inputRange: [0, 1], outputRange: [0.85, 1] }) }
+    : { translateY: v.interpolate({ inputRange: [0, 1], outputRange: [from, 0] }) };
+  return <Animated.View style={[style, { opacity: v, transform: [move] }]} {...props}>{children}</Animated.View>;
+}
+
+// `index` staggers the cards of a step so they arrive one after another.
+export function Card({ children, style, index = 0 }) {
+  return <Appear delay={Math.min(index, 5) * 70} style={[s.card, style]}>{children}</Appear>;
 }
 
 export function FieldLabel({ icon, children, required, right, style }) {
@@ -85,7 +107,23 @@ export function FieldLabel({ icon, children, required, right, style }) {
   );
 }
 
-export const ErrorText = ({ children }) => (children ? <Text style={s.err} accessibilityLiveRegion="polite">{children}</Text> : null);
+export const ErrorText = ({ children }) => (children ? (
+  <Appear from={-4}><Text style={s.err} accessibilityLiveRegion="polite">{children}</Text></Appear>
+) : null);
+
+// Tapping any non-text control closes the keyboard, since the form's scroll view keeps taps
+// for its buttons ("handled") and would otherwise leave the keyboard up.
+const dismissThen = (fn) => (...args) => { Keyboard.dismiss(); fn?.(...args); };
+
+// Runs `fn` once the keyboard is gone and the screen has re-laid out without it.
+function afterKeyboard(fn) {
+  if (!Keyboard.isVisible()) { fn(); return; }
+  let done = false;
+  const run = () => { if (done) return; done = true; sub.remove(); requestAnimationFrame(fn); };
+  const sub = Keyboard.addListener("keyboardDidHide", run);
+  Keyboard.dismiss();
+  setTimeout(run, 450); // in case the hide event never arrives
+}
 
 const optLabel = (o) => (typeof o === "string" ? o : o.label);
 const optValue = (o) => (typeof o === "string" ? o : o.value);
@@ -98,8 +136,7 @@ const MENU_MAX_H = 280;
 const MENU_MIN_W = 140;
 
 // Dropdown menus draw into this layer at the top of the screen, so they float over the form
-// without pushing it down. Fields are measured relative to the host view itself (not the
-// window), which keeps the menu glued to its field whatever the status bar is doing.
+// without pushing it down.
 const DropdownContext = createContext(null);
 
 export function DropdownHost({ children, style }) {
@@ -173,15 +210,23 @@ export function SelectField({ value, options, onChange, placeholder = "Select", 
   const [rect, setRect] = useState(null); // field position inside the host while open
   const field = useRef(null);
   const open = !!rect;
+  const turn = useRef(new Animated.Value(0)).current;
+  useEffect(() => {
+    Animated.timing(turn, { toValue: open ? 1 : 0, duration: isReducedMotion() ? 0 : 200, useNativeDriver: true }).start();
+  }, [open]); // eslint-disable-line react-hooks/exhaustive-deps
   const current = options.find((o) => optValue(o) === value);
   const shown = current ? (format ? format(current) : optLabel(current)) : "";
   // icon={false} keeps a narrow box text-only while its menu still shows option icons.
   const fieldIcon = icon === false ? null : icon || (current ? optIcon(current, optionIcon) : null);
 
-  const show = () => {
-    if (!host?.root.current || !field.current) return;
-    field.current.measureLayout(host.root.current, (x, y, width, height) => setRect({ x, y, width, height }), () => {});
-  };
+  // Both the field and the host are measured on screen, in the same coordinates: measuring the
+  // field through the scroll view (measureLayout) lags behind scrolling and drops the menu far
+  // from its field. With the keyboard up, the menu opens once it has closed and the form settled.
+  const show = () => afterKeyboard(() => {
+    field.current?.measureInWindow((fx, fy, width, height) => {
+      host?.root.current?.measureInWindow((hx, hy) => setRect({ x: fx - hx, y: fy - hy, width, height }));
+    });
+  });
 
   useEffect(() => {
     if (!host || !rect) return undefined;
@@ -205,7 +250,9 @@ export function SelectField({ value, options, onChange, placeholder = "Select", 
       accessibilityLabel={`${title || placeholder}: ${shown || "not selected"}`}>
       {fieldIcon ? <Ionicons name={fieldIcon} size={17} color={brand.violet} style={{ marginRight: 8 }} /> : null}
       <Text style={[s.selectText, !shown && { color: brand.placeholder }]} numberOfLines={1}>{shown || placeholder}</Text>
-      <Ionicons name={open ? "chevron-up" : "chevron-down"} size={16} color={open ? brand.violet : brand.inkSoft} />
+      <Animated.View style={{ transform: [{ rotate: turn.interpolate({ inputRange: [0, 1], outputRange: ["0deg", "180deg"] }) }] }}>
+        <Ionicons name="chevron-down" size={16} color={open ? brand.violet : brand.inkSoft} />
+      </Animated.View>
     </Pressable>
   );
 }
@@ -244,7 +291,7 @@ export function TextField({ label, required, error, prefix, style, multiline, ..
 // Big Rent / Sell tile with a tick badge when chosen.
 export function ChoiceTile({ label, icon, active, onPress }) {
   return (
-    <PressableScale to={0.97} onPress={onPress} style={[s.tile, active && s.tileOn]}
+    <PressableScale to={0.97} onPress={dismissThen(onPress)} style={[s.tile, active && s.tileOn]}
       accessibilityRole="radio" accessibilityState={{ checked: active }} accessibilityLabel={label}>
       {active ? <View style={s.tileTick}><Ionicons name="checkmark" size={12} color="#fff" /></View> : null}
       <Ionicons name={icon} size={26} color={brand.violet} />
@@ -256,34 +303,38 @@ export function ChoiceTile({ label, icon, active, onPress }) {
 // Multi-select pill (amenities, highlights) laid out two to a row.
 export function TogglePill({ label, active, onPress }) {
   return (
-    <Pressable onPress={onPress} style={[s.toggle, active && s.toggleOn]}
+    <PressableScale to={0.97} onPress={dismissThen(onPress)} style={[s.toggle, active && s.toggleOn]}
       accessibilityRole="checkbox" accessibilityState={{ checked: active }} accessibilityLabel={label}>
-      <Text style={[s.toggleText, active && { color: "#fff" }]} numberOfLines={1}>{label}</Text>
+      <Text style={[s.toggleText, active && { color: "#fff" }]} numberOfLines={2}>{label}</Text>
       <Ionicons name={active ? "checkmark-circle" : "add-circle-outline"} size={16} color={active ? "#fff" : brand.inkSoft} />
-    </Pressable>
+    </PressableScale>
   );
 }
 
 // Single-select pill (availability, photo room).
 export function ChoicePill({ label, active, onPress, style }) {
   return (
-    <Pressable onPress={onPress} style={[s.pill, active && s.pillOn, style]}
+    <PressableScale to={0.96} onPress={dismissThen(onPress)} style={[s.pill, active && s.pillOn, style]}
       accessibilityRole="radio" accessibilityState={{ checked: active }} accessibilityLabel={label}>
-      {active ? <LinearGradient colors={gradients.cta} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={[StyleSheet.absoluteFill, { borderRadius: radius.pill }]} /> : null}
+      {active ? (
+        <Appear style={StyleSheet.absoluteFill} from={0}>
+          <LinearGradient colors={gradients.cta} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={[StyleSheet.absoluteFill, { borderRadius: radius.pill }]} />
+        </Appear>
+      ) : null}
       <Text style={[s.pillText, active && { color: "#fff" }]} numberOfLines={1}>{label}</Text>
-    </Pressable>
+    </PressableScale>
   );
 }
 
 // Dashed drop zone used for the cover and room photos.
 export function UploadBox({ title, hint, onPress, busy, error, height = 120 }) {
   return (
-    <Pressable onPress={onPress} disabled={busy} style={[s.upload, { height }, error && s.fieldErr]}
+    <PressableScale to={0.98} onPress={dismissThen(onPress)} disabled={busy} style={[s.upload, { height }, error && s.fieldErr]}
       accessibilityRole="button" accessibilityLabel={title} accessibilityState={{ busy: !!busy }}>
       {busy ? <ActivityIndicator color={brand.violet} /> : <Ionicons name="camera-outline" size={28} color={brand.violet} />}
       <Text style={s.uploadTitle}>{busy ? "Uploading…" : title}</Text>
       {hint && !busy ? <Text style={s.uploadHint}>{hint}</Text> : null}
-    </Pressable>
+    </PressableScale>
   );
 }
 
@@ -315,7 +366,7 @@ const s = StyleSheet.create({
   },
   labelRow: { flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 10 },
   labelIcon: { width: 26, height: 26, borderRadius: 8, backgroundColor: brand.lavender, alignItems: "center", justifyContent: "center" },
-  label: { flex: 1, fontSize: 14, fontWeight: "700", color: brand.ink },
+  label: { flex: 1, fontSize: 14, fontWeight: "800", color: brand.ink },
   err: { color: colors.error, fontSize: 12, fontWeight: "600", marginTop: 6 },
 
   select: { minHeight: 46, flexDirection: "row", alignItems: "center", borderWidth: 1.2, borderColor: LINE, borderRadius: 12, paddingHorizontal: 12, backgroundColor: FIELD_BG },
@@ -323,7 +374,7 @@ const s = StyleSheet.create({
   fieldErr: { borderColor: colors.error },
   fieldFocus: { borderColor: brand.violet },
   multiline: { alignItems: "flex-start", paddingVertical: 10 },
-  smallLabel: { fontSize: 12.5, fontWeight: "700", color: brand.ink, marginBottom: 6 },
+  smallLabel: { fontSize: 12.5, fontWeight: "800", color: brand.ink, marginBottom: 6 },
   input: { flex: 1, fontSize: 14, fontWeight: "600", color: brand.ink, paddingVertical: 10 },
   prefix: { marginLeft: -12, marginRight: 10, alignSelf: "stretch", width: 40, alignItems: "center", justifyContent: "center", borderRightWidth: 1.2, borderRightColor: LINE },
   prefixText: { fontSize: 15, fontWeight: "700", color: brand.violet },
@@ -346,7 +397,7 @@ const s = StyleSheet.create({
   tileTick: { position: "absolute", top: 8, right: 8, width: 20, height: 20, borderRadius: 10, backgroundColor: brand.violet, alignItems: "center", justifyContent: "center" },
   tileText: { fontSize: 14.5, fontWeight: "700", color: brand.ink },
 
-  toggle: { width: "48.5%", minHeight: 42, flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 6, borderWidth: 1.2, borderColor: LINE, borderRadius: radius.pill, paddingHorizontal: 14, backgroundColor: FIELD_BG },
+  toggle: { width: "48.5%", minHeight: 42, paddingVertical: 8, flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 6, borderWidth: 1.2, borderColor: LINE, borderRadius: radius.pill, paddingHorizontal: 14, backgroundColor: FIELD_BG },
   toggleOn: { backgroundColor: brand.violet, borderColor: brand.violet },
   toggleText: { flexShrink: 1, fontSize: 12.5, fontWeight: "600", color: brand.ink },
 

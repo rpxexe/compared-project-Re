@@ -66,10 +66,17 @@ function parse(body = {}) {
   }
   if (body.possessionStatus)
     opt.possessionStatus = str(body.possessionStatus, 40);
+  if (body.ageOfProperty) opt.ageOfProperty = str(body.ageOfProperty, 30);
   if (Array.isArray(body.amenities))
     opt.amenities = [
       ...new Set(body.amenities.map((a) => str(a, 40)).filter(Boolean)),
-    ].slice(0, 30);
+    ].slice(0, 120);
+  // Furnishings and flooring from the amenities step.
+  if (Array.isArray(body.facilities))
+    opt.facilities = [
+      ...new Set(body.facilities.map((a) => str(a, 40)).filter(Boolean)),
+    ].slice(0, 60);
+  if (body.buildingGrade) opt.buildingGrade = str(body.buildingGrade, 10);
   if (Array.isArray(body.highlights))
     opt.highlights = [
       ...new Set(body.highlights.map((h) => str(h, 40)).filter(Boolean)),
