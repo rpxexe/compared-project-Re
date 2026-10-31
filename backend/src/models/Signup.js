@@ -12,7 +12,7 @@ const signUpUserSchema = new mongoose.Schema(
     password: { type: String, default: "", trim: true, maxlength: 256 },
     isActive: { type: Boolean, default: true },
     lastLoginAt: { type: Date },
-    savedProperties: [{ type: mongoose.Schema.Types.ObjectId }],
+    savedProperties: [{ type: mongoose.Schema.Types.Mixed }], // listing _ids as stored (ObjectId or hex string)
   },
   { timestamps: true },
 );

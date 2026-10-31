@@ -1,7 +1,8 @@
 const mongoose = require('mongoose');
 
 const reviewSchema = new mongoose.Schema({
-  property: { type: mongoose.Schema.Types.ObjectId, required: true, index: true },
+  // The listing's _id as stored: an ObjectId or (for imported listings) a hex string.
+  property: { type: mongoose.Schema.Types.Mixed, required: true, index: true },
   user: { type: mongoose.Schema.Types.ObjectId, required: true },
   userName: { type: String, default: '' },
   rating: { type: Number, required: true, min: 1, max: 5 },

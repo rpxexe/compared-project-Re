@@ -2,8 +2,10 @@ const mongoose = require("mongoose");
 const { Property, User, Review, PropertyRating } = require("../models");
 const { AppError, bad } = require("../utils/errors");
 const {
-  requireObjectId,
-  isObjectId,
+  isPropertyId,
+  requirePropertyId,
+  propertyIdValues,
+  propertyIdMatch,
   paging,
   str,
 } = require("../utils/validate");
@@ -26,11 +28,7 @@ async function withRatings(docs) {
   const items = docs.map(normalizeProperty);
   if (!items.length) return items;
   const ratings = await PropertyRating.find({
-    property: {
-      $in: items
-        .filter((i) => isObjectId(i.id))
-        .map((i) => new mongoose.Types.ObjectId(i.id)),
-    },
+    property: { $in: items.flatMap((i) => propertyIdValues(i.id)) },
   }).lean();
   const map = new Map(ratings.map((r) => [String(r.property), r]));
   for (const it of items) it.rating = publicRating(map.get(it.id));
@@ -320,13 +318,10 @@ const getCompareProperties = async (req, res) => {
     ),
   ];
   if (ids.length > 4) throw bad("You can compare up to 4 projects at a time");
-  if (ids.some((id) => !isObjectId(id))) throw bad("Invalid property id");
+  if (ids.some((id) => !isPropertyId(id))) throw bad("Invalid property id");
   if (!ids.length) return res.json({ items: [] });
   const docs = await Property.find({
-    $and: [
-      PUBLIC,
-      { _id: { $in: ids.map((i) => new mongoose.Types.ObjectId(i)) } },
-    ],
+    $and: [PUBLIC, { _id: { $in: ids.flatMap(propertyIdValues) } }],
   }).lean();
   const items = await withRatings(docs);
   items.sort((a, b) => ids.indexOf(a.id) - ids.indexOf(b.id));
@@ -335,20 +330,21 @@ const getCompareProperties = async (req, res) => {
 
 const getSavedProperties = async (req, res) => {
   const user = await User.findById(req.user.id).lean();
-  const ids = (user?.savedProperties || []).map(String);
+  const saved = user?.savedProperties || []; // stored with each listing's own _id type
+  const ids = saved.map(String);
   const docs = ids.length
-    ? await Property.find({
-        _id: { $in: ids.map((i) => new mongoose.Types.ObjectId(i)) },
-      }).lean()
+    ? await Property.find({ _id: { $in: saved } }).lean()
     : [];
   const items = await withRatings(docs);
   items.sort((a, b) => ids.indexOf(b.id) - ids.indexOf(a.id)); // most recently saved first
   res.json({ items });
 };
 
+// The listing for an id from the URL, whichever type its _id is stored as.
+const findListing = (id) => Property.findOne({ _id: propertyIdMatch(requirePropertyId(id)) }).lean();
+
 const getProperty = async (req, res) => {
-  requireObjectId(req.params.id, "property id");
-  const doc = await Property.findById(req.params.id).lean();
+  const doc = await findListing(req.params.id);
   const hidden = doc && ["pending", "rejected"].includes(doc.approvalStatus);
   const isOwner = Boolean(
     req.user && doc?.ownerUserId && String(doc.ownerUserId) === req.user.id,
@@ -360,10 +356,9 @@ const getProperty = async (req, res) => {
 };
 
 async function setSaved(req, res, desired) {
-  requireObjectId(req.params.id, "property id");
-  const exists = await Property.findById(req.params.id).lean();
+  const exists = await findListing(req.params.id);
   if (!exists) throw new AppError(404, "Property not found");
-  const id = new mongoose.Types.ObjectId(req.params.id);
+  const id = exists._id;
   const user = await User.findById(req.user.id).lean();
   const currently = (user?.savedProperties || []).some(
     (x) => String(x) === String(id),
@@ -411,8 +406,7 @@ async function recompute(propertyId) {
 }
 
 const getReviews = async (req, res) => {
-  requireObjectId(req.params.id, "property id");
-  const propertyId = new mongoose.Types.ObjectId(req.params.id);
+  const propertyId = propertyIdMatch(requirePropertyId(req.params.id));
   const { page, limit, skip } = paging(req.query, {
     defLimit: 10,
     maxLimit: 30,
@@ -447,18 +441,18 @@ const getReviews = async (req, res) => {
 };
 
 const postReview = async (req, res) => {
-  requireObjectId(req.params.id, "property id");
+  requirePropertyId(req.params.id);
   const rating = Number(req.body?.rating);
   if (!Number.isInteger(rating) || rating < 1 || rating > 5)
     throw bad("Rating must be a whole number from 1 to 5");
   const comment = str(req.body?.comment, 500);
-  const property = await Property.findById(req.params.id).lean();
+  const property = await findListing(req.params.id);
   if (!property || ["pending", "rejected"].includes(property.approvalStatus))
     throw new AppError(404, "Property not found");
   if (property.ownerUserId && String(property.ownerUserId) === req.user.id)
     throw new AppError(403, "You cannot rate your own listing");
 
-  const propertyId = new mongoose.Types.ObjectId(req.params.id);
+  const propertyId = property._id;
   const user = await User.findById(req.user.id).lean();
   const review = await Review.findOneAndUpdate(
     { property: propertyId, user: new mongoose.Types.ObjectId(req.user.id) },
@@ -483,8 +477,9 @@ const postReview = async (req, res) => {
 };
 
 const deleteReview = async (req, res) => {
-  requireObjectId(req.params.id, "property id");
-  const propertyId = new mongoose.Types.ObjectId(req.params.id);
+  const property = await findListing(req.params.id);
+  if (!property) throw new AppError(404, "Property not found");
+  const propertyId = property._id;
   await Review.deleteOne({
     property: propertyId,
     user: new mongoose.Types.ObjectId(req.user.id),

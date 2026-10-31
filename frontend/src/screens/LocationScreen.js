@@ -2,9 +2,11 @@ import React, { useEffect, useMemo, useState } from "react";
 import { ActivityIndicator, FlatList, Keyboard, ScrollView, StyleSheet, TouchableOpacity, View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { useBottomSpace } from "../hooks/useBottomSpace";
 import { colors, fonts, radius, shadow, glass } from "../theme";
 import Screen from "../components/Screen";
 import { useCity } from "../hooks/useCity";
+import { useLocationAccess } from "../context/LocationAccessContext";
 import { api } from "../services/api";
 import {
   POPULAR_CITIES,
@@ -13,7 +15,9 @@ import {
 import Text, { AppTextInput as TextInput } from "../components/AppText";
 
 export default function LocationScreen({ navigation }) {
+  const { ensureLocation } = useLocationAccess();
   const insets = useSafeAreaInsets();
+  const { bottom, tabBar, inset } = useBottomSpace();
   const [
     city,
     setCity,
@@ -127,6 +131,7 @@ export default function LocationScreen({ navigation }) {
 
   // Handle GPS Current Location
   const handleFetchCurrentLocation = async () => {
+    if (!(await ensureLocation("Allow location to show properties around you."))) return;
     setIsLocating(true);
     setLocationError("");
     Keyboard.dismiss();
@@ -245,7 +250,7 @@ export default function LocationScreen({ navigation }) {
 
       <ScrollView
         style={styles.content}
-        contentContainerStyle={{ paddingBottom: insets.bottom + 40 }}
+        contentContainerStyle={{ paddingBottom: bottom + 40 }}
         showsVerticalScrollIndicator={false}
         keyboardShouldPersistTaps="handled"
       >

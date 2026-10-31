@@ -38,7 +38,7 @@ async function startServer() {
     const v = await call('POST', '/auth/verify-otp', { body: { phone, otp: s.body.devOtp } });
     return v.body;
   }
-  return { call, login, close: () => new Promise((r) => server.close(r)), models, oid: () => new mongoose.Types.ObjectId() };
+  return { base, call, login, close: () => new Promise((r) => server.close(r)), models, oid: () => new mongoose.Types.ObjectId() };
 }
 
 module.exports = { startServer, models, env };

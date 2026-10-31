@@ -35,7 +35,7 @@
       "versionCode": 2,
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
-        "backgroundColor": "#140A2E"
+        "backgroundColor": "#0B0420"
       },
       "softwareKeyboardLayoutMode": "resize",
       "allowBackup": false
@@ -48,7 +48,21 @@
       "favicon": "./assets/favicon.png"
     },
     "plugins": [
-      "expo-secure-store"
+      "expo-secure-store",
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "CompareProjects needs access to your photos so you can add pictures of the property you're listing.",
+          "cameraPermission": false,
+          "microphonePermission": false
+        }
+      ],
+      [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "CompareProjects uses your location to show properties near you and fill in your city and locality."
+        }
+      ]
     ]
   }
 }

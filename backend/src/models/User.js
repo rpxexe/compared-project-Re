@@ -11,7 +11,7 @@ const userSchema = new mongoose.Schema({
   city: { type: String, default: '', trim: true, maxlength: 80 },
   isActive: { type: Boolean, default: true },
   lastLoginAt: { type: Date },
-  savedProperties: [{ type: mongoose.Schema.Types.ObjectId }],
+  savedProperties: [{ type: mongoose.Schema.Types.Mixed }], // listing _ids as stored (ObjectId or hex string)
 }, { timestamps: true });
 
 const User = mongoose.models.AppUser || mongoose.model('AppUser', userSchema, 'app_users');

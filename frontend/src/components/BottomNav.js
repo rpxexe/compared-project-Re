@@ -3,7 +3,7 @@ import { Animated, Pressable, StyleSheet, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { BottomTabBarHeightCallbackContext } from "@react-navigation/bottom-tabs";
 import { LinearGradient } from "expo-linear-gradient";
-import Svg, { Path } from "react-native-svg";
+import Svg, { G, Path } from "react-native-svg";
 import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import { brand, colors, gradients } from "../theme";
 import { useAuth } from "../context/AuthContext";
@@ -12,14 +12,25 @@ import Text from "./AppText";
 
 // Bar geometry. The active tab's icon sits in a floating bubble that rests in a notch cut
 // into the bar's top edge; both slide to the tapped tab.
-const BAR_H = 66;
-const BAR_RADIUS = 22;
-const GUTTER = 12;
-const BUBBLE_R = 26;
+const BAR_H = 60;
+const BAR_RADIUS = 20;
+const GUTTER = 14;
+const BAR_INSET = 14; // horizontal padding inside the bar, keeps the end notches off the corners
+const BUBBLE_R = 23;
 const BUBBLE_Y = 2; // bubble centre, measured down from the bar's top edge
-const NOTCH_R = 34; // half-width of the bowl
-const NOTCH_SHOULDER = 12; // smoothing where the bowl meets the flat edge
-const NOTCH_DEPTH = 36;
+const NOTCH_R = 30; // half-width of the bowl
+const NOTCH_SHOULDER = 10; // smoothing where the bowl meets the flat edge
+const NOTCH_DEPTH = 31;
+const SHADOW_BLEED = 16; // room around the bar for its soft shadow
+
+// Stacked translucent strokes fake a soft drop shadow (SVG shapes can't use native shadows).
+const SHADOW_LAYERS = [
+  { width: 28, opacity: 0.025 },
+  { width: 20, opacity: 0.035 },
+  { width: 13, opacity: 0.045 },
+  { width: 7, opacity: 0.06 },
+  { width: 3, opacity: 0.08 },
+];
 
 const MUTED = "#8A82A3";
 
@@ -69,16 +80,57 @@ const TABS = {
 
 const tabConfig = (name) => TABS[name] || { label: name, icon: () => null };
 
-// Bar fill for an SVG of `width`, with the notch centred at `cx`.
-function notchPath(width, cx) {
+// Outline of the whole bar (rounded rect of `width`) with the notch centred at `cx`. A notch
+// close to an end shrinks that top corner instead of overlapping it.
+function barPath(width, cx) {
+  const R = BAR_RADIUS;
   const l = cx - NOTCH_R - NOTCH_SHOULDER;
   const r = cx + NOTCH_R + NOTCH_SHOULDER;
+  const tl = Math.max(0, Math.min(R, l));
+  const tr = Math.max(0, Math.min(R, width - r));
   return [
-    `M0 0 H${l}`,
+    `M${tl} 0 H${Math.max(l, tl)}`,
     `C${cx - NOTCH_R} 0 ${cx - NOTCH_R} ${NOTCH_DEPTH} ${cx} ${NOTCH_DEPTH}`,
-    `C${cx + NOTCH_R} ${NOTCH_DEPTH} ${cx + NOTCH_R} 0 ${r} 0`,
-    `H${width} V${BAR_H} H0 Z`,
+    `C${cx + NOTCH_R} ${NOTCH_DEPTH} ${cx + NOTCH_R} 0 ${Math.min(r, width - tr)} 0`,
+    `H${width - tr} A${tr} ${tr} 0 0 1 ${width} ${tr}`,
+    `V${BAR_H - R} A${R} ${R} 0 0 1 ${width - R} ${BAR_H}`,
+    `H${R} A${R} ${R} 0 0 1 0 ${BAR_H - R}`,
+    `V${tl} A${tl} ${tl} 0 0 1 ${tl} 0 Z`,
   ].join(" ");
+}
+
+// Shadow + fill, redrawn as the notch moves.
+function BarShape({ width, x }) {
+  const [cx, setCx] = useState(x.__getValue());
+  useEffect(() => {
+    let frame = 0;
+    const id = x.addListener(({ value }) => {
+      cancelAnimationFrame(frame);
+      frame = requestAnimationFrame(() => setCx(value));
+    });
+    return () => {
+      x.removeListener(id);
+      cancelAnimationFrame(frame);
+    };
+  }, [x]);
+  const d = barPath(width, cx);
+  return (
+    <Svg
+      pointerEvents="none"
+      width={width + SHADOW_BLEED * 2}
+      height={BAR_H + SHADOW_BLEED * 2}
+      style={styles.shape}
+    >
+      <G transform={`translate(${SHADOW_BLEED}, ${SHADOW_BLEED + 3})`}>
+        {SHADOW_LAYERS.map((s) => (
+          <Path key={s.width} d={d} fill="none" stroke={brand.deep} strokeOpacity={s.opacity} strokeWidth={s.width} strokeLinejoin="round" />
+        ))}
+      </G>
+      <G transform={`translate(${SHADOW_BLEED}, ${SHADOW_BLEED})`}>
+        <Path d={d} fill={colors.white} stroke="rgba(124, 44, 245, 0.14)" strokeWidth={1} />
+      </G>
+    </Svg>
+  );
 }
 
 function TabItem({ name, focused, onPress, onLongPress, badge }) {
@@ -145,7 +197,7 @@ export default function BottomNav({ state, navigation, badges = {} }) {
 
   useEffect(() => {
     if (!width) return;
-    const to = ((state.index + 0.5) * width) / count;
+    const to = BAR_INSET + ((state.index + 0.5) * (width - BAR_INSET * 2)) / count;
     // First layout (and reduced motion) snaps into place; afterwards the bubble travels.
     if (!placed.current || isReducedMotion()) {
       placed.current = true;
@@ -171,17 +223,7 @@ export default function BottomNav({ state, navigation, badges = {} }) {
       {/* Solid strip behind the phone's own navigation buttons, so content never scrolls under them. */}
       {insets.bottom ? <View pointerEvents="none" style={[styles.systemNavFill, { height: insets.bottom }]} /> : null}
       <View style={styles.bar} onLayout={(e) => setWidth(e.nativeEvent.layout.width)}>
-        {width ? (
-          // Twice the bar's width with the notch in the middle, slid so the notch tracks `x`.
-          <Animated.View
-            pointerEvents="none"
-            style={[styles.fill, { width: width * 2, transform: [{ translateX: Animated.subtract(x, width) }] }]}
-          >
-            <Svg width={width * 2} height={BAR_H}>
-              <Path d={notchPath(width * 2, width)} fill={colors.white} stroke="rgba(124, 44, 245, 0.10)" strokeWidth={1} />
-            </Svg>
-          </Animated.View>
-        ) : null}
+        {width ? <BarShape width={width} x={x} /> : null}
 
         {state.routes.map((route, i) => {
           const focused = state.index === i;
@@ -240,15 +282,14 @@ const styles = StyleSheet.create({
   bar: {
     flexDirection: "row",
     height: BAR_H,
-    borderRadius: BAR_RADIUS,
-    overflow: "hidden",
+    paddingHorizontal: BAR_INSET,
   },
-  fill: { position: "absolute", top: 0, left: 0, height: BAR_H },
+  shape: { position: "absolute", top: -SHADOW_BLEED, left: -SHADOW_BLEED },
   item: {
     flex: 1,
     alignItems: "center",
     justifyContent: "flex-end",
-    paddingBottom: 9,
+    paddingBottom: 8,
   },
   itemPressed: { opacity: 0.6 },
   iconBox: { width: 44, height: 28, alignItems: "center", justifyContent: "center", marginBottom: 2 },

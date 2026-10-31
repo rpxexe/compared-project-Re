@@ -2,6 +2,7 @@ import React, { useEffect, useState } from "react";
 import { ActivityIndicator, Pressable, StyleSheet, View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { api } from "../../services/api";
+import { useLocationAccess } from "../../context/LocationAccessContext";
 import { getCurrentUserLocation } from "../../services/locationService";
 import { brand, colors, radius } from "../../theme";
 import Text, { AppTextInput as TextInput } from "../AppText";
@@ -9,6 +10,7 @@ import Text, { AppTextInput as TextInput } from "../AppText";
 // City / locality picker. Suggestions are real locality + city pairs from /properties/locations
 // (most listings first); picking one sets both. "Use my current location" does the same from GPS.
 export default function LocationFilter({ city, locality, onChange }) {
+  const { ensureLocation } = useLocationAccess();
   const [text, setText] = useState("");
   const [items, setItems] = useState(null);
   const [loading, setLoading] = useState(false);
@@ -32,6 +34,7 @@ export default function LocationFilter({ city, locality, onChange }) {
   }, [text]);
 
   const locate = async () => {
+    if (!(await ensureLocation("Allow location to search for properties near you."))) return;
     setLocating(true);
     setNote("");
     try {

@@ -3,7 +3,8 @@ const mongoose = require('mongoose');
 // Denormalised rating summary in its own collection, so the existing
 // `properties` documents are never modified by the rating feature.
 const ratingSchema = new mongoose.Schema({
-  property: { type: mongoose.Schema.Types.ObjectId, required: true, unique: true },
+  // The listing's _id as stored: an ObjectId or (for imported listings) a hex string.
+  property: { type: mongoose.Schema.Types.Mixed, required: true, unique: true },
   average: { type: Number, default: 0 },
   count: { type: Number, default: 0 },
   distribution: { type: Map, of: Number, default: {} },

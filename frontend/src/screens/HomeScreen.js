@@ -12,9 +12,11 @@ import MiniLineChart from "../components/MiniLineChart";
 import LoanCalculatorSheet from "../components/LoanCalculatorSheet";
 import PressableScale from "../components/PressableScale";
 import RollingPlaceholder from "../components/RollingPlaceholder";
+import HeroRotatingWord from "../components/HeroRotatingWord";
 import { Cover } from "../components/PropertyCard";
 import { ErrorState, LoadingState } from "../components/StateViews";
 import { useAuth } from "../context/AuthContext";
+import { useLocationAccess } from "../context/LocationAccessContext";
 import { useApi } from "../hooks/useApi";
 import { useCity } from "../hooks/useCity";
 import { useEntrance } from "../hooks/useEntrance";
@@ -31,6 +33,9 @@ import Text from "../components/AppText";
 
 const HERO_IMAGE = require("../../assets/onboarding_residence.jpg");
 const safe = (p) => p.catch(() => null);
+
+// Rotating last word of the hero headline: "Homes That Fit Your ___".
+const HERO_WORDS = ["Budget", "Lifestyle", "Family", "Commute", "Dreams"];
 
 const QUICK_ACTIONS = [
   { key: "resume", label: "Resume Search", icon: "play-forward", bg: "#FFE4EE", fg: "#E0457B" },
@@ -168,7 +173,8 @@ const UpcomingCard = React.memo(function UpcomingCard({ p, onOpen }) {
 export default function HomeScreen({ navigation }) {
   const { token, openLoginPrompt } = useAuth();
   const { width: W } = useWindowDimensions();
-  const [city, setCity, { detectingLocation }] = useCity();
+  const [city, setCity, { detectingLocation, fetchCurrentLocation }] = useCity();
+  const { promptOnLaunch } = useLocationAccess();
   const [selectedLocality, setSelectedLocality] = useState("");
   const [searchHistory, setSearchHistory] = useState([]);
   const [refreshing, setRefreshing] = useState(false);
@@ -180,6 +186,14 @@ export default function HomeScreen({ navigation }) {
 
   const heroAnim = useEntrance(0, 14);
   const cardW = Math.min(Math.round((W - 40) / 1.55), 250);
+
+  // Location skipped or blocked at onboarding (or GPS switched off): ask once per session.
+  useEffect(() => {
+    const t = setTimeout(() => {
+      promptOnLaunch().then((granted) => granted && fetchCurrentLocation().catch(() => {}));
+    }, 900);
+    return () => clearTimeout(t);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     getSearchHistory().then(setSearchHistory).catch(() => {});
@@ -317,10 +331,14 @@ export default function HomeScreen({ navigation }) {
       </View>
 
       <View style={styles.hero}>
-        <Text style={styles.h1} accessibilityRole="header">
-          Find Your{"\n"}Dream <Text style={{ color: brand.violet }}>Property</Text>
-        </Text>
-        <Text style={styles.heroSub}>Compare projects, prices and{"\n"}amenities — all in one place.</Text>
+        <View accessible accessibilityRole="header" accessibilityLabel={`Homes that fit your ${HERO_WORDS.join(", ").toLowerCase()}`}>
+          <Text style={styles.h1}>Homes That Fit</Text>
+          <View style={styles.h1Row}>
+            <Text style={styles.h1}>Your </Text>
+            <HeroRotatingWord words={HERO_WORDS} active={focused} style={[styles.h1, { color: brand.violet }]} />
+          </View>
+        </View>
+        <Text style={styles.heroSub}>Smart comparisons, zero guesswork —{"\n"}your perfect home is a tap away.</Text>
       </View>
 
       {/* Folder-style tabs sitting on the search bar's top-left edge. */}
@@ -562,7 +580,8 @@ const styles = StyleSheet.create({
   bellBadgeText: { color: "#FFFFFF", fontSize: 9, fontWeight: "800" },
   hero: { paddingHorizontal: 20, marginTop: 22 },
   h1: { fontFamily: fonts.serif, fontSize: 34, lineHeight: 40, fontWeight: "700", color: brand.ink, letterSpacing: -0.8 },
-  heroSub: { fontSize: 14.5, lineHeight: 21, color: brand.inkSoft, marginTop: 10 },
+  h1Row: { flexDirection: "row", alignItems: "flex-end" },
+  heroSub: { fontSize: 14.5, lineHeight: 21, color: brand.inkSoft, marginTop: 10, maxWidth: 320 },
   searchBlock: { marginHorizontal: 20, marginTop: 20 },
   searchTabs: {
     ...surfaces.glassStrong,

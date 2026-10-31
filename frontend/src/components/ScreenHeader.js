@@ -9,9 +9,11 @@ import Text from "./AppText";
 
 export default function ScreenHeader({ title, subtitle, back, right, style }) {
   const nav = useNavigation();
+  // canGoBack() is also true on a tab's first screen (tab history), so check this screen's own stack.
+  const canPop = (nav.getState()?.index ?? 0) > 0;
   return (
     <View style={[styles.row, style]}>
-      {back && nav.canGoBack() ? (
+      {back && canPop ? (
         <PressableScale
           onPress={() => nav.goBack()}
           to={0.9}

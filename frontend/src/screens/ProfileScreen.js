@@ -84,7 +84,7 @@ export default function ProfileScreen({ navigation }) {
                   <Text style={styles.tagText}>{purpose}</Text>
                 </View>
               ) : null}
-              {user?.role && user.role !== 'user' ? (
+              {user?.role && user.role !== 'user' && user.role.toLowerCase() !== (purpose || '').toLowerCase() ? (
                 <View style={[styles.tag, { backgroundColor: colors.ink }]}>
                   <Text style={[styles.tagText, { color: colors.gold }]}>
                     {user.role}

@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ActivityIndicator, FlatList, ScrollView, StyleSheet, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { useBottomSpace } from "../hooks/useBottomSpace";
 import { StatusBar } from "expo-status-bar";
 import { Ionicons } from "@expo/vector-icons";
 import ScreenHeader from "../components/ScreenHeader";
@@ -28,6 +29,7 @@ const MAX_SUGGESTIONS = 4;
 
 export default function SearchScreen({ navigation, route }) {
   const insets = useSafeAreaInsets();
+  const { bottom, tabBar, inset } = useBottomSpace();
   const init = route.params || {};
   const filters = useFilterState(init);
   const { state: fs, config, params, ready, activeCount } = filters;
@@ -205,7 +207,7 @@ export default function SearchScreen({ navigation, route }) {
           data={items}
           keyExtractor={(i) => i.id}
           keyboardShouldPersistTaps="handled"
-          contentContainerStyle={{ padding: 20, paddingTop: 6, paddingBottom: insets.bottom + 30, gap: 14 }}
+          contentContainerStyle={{ padding: 20, paddingTop: 6, paddingBottom: bottom + 30, gap: 14 }}
           renderItem={({ item, index }) => <PropertyCard property={item} index={index} />}
           onEndReachedThreshold={0.4}
           onEndReached={() => {
