@@ -50,7 +50,13 @@ export function AuthProvider({ children }) {
   }, []);
 
   useEffect(() => {
-    setUnauthorizedHandler(signOut);
+    // A request needed sign-in: drop an expired session, then ask the user to sign in.
+    setUnauthorizedHandler(async ({ hadSession } = {}) => {
+      if (hadSession) await signOut();
+      openLoginPrompt(hadSession
+        ? { title: 'Session expired', message: 'Your session has expired. Please sign in again to continue.' }
+        : { title: 'Sign In Required', message: 'Please sign in or create an account to continue.' });
+    });
     (async () => {
       try {
         const s = await session.load();

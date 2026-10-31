@@ -12,6 +12,11 @@ export function normalizeError(err) {
       message: timeout ? 'The server took too long to respond. Please try again.' : 'Cannot reach the server. Check your internet connection and that the API is running.',
     };
   }
+  // Not signed in (or the session ran out) anywhere but the sign-in screens themselves: the app
+  // opens the sign-in dialog for these, so there is no message to toast.
+  if (status === 401 && !String(err?.config?.url || '').startsWith('/auth/')) {
+    return { status, network: false, signInRequired: true, fieldErrors: null, message: '' };
+  }
   return {
     status, network: false, code: data?.code, retryAfterSeconds: data?.retryAfterSeconds, fieldErrors: data?.errors || null,
     message: (typeof data?.message === 'string' && data.message) || (status >= 500 ? 'Something went wrong on our side. Please try again.' : 'Request failed.'),

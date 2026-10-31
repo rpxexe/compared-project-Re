@@ -60,13 +60,9 @@ client.interceptors.response.use(
   (r) => r,
   (error) => {
     const url = error?.config?.url || "";
-    if (
-      error?.response?.status === 401 &&
-      memoryToken &&
-      !url.startsWith("/auth/") &&
-      onUnauthorized
-    )
-      onUnauthorized();
+    // Signed-out users and expired sessions both get the sign-in dialog (see AuthContext).
+    if (error?.response?.status === 401 && !url.startsWith("/auth/") && onUnauthorized)
+      onUnauthorized({ hadSession: !!memoryToken });
     return Promise.reject(error);
   },
 );
@@ -263,6 +259,8 @@ export const api = {
   deleteMyReview: (id) => call(client.delete(`/properties/${id}/reviews/mine`)),
 
   postProperty: (payload) => call(client.post("/post-property", payload)),
+  // Gemini-written listing description from the form's details (the server holds the key).
+  describeProperty: (facts) => call(client.post("/post-property/describe", facts, { timeout: 45000 })),
   // `asset` is an expo-image-picker asset; resolves to { url } of the stored image.
   uploadImage: async (asset) => {
     const type = asset.mimeType || "image/jpeg";

@@ -31,6 +31,14 @@ function load() {
     autoApprovePosts: String(process.env.AUTO_APPROVE_POSTS || 'false').toLowerCase() === 'true',
     // How often the API refreshes listings' normalised filter fields (0 turns the job off).
     filterSyncMinutes: Number(process.env.FILTER_SYNC_MINUTES ?? 10),
+    // Gemini writes listing descriptions on request; without a key the feature reports itself unavailable.
+    gemini: {
+      apiKey: String(process.env.GEMINI_API_KEY || '').trim(),
+      model: String(process.env.GEMINI_MODEL || 'gemini-3.8-flash').trim(),
+      // Tried in order when the main model is overloaded (comma separated); empty to retry the main model only.
+      fallbackModels: String(process.env.GEMINI_FALLBACK_MODELS ?? 'gemini-3.7-flash,gemini-3.5-flash,gemini-flash-lite-latest')
+        .split(',').map((m) => m.trim()).filter(Boolean),
+    },
   };
 }
 

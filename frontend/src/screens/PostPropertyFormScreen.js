@@ -1,11 +1,11 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
-import { ActivityIndicator, Animated, BackHandler, Easing, Image, Keyboard, KeyboardAvoidingView, Pressable, ScrollView, StyleSheet, View } from "react-native";
+import { ActivityIndicator, Alert, Animated, BackHandler, Easing, Image, Keyboard, KeyboardAvoidingView, Pressable, ScrollView, StyleSheet, View } from "react-native";
 import { StatusBar } from "expo-status-bar";
 import * as ImagePicker from "expo-image-picker";
 import { Ionicons } from "@expo/vector-icons";
 import Button from "../components/Button";
 import {
-  Appear, Card, ChoicePill, ChoiceTile, DropdownHost, ErrorText, FieldLabel, KeepVisibleContext, LINE, SelectField, Stepper, TextField, UploadBox, WizardHeader,
+  Appear, Card, ChoicePill, ChoiceTile, DropdownHost, ErrorText, FieldLabel, KeepVisibleContext, LINE, SelectField, Stepper, SuggestionList, TextField, UploadBox, WizardHeader,
 } from "../components/postProperty/Parts";
 import Submitted from "../components/postProperty/Submitted";
 import { useAuth } from "../context/AuthContext";
@@ -16,21 +16,40 @@ import { api } from "../services/api";
 import { formatInr } from "../utils/format";
 import PressableScale from "../components/PressableScale";
 import { isReducedMotion } from "../hooks/useReducedMotion";
-import { getCurrentUserLocation } from "../services/locationService";
+import { POPULAR_CITIES, getCurrentUserLocation } from "../services/locationService";
 import {
   AREA_UNITS, BATHROOMS, BHKS, FLOORS, GROUND, CATEGORY_OPTIONS, CUSTOM_DATE, EMPTY_FORM, FACINGS, FURNISHING, FURNISHING_ICONS, LISTING_OPTIONS, MAX_PHOTOS, PARKING,
   PARKING_ICONS, TYPE_ICONS,
   PROPERTY_AGES, RENT_AVAILABILITY, SALE_POSSESSION, STEPS, MAX_AMENITIES, availabilityText, buildPayload, firstInvalidStep,
   floorText, maskDate, needsBhk, photoRoomsFor, priceLabel, sanitizeForType, sectionsFor, showsAge, showsBuildingFields, showsFloor, typeLabel, typesFor, validateStep,
 } from "../utils/postPropertyFlow";
-import { brand, colors } from "../theme";
+import { LinearGradient } from "expo-linear-gradient";
+import { brand, colors, gradients } from "../theme";
 import Text from "../components/AppText";
 
-// TESTING: true opens the form on the Amenities step alone, with a bar to switch the property
-// being previewed. Set back to false before shipping.
-const AMENITIES_ONLY = false;
-const STEP_LIST = AMENITIES_ONLY ? STEPS.filter((x) => x.key === "amenities") : STEPS;
+// TESTING: a step key ("purpose", "amenities", "details", "review") opens the form on that step
+// alone, with a bar to switch the property being previewed. Set back to null before shipping.
+const ONLY_STEP = null;
+const STEP_LIST = ONLY_STEP ? STEPS.filter((x) => x.key === ONLY_STEP) : STEPS;
 const TEST_FORM = { listingType: "sale", category: "residential", propertyType: "Flats/Apartments", furnishing: "Furnished" };
+
+// Toast titles for the AI writer's errors (codes from the server, plus no-network / timeout).
+const AI_ERROR_TITLES = {
+  AI_BUSY: "AI is busy right now",
+  AI_DAILY_LIMIT: "Daily AI limit reached",
+  AI_NOT_CONFIGURED: "AI writer unavailable",
+  AI_NEEDS_DETAILS: "A few details needed",
+  AI_FAILED: "Couldn't write a description",
+};
+function aiErrorToast(e) {
+  if (e?.network) {
+    return /too long/i.test(e.message)
+      ? { title: "AI took too long", message: "Writing took longer than expected. Please try again." }
+      : { title: "No connection", message: "Couldn't reach the server. Check your internet connection and try again." };
+  }
+  if (e?.status === 429 && !e.code) return { title: "Slow down a little", message: e.message };
+  return { title: AI_ERROR_TITLES[e?.code] || "Couldn't write a description", message: e?.message || "Please try again, or write it yourself." };
+}
 
 // Which step owns a backend field error, so server-side validation can send the user to the right place.
 const FIELD_STEP = {
@@ -40,6 +59,28 @@ const FIELD_STEP = {
 };
 
 const FIELD_GAP = 24;
+const ROOM_ICONS = {
+  Hall: "tv-outline", Bedroom: "bed-outline", Kitchen: "restaurant-outline", Bathroom: "water-outline", Balcony: "sunny-outline",
+  "Front View": "storefront-outline", Interior: "business-outline", Washroom: "water-outline", Parking: "car-outline",
+  Site: "map-outline", Surroundings: "leaf-outline", Other: "images-outline",
+};
+const MAX_SUGGESTIONS = 5;
+const sameText = (a, b) => a.trim().toLowerCase() === b.trim().toLowerCase();
+// Names starting with what was typed come first, then names containing it; an exact match is
+// already chosen, so it is left out.
+function rankSuggestions(items, typed) {
+  const q = typed.trim().toLowerCase();
+  if (!q) return items.slice(0, MAX_SUGGESTIONS);
+  const starts = [];
+  const has = [];
+  items.forEach((it) => {
+    const v = it.title.toLowerCase();
+    if (v === q) return;
+    if (v.startsWith(q)) starts.push(it);
+    else if (v.includes(q)) has.push(it);
+  });
+  return [...starts, ...has].slice(0, MAX_SUGGESTIONS);
+}
 const labelOf = (opts, v) => opts.find((o) => o.value === v)?.label || "";
 const toggle = (list, v) => (list.includes(v) ? list.filter((x) => x !== v) : [...list, v]);
 let photoSeq = 0;
@@ -83,7 +124,7 @@ function Wizard({ navigation, initial }) {
   const scrollY = useRef(0);
   const viewportH = useRef(0);
   const [step, setStep] = useState(0);
-  const [form, setForm] = useState(() => sanitizeForType({ ...EMPTY_FORM, ...(AMENITIES_ONLY ? TEST_FORM : {}), ...initial }));
+  const [form, setForm] = useState(() => sanitizeForType({ ...EMPTY_FORM, ...(ONLY_STEP ? TEST_FORM : {}), ...initial }));
   const [errors, setErrors] = useState({});
   const [apiError, setApiError] = useState("");
   const [submitting, setSubmitting] = useState(false);
@@ -93,6 +134,13 @@ function Wizard({ navigation, initial }) {
   const [customAmenity, setCustomAmenity] = useState("");
   const [sectionKey, setSectionKey] = useState(""); // Amenities tab on show; the first one by default
   const [locating, setLocating] = useState(false);
+  const [writing, setWriting] = useState(false); // AI description request in flight
+  const [beforeAi, setBeforeAi] = useState(null); // description the AI replaced, for Undo
+  // City / locality suggestions: popular cities plus every city already listed, and localities
+  // from existing listings looked up as the user types.
+  const [locFocus, setLocFocus] = useState(null); // "city" | "locality" | null
+  const [cities, setCities] = useState(POPULAR_CITIES);
+  const [places, setPlaces] = useState([]); // [{ locality, city }]
   const fade = useRef(new Animated.Value(1)).current;
   const shake = useRef(new Animated.Value(0)).current;
   // Which way the step content slides in: worked out while rendering the new step, so the very
@@ -111,6 +159,27 @@ function Wizard({ navigation, initial }) {
   const rooms = photoRoomsFor(form.category, form.propertyType);
   const activeRoom = rooms.includes(room) ? room : rooms[0];
   const busy = uploading.cover || uploading.photos;
+
+  useEffect(() => {
+    api.facets().then((r) => {
+      const seen = new Set();
+      setCities([...POPULAR_CITIES, ...(r?.cities || [])].map((c) => String(c || "").trim()).filter((c) => {
+        const k = c.toLowerCase();
+        if (!c || seen.has(k)) return false;
+        seen.add(k);
+        return true;
+      }));
+    }).catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    if (locFocus !== "locality") return undefined;
+    const search = form.locality.trim() || form.city.trim();
+    const t = setTimeout(() => {
+      api.locations({ search, limit: 50 }).then((r) => setPlaces(r?.locations || [])).catch(() => {});
+    }, 250);
+    return () => clearTimeout(t);
+  }, [locFocus, form.locality, form.city]);
 
   const update = (fn) => setForm((f) => sanitizeForType(fn(f)));
   const set = (key, value) => {
@@ -223,6 +292,7 @@ function Wizard({ navigation, initial }) {
   };
 
   const uploadCover = async () => {
+    if (!token) return askLogin(); // photos are saved to the account
     const [asset] = await pick(1);
     if (!asset) return;
     setUploading((u) => ({ ...u, cover: true }));
@@ -230,13 +300,14 @@ function Wizard({ navigation, initial }) {
       const { url } = await api.uploadImage(asset);
       set("cover", { uri: asset.uri, url });
     } catch (e) {
-      toast.show(e?.message || "Could not upload the image", "error");
+      if (!e?.signInRequired) toast.show(e?.message || "Could not upload the image", "error");
     } finally {
       setUploading((u) => ({ ...u, cover: false }));
     }
   };
 
   const uploadPhotos = async () => {
+    if (!token) return askLogin();
     const left = MAX_PHOTOS - form.photos.length;
     if (left <= 0) return;
     const assets = await pick(left);
@@ -249,7 +320,8 @@ function Wizard({ navigation, initial }) {
         photoSeq += 1;
         const photo = { id: `p${photoSeq}`, uri: asset.uri, url, room: activeRoom };
         update((f) => (f.photos.length < MAX_PHOTOS ? { ...f, photos: [...f.photos, photo] } : f));
-      } catch {
+      } catch (e) {
+        if (e?.signInRequired) break; // the sign-in dialog is open; don't count the rest as failed
         failed += 1;
       }
     }
@@ -262,6 +334,55 @@ function Wizard({ navigation, initial }) {
     if (!a) return;
     if (!form.amenities.some((x) => x.toLowerCase() === a.toLowerCase()) && form.amenities.length < MAX_AMENITIES) set("amenities", [...form.amenities, a]);
     setCustomAmenity("");
+  };
+
+  // Asks the server (Gemini) to write the description from everything filled in so far. An
+  // existing description is sent as a draft to improve, after the user agrees to replace it.
+  const writeWithAi = (confirmed = false) => {
+    if (writing) return;
+    Keyboard.dismiss();
+    const draft = form.description.trim();
+    if (draft.length >= 10 && !confirmed) {
+      Alert.alert("Rewrite your description?", "The AI will use your text as a starting point and replace it. You can undo this.", [
+        { text: "Cancel", style: "cancel" },
+        { text: "Rewrite", onPress: () => writeWithAi(true) },
+      ]);
+      return;
+    }
+    if (!token) return askLogin();
+    const priceNum = Number(form.price);
+    setWriting(true);
+    api.describeProperty({
+      listingType: form.listingType,
+      category: labelOf(CATEGORY_OPTIONS, form.category),
+      propertyType: typeLabel(form.propertyType),
+      bhk: needsBhk(form.category, form.propertyType) ? form.bhk : "",
+      area: form.area ? `${form.area} ${labelOf(AREA_UNITS, form.areaUnit)}` : "",
+      city: form.city.trim(),
+      locality: form.locality.trim(),
+      price: priceNum > 0 ? `${formatInr(priceNum)}${form.listingType === "rent" ? " per month" : ""}` : "",
+      possession: availabilityText(form),
+      age: form.age,
+      floor: showsFloor(form.propertyType) ? floorText(form) : "",
+      totalFloors: building ? form.totalFloors : "",
+      bathrooms: building ? form.bathrooms : "",
+      furnishing: building ? form.furnishing : "",
+      facing: form.facing,
+      parking: form.parking,
+      grade: form.grade,
+      amenities: form.amenities,
+      facilities: form.facilities,
+      draft,
+    }).then((res) => {
+      if (!res?.description) throw new Error("The AI couldn't write a description. Please try again.");
+      setBeforeAi(form.description);
+      set("description", res.description);
+      toast.show("Description written. Read it through and edit anything that's off.");
+    }).catch((e) => {
+      if (e?.signInRequired) return; // the sign-in dialog is already open
+      const { title, message } = aiErrorToast(e);
+      toast.show(message, "error", { title });
+    }).finally(() => setWriting(false));
   };
 
   const submit = async () => {
@@ -281,6 +402,7 @@ function Wizard({ navigation, initial }) {
       const result = await api.postProperty(buildPayload(form));
       setDone(result?.message || "Submitted for review. It will appear once approved.");
     } catch (error) {
+      if (error?.signInRequired) return; // the sign-in dialog is already open
       const fe = error?.fieldErrors;
       if (fe && typeof fe === "object") {
         const keys = Object.keys(fe).filter((k) => fe[k]);
@@ -305,6 +427,28 @@ function Wizard({ navigation, initial }) {
       </Submitted>
     );
   }
+
+  const citySuggestions = locFocus === "city" ? rankSuggestions(cities.map((c) => ({ title: c })), form.city) : [];
+  const localitySuggestions = locFocus === "locality" ? rankSuggestions(
+    places
+      .filter((p) => p.locality && (!form.city.trim() || sameText(p.city || "", form.city)))
+      .filter((p, i, all) => all.findIndex((x) => sameText(x.locality, p.locality) && sameText(x.city || "", p.city || "")) === i)
+      .map((p) => ({ title: p.locality, subtitle: p.city })),
+    form.locality,
+  ) : [];
+  // The top suggestion when it carries on from what was typed, offered inline in the field.
+  const startsWithTyped = (list, typed) => (list[0] && typed.trim() && list[0].title.toLowerCase().startsWith(typed.toLowerCase()) ? list[0] : null);
+  const cityCompletion = startsWithTyped(citySuggestions, form.city);
+  const localityCompletion = startsWithTyped(localitySuggestions, form.locality);
+  const pickPlace = (it, field = locFocus) => {
+    if (field === "city") set("city", it.title);
+    else {
+      set("locality", it.title);
+      if (!form.city.trim() && it.subtitle) set("city", it.subtitle);
+    }
+    setLocFocus(null);
+    Keyboard.dismiss();
+  };
 
   const priceNum = Number(form.price);
   const roomPhotos = form.photos.filter((p) => p.room === activeRoom);
@@ -346,7 +490,7 @@ function Wizard({ navigation, initial }) {
     <DropdownHost style={s.root}>
       <StatusBar style="dark" />
       <WizardHeader title={cur.heading || "Post your property"} subtitle={cur.subtitle} onBack={goBack} />
-      {AMENITIES_ONLY ? null : <Stepper steps={STEPS} step={step} onJump={jump} />}
+      {ONLY_STEP ? null : <Stepper steps={STEPS} step={step} onJump={jump} />}
 
       {/* The form scrolls on behind the see-through tab bar; the bottom padding lets its end clear the bar. */}
       {/* "padding" on Android too: the app draws edge-to-edge, so the window no longer shrinks for the keyboard. */}
@@ -357,6 +501,20 @@ function Wizard({ navigation, initial }) {
           onLayout={(e) => { viewportH.current = e.nativeEvent.layout.height; }}>
           <View ref={content} collapsable={false} style={s.scroll}>
           <Animated.View style={{ opacity: fade, transform: [{ translateX: Animated.add(shake, fade.interpolate({ inputRange: [0, 1], outputRange: [28 * dir.current, 0] })) }] }}>
+            {ONLY_STEP ? (
+              <Card style={s.testBar}>
+                <Text style={s.testTitle}>Testing · preview for</Text>
+                <View style={s.row}>
+                  <SelectField style={{ flex: 1 }} title="Category" value={form.category} options={CATEGORY_OPTIONS} icon={false} onChange={(v) => set("category", v)} />
+                  <SelectField style={{ flex: 1.3 }} title="Type" placeholder="Type" value={form.propertyType} icon={false}
+                    options={typesFor(form.category).map((x) => ({ label: typeLabel(x), value: x, icon: TYPE_ICONS[x] }))} onChange={(v) => set("propertyType", v)} />
+                </View>
+                {ONLY_STEP === "amenities" ? (
+                  <SelectField style={{ marginTop: 8 }} title="Furnishing" placeholder="Furnishing" value={form.furnishing} options={FURNISHING}
+                    optionIcon={(v) => FURNISHING_ICONS[v]} onChange={(v) => set("furnishing", v)} />
+                ) : null}
+              </Card>
+            ) : null}
             {apiError ? <View style={s.apiErr}><Ionicons name="alert-circle-outline" size={19} color={colors.error} /><Text style={s.apiErrText}>{apiError}</Text></View> : null}
 
             {cur.key === "purpose" ? (
@@ -386,9 +544,18 @@ function Wizard({ navigation, initial }) {
                   </Pressable>
                 }>Location</FieldLabel>
                 <View style={s.row}>
-                  <TextField style={{ flex: 1 }} label="City" required value={form.city} onChangeText={(v) => set("city", v)} placeholder="e.g. Mumbai" autoCapitalize="words" maxLength={60} error={errors.city} />
-                  <TextField style={{ flex: 1 }} label="Locality / Area" required value={form.locality} onChangeText={(v) => set("locality", v)} placeholder="e.g. Andheri West" autoCapitalize="words" maxLength={80} error={errors.locality} />
+                  <TextField style={{ flex: 1 }} label="City" required value={form.city} onChangeText={(v) => set("city", v)} placeholder="e.g. Mumbai" autoCapitalize="words" maxLength={60} error={errors.city}
+                    onFocus={() => setLocFocus("city")} onBlur={() => setLocFocus((f) => (f === "city" ? null : f))} autoComplete="off" autoCorrect={false}
+                    completion={cityCompletion?.title} onComplete={() => pickPlace(cityCompletion, "city")} returnKeyType="next" />
+                  <TextField style={{ flex: 1 }} label="Locality / Area" required value={form.locality} onChangeText={(v) => set("locality", v)} placeholder="e.g. Andheri West" autoCapitalize="words" maxLength={80} error={errors.locality}
+                    onFocus={() => setLocFocus("locality")} onBlur={() => setLocFocus((f) => (f === "locality" ? null : f))} autoComplete="off" autoCorrect={false}
+                    completion={localityCompletion?.title} onComplete={() => pickPlace(localityCompletion, "locality")} returnKeyType="done" />
                 </View>
+                {citySuggestions.length ? (
+                  <SuggestionList key="city" items={citySuggestions} query={form.city} icon="business-outline" onPick={pickPlace} />
+                ) : localitySuggestions.length ? (
+                  <SuggestionList key="locality" items={localitySuggestions} query={form.locality} onPick={pickPlace} />
+                ) : null}
               </Card>
             ) : null}
 
@@ -474,18 +641,6 @@ function Wizard({ navigation, initial }) {
 
             {cur.key === "amenities" ? (
               <>
-                {AMENITIES_ONLY ? (
-                  <Card style={s.testBar}>
-                    <Text style={s.testTitle}>Testing · preview amenities for</Text>
-                    <View style={s.row}>
-                      <SelectField style={{ flex: 1 }} title="Category" value={form.category} options={CATEGORY_OPTIONS} icon={false} onChange={(v) => set("category", v)} />
-                      <SelectField style={{ flex: 1.3 }} title="Type" placeholder="Type" value={form.propertyType} icon={false}
-                        options={typesFor(form.category).map((t) => ({ label: typeLabel(t), value: t, icon: TYPE_ICONS[t] }))} onChange={(v) => set("propertyType", v)} />
-                    </View>
-                    <SelectField style={{ marginTop: 8 }} title="Furnishing" placeholder="Furnishing" value={form.furnishing} options={FURNISHING}
-                      optionIcon={(v) => FURNISHING_ICONS[v]} onChange={(v) => set("furnishing", v)} />
-                  </Card>
-                ) : null}
                 {/* Section tabs: one group of options on show at a time, each tab carrying its count. */}
                 <ScrollView horizontal showsHorizontalScrollIndicator={false} style={s.tabsWrap} contentContainerStyle={s.tabs}>
                   {sections.map((sec) => {
@@ -563,11 +718,7 @@ function Wizard({ navigation, initial }) {
 
             {cur.key === "details" ? (
               <Card>
-                <FieldLabel icon="document-text-outline" required right={<Text style={s.count}>{form.description.length}/2000</Text>}>Property description</FieldLabel>
-                <TextField value={form.description} onChangeText={(v) => set("description", v)} placeholder="Describe the property, nearby facilities, highlights..."
-                  multiline maxLength={2000} accessibilityLabel="Property description" error={errors.description} />
-
-                <FieldLabel icon="image-outline" required style={s.gapLg}>Cover Image</FieldLabel>
+                <FieldLabel icon="image-outline" required>Cover Image</FieldLabel>
                 {form.cover ? (
                   <View style={s.cover}>
                     <Image source={{ uri: form.cover.uri || form.cover.url }} style={StyleSheet.absoluteFill} resizeMode="cover" />
@@ -587,14 +738,20 @@ function Wizard({ navigation, initial }) {
                 <ErrorText>{errors.cover}</ErrorText>
 
                 <FieldLabel icon="images-outline" style={s.gapLg} right={<Text style={s.count}>{form.photos.length}/{MAX_PHOTOS}</Text>}>Property Photos</FieldLabel>
-                <View style={s.roomRow} accessibilityRole="radiogroup">
-                  {rooms.map((r) => {
+                <Text style={s.smallHead}>Which room are these photos of?</Text>
+                <SelectField title="Photo room" value={activeRoom} onChange={setRoom}
+                  options={rooms.map((r) => {
                     const n = form.photos.filter((p) => p.room === r).length;
-                    return <ChoicePill key={r} label={n ? `${r} · ${n}` : r} active={r === activeRoom} onPress={() => setRoom(r)} style={s.roomPill} />;
-                  })}
-                </View>
+                    return { value: r, label: n ? `${r} · ${n} photo${n > 1 ? "s" : ""}` : r, icon: ROOM_ICONS[r] || "image-outline" };
+                  })} />
+                <View style={{ height: 12 }} />
+                {form.photos.length < MAX_PHOTOS ? (
+                  <UploadBox title={`Add ${activeRoom.toLowerCase()} photo`} hint="Tap to upload or choose from gallery" onPress={uploadPhotos} busy={uploading.photos} />
+                ) : (
+                  <Text style={s.note}>You've added the maximum of {MAX_PHOTOS} photos.</Text>
+                )}
                 {roomPhotos.length ? (
-                  <View style={s.thumbs}>
+                  <View style={[s.thumbs, { marginTop: 12 }]}>
                     {roomPhotos.map((p) => (
                       <View key={p.id} style={s.thumb}>
                         <Image source={{ uri: p.uri || p.url }} style={StyleSheet.absoluteFill} resizeMode="cover" />
@@ -606,11 +763,29 @@ function Wizard({ navigation, initial }) {
                     ))}
                   </View>
                 ) : null}
-                {form.photos.length < MAX_PHOTOS ? (
-                  <UploadBox title={`Add ${activeRoom.toLowerCase()} photo`} hint="Tap to upload or choose from gallery" onPress={uploadPhotos} busy={uploading.photos} />
-                ) : (
-                  <Text style={s.note}>You've added the maximum of {MAX_PHOTOS} photos.</Text>
-                )}
+
+                <FieldLabel icon="document-text-outline" required style={s.gapLg} right={<Text style={s.count}>{form.description.length}/2000</Text>}>Property description</FieldLabel>
+                {/* Gemini writes it from the details entered so far; the owner can edit or undo. */}
+                <View style={s.aiRow}>
+                  <PressableScale to={0.96} onPress={() => writeWithAi()} disabled={writing} style={s.aiBtn}
+                    accessibilityRole="button" accessibilityLabel="Write description with AI" accessibilityState={{ busy: writing }}>
+                    <LinearGradient colors={gradients.cta} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={StyleSheet.absoluteFill} />
+                    {writing ? <ActivityIndicator size="small" color="#fff" /> : <Ionicons name="sparkles" size={15} color="#fff" />}
+                    <Text style={s.aiBtnText}>{writing ? "Writing…" : form.description.trim() ? "Rewrite with AI" : "Write with AI"}</Text>
+                  </PressableScale>
+                  {beforeAi !== null && !writing ? (
+                    <Appear scale>
+                      <Pressable onPress={() => { set("description", beforeAi); setBeforeAi(null); }} hitSlop={8} style={s.aiUndo} accessibilityRole="button">
+                        <Ionicons name="arrow-undo-outline" size={14} color={brand.violet} />
+                        <Text style={s.aiUndoText}>Undo</Text>
+                      </Pressable>
+                    </Appear>
+                  ) : null}
+                </View>
+                <TextField value={form.description} onChangeText={(v) => { set("description", v); if (beforeAi !== null) setBeforeAi(null); }}
+                  placeholder={writing ? "Writing a description from your details…" : "Describe the property, nearby facilities, highlights... or tap Write with AI"}
+                  multiline maxLength={2000} accessibilityLabel="Property description" error={errors.description} editable={!writing} />
+                <Text style={s.aiNote}>AI uses only the details you've entered. Please check it before submitting.</Text>
               </Card>
             ) : null}
 
@@ -650,7 +825,7 @@ function Wizard({ navigation, initial }) {
 
           {/* Sits right under the card, as in the design, rather than pinned to the screen bottom. */}
           <View style={s.actions}>
-            {AMENITIES_ONLY ? null : last ? (
+            {ONLY_STEP ? null : last ? (
               <Button title="Submit Property" icon="paper-plane-outline" loading={submitting} disabled={busy} onPress={submit} />
             ) : (
               <Button title="Continue" iconRight="arrow-forward" disabled={busy} onPress={next} />
@@ -700,6 +875,12 @@ const s = StyleSheet.create({
   addRow: { flexDirection: "row", alignItems: "flex-start", gap: 10 },
   testBar: { marginBottom: 12, borderStyle: "dashed", borderColor: "#C9B5F5", backgroundColor: "#FCFAFF" },
   testTitle: { fontSize: 12, fontWeight: "800", color: brand.violet, marginBottom: 8, textTransform: "uppercase", letterSpacing: 0.4 },
+  aiRow: { flexDirection: "row", alignItems: "center", gap: 12, marginBottom: 10 },
+  aiBtn: { flexDirection: "row", alignItems: "center", gap: 7, minHeight: 38, paddingHorizontal: 16, borderRadius: 19, overflow: "hidden" },
+  aiBtnText: { fontSize: 13, fontWeight: "800", color: "#fff" },
+  aiUndo: { flexDirection: "row", alignItems: "center", gap: 4, minHeight: 32 },
+  aiUndoText: { fontSize: 13, fontWeight: "800", color: brand.violet },
+  aiNote: { fontSize: 11.5, color: brand.inkSoft, marginTop: 6 },
   amenCount: { paddingHorizontal: 10, minWidth: 28, minHeight: 24, borderRadius: 12, backgroundColor: brand.lavender, alignItems: "center", justifyContent: "center" },
   amenCountText: { fontSize: 12, fontWeight: "800", color: brand.violet },
   tabsWrap: { marginHorizontal: -16, marginBottom: 12 },

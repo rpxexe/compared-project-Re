@@ -9,6 +9,7 @@
   "scripts": {
     "start": "node src/server.js",
     "dev": "node --watch src/server.js",
+    "check:gemini": "node scripts/check-gemini.js",
     "test": "node --test \"test/*.test.js\"",
     "check:db": "node scripts/check-db.js",
     "sync:filters": "node scripts/sync-filter-fields.js"
