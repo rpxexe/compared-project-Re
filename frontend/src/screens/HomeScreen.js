@@ -23,10 +23,14 @@ import { useEntrance } from "../hooks/useEntrance";
 import { api } from "../services/api";
 import { formatInr } from "../utils/format";
 import {
+  clearCompareHistory,
   clearSearchHistory,
+  getCompareHistory,
   getSearchHistory,
+  subscribeCompareHistory,
   subscribeSearchHistory,
 } from "../services/historyService";
+import { useCompare } from "../context/CompareContext";
 import BottomSheet from "../components/BottomSheet";
 import { brand, colors, fonts, gradients, radius, surfaces } from "../theme";
 import Text from "../components/AppText";
@@ -40,7 +44,7 @@ const HERO_WORDS = ["Budget", "Lifestyle", "Family", "Commute", "Dreams"];
 const QUICK_ACTIONS = [
   { key: "resume", label: "Resume Search", icon: "play-forward", bg: "#FFE4EE", fg: "#E0457B" },
   { key: "wishlist", label: "My Wishlist", icon: "heart", bg: "#FFE3E6", fg: "#E5484D" },
-  { key: "recommend", label: "Top Picks", icon: "sparkles", bg: "#E3EEFF", fg: "#3B6FE0" },
+  { key: "compared", label: "Recent Compares", icon: "swap-horizontal", bg: "#E3EEFF", fg: "#3B6FE0" },
   { key: "recent", label: "Recent Searches", icon: "time", bg: "#EEE6FF", fg: brand.violet },
 ];
 
@@ -181,6 +185,9 @@ export default function HomeScreen({ navigation }) {
   const [unread, setUnread] = useState(0);
   const [loanSheet, setLoanSheet] = useState(null); // null | "emi" | "eligibility"
   const [recentOpen, setRecentOpen] = useState(false);
+  const [compareHistory, setCompareHistory] = useState([]);
+  const [comparedOpen, setComparedOpen] = useState(false);
+  const cmp = useCompare();
   const [tabsWidth, setTabsWidth] = useState(0);
   const focused = useIsFocused(); // pauses the rolling search hint while Home is hidden
 
@@ -199,6 +206,18 @@ export default function HomeScreen({ navigation }) {
     getSearchHistory().then(setSearchHistory).catch(() => {});
     return subscribeSearchHistory(setSearchHistory);
   }, []);
+
+  useEffect(() => {
+    getCompareHistory().then(setCompareHistory).catch(() => {});
+    return subscribeCompareHistory(setCompareHistory);
+  }, []);
+
+  // Load a past comparison back into the compare tray and open the Compare tab.
+  const reopenComparison = (item) => {
+    setComparedOpen(false);
+    cmp.replace(item.ids);
+    navigation.navigate("Compare", { screen: "CompareMain" });
+  };
 
   // Real unread count (signed-in users only); refreshed whenever Home regains focus.
   const loadUnread = useCallback(() => {
@@ -272,10 +291,8 @@ export default function HomeScreen({ navigation }) {
     } else if (key === "wishlist") {
       if (token) navigation.navigate("Saved");
       else openLoginPrompt({ reason: "general", title: "Sign In to See Your Wishlist", message: "Sign in to save properties and find them here on any device." });
-    } else if (key === "recommend") {
-      // Top-rated listings in the user's city, narrowed by their most recent search if any.
-      const last = searchHistory[0];
-      runSearch({ sort: "rating", propertyType: last?.propertyType || "", bhk: last?.bhk || "" });
+    } else if (key === "compared") {
+      setComparedOpen(true);
     } else if (key === "recent") {
       setRecentOpen(true);
     }
@@ -542,6 +559,40 @@ export default function HomeScreen({ navigation }) {
           <Text style={styles.emptyRecent}>Your searches will appear here.</Text>
         )}
       </BottomSheet>
+
+      <BottomSheet visible={comparedOpen} onClose={() => setComparedOpen(false)} title="Recently Compared">
+        {compareHistory.length ? (
+          <>
+            {/* Plain rows, capped so the sheet always fits without a nested scroller. */}
+            {compareHistory.slice(0, 5).map((item) => {
+              const names = item.properties.map(cardName).join("  vs  ");
+              return (
+                <PressableScale
+                  key={item.id}
+                  onPress={() => reopenComparison(item)}
+                  style={[styles.recentRow, styles.comparedRow]}
+                  accessibilityRole="button"
+                  accessibilityLabel={`Compare again: ${names}`}
+                >
+                  <Ionicons name="swap-horizontal" size={18} color={brand.violet} />
+                  <View style={styles.comparedBody}>
+                    <Text style={styles.comparedText} numberOfLines={2}>
+                      {names}
+                    </Text>
+                    <Text style={styles.recentMeta}>{`${item.ids.length} properties`}</Text>
+                  </View>
+                  <Ionicons name="chevron-forward" size={16} color={brand.inkSoft} />
+                </PressableScale>
+              );
+            })}
+            <PressableScale onPress={clearCompareHistory} style={styles.clearBtn} accessibilityRole="button">
+              <Text style={styles.clearText}>Clear compare history</Text>
+            </PressableScale>
+          </>
+        ) : (
+          <Text style={styles.emptyRecent}>Properties you compare will appear here.</Text>
+        )}
+      </BottomSheet>
     </Screen>
   );
 }
@@ -681,6 +732,10 @@ const styles = StyleSheet.create({
   chartNote: { fontSize: 11.5, color: brand.inkSoft, paddingHorizontal: 20, marginTop: 10 },
   recentRow: { flexDirection: "row", alignItems: "center", gap: 12, minHeight: 50, borderBottomWidth: 1, borderBottomColor: "#F1ECFB" },
   recentText: { flex: 1, fontSize: 14.5, color: brand.ink, fontWeight: "600" },
+  comparedRow: { paddingVertical: 12 },
+  comparedBody: { flex: 1, minWidth: 0 },
+  comparedText: { fontSize: 14.5, lineHeight: 20, color: brand.ink, fontWeight: "600" },
+  recentMeta: { fontSize: 12, color: brand.inkSoft, marginTop: 2 },
   clearBtn: { alignSelf: "center", marginTop: 16, padding: 10 },
   clearText: { color: colors.error, fontWeight: "700", fontSize: 13.5 },
   emptyRecent: { color: brand.inkSoft, fontSize: 14, textAlign: "center", paddingVertical: 24 },

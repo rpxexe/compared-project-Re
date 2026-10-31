@@ -25,6 +25,7 @@ export function CompareProvider({ children }) {
     ids, count: ids.length, has: (id) => ids.includes(id), toggle,
     remove: (id) => persist(ids.filter((x) => x !== id)),
     clear: () => persist([]),
+    replace: (next) => persist(next.slice(0, COMPARE_MAX)),
     // Drop ids that no longer exist in the database.
     prune: (valid) => { const next = ids.filter((x) => valid.includes(x)); if (next.length !== ids.length) persist(next); },
   }), [ids, toggle]);
