@@ -3,7 +3,7 @@ import { Animated, Pressable, StyleSheet, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { BottomTabBarHeightCallbackContext } from "@react-navigation/bottom-tabs";
 import { LinearGradient } from "expo-linear-gradient";
-import Svg, { G, Path } from "react-native-svg";
+import Svg, { Path } from "react-native-svg";
 import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import { brand, colors, gradients } from "../theme";
 import { useAuth } from "../context/AuthContext";
@@ -21,16 +21,6 @@ const BUBBLE_Y = 2; // bubble centre, measured down from the bar's top edge
 const NOTCH_R = 30; // half-width of the bowl
 const NOTCH_SHOULDER = 10; // smoothing where the bowl meets the flat edge
 const NOTCH_DEPTH = 31;
-const SHADOW_BLEED = 16; // room around the bar for its soft shadow
-
-// Stacked translucent strokes fake a soft drop shadow (SVG shapes can't use native shadows).
-const SHADOW_LAYERS = [
-  { width: 28, opacity: 0.025 },
-  { width: 20, opacity: 0.035 },
-  { width: 13, opacity: 0.045 },
-  { width: 7, opacity: 0.06 },
-  { width: 3, opacity: 0.08 },
-];
 
 const MUTED = "#8A82A3";
 
@@ -80,57 +70,16 @@ const TABS = {
 
 const tabConfig = (name) => TABS[name] || { label: name, icon: () => null };
 
-// Outline of the whole bar (rounded rect of `width`) with the notch centred at `cx`. A notch
-// close to an end shrinks that top corner instead of overlapping it.
-function barPath(width, cx) {
-  const R = BAR_RADIUS;
+// Bar fill for an SVG of `width`, with the notch centred at `cx`.
+function notchPath(width, cx) {
   const l = cx - NOTCH_R - NOTCH_SHOULDER;
   const r = cx + NOTCH_R + NOTCH_SHOULDER;
-  const tl = Math.max(0, Math.min(R, l));
-  const tr = Math.max(0, Math.min(R, width - r));
   return [
-    `M${tl} 0 H${Math.max(l, tl)}`,
+    `M0 0 H${l}`,
     `C${cx - NOTCH_R} 0 ${cx - NOTCH_R} ${NOTCH_DEPTH} ${cx} ${NOTCH_DEPTH}`,
-    `C${cx + NOTCH_R} ${NOTCH_DEPTH} ${cx + NOTCH_R} 0 ${Math.min(r, width - tr)} 0`,
-    `H${width - tr} A${tr} ${tr} 0 0 1 ${width} ${tr}`,
-    `V${BAR_H - R} A${R} ${R} 0 0 1 ${width - R} ${BAR_H}`,
-    `H${R} A${R} ${R} 0 0 1 0 ${BAR_H - R}`,
-    `V${tl} A${tl} ${tl} 0 0 1 ${tl} 0 Z`,
+    `C${cx + NOTCH_R} ${NOTCH_DEPTH} ${cx + NOTCH_R} 0 ${r} 0`,
+    `H${width} V${BAR_H} H0 Z`,
   ].join(" ");
-}
-
-// Shadow + fill, redrawn as the notch moves.
-function BarShape({ width, x }) {
-  const [cx, setCx] = useState(x.__getValue());
-  useEffect(() => {
-    let frame = 0;
-    const id = x.addListener(({ value }) => {
-      cancelAnimationFrame(frame);
-      frame = requestAnimationFrame(() => setCx(value));
-    });
-    return () => {
-      x.removeListener(id);
-      cancelAnimationFrame(frame);
-    };
-  }, [x]);
-  const d = barPath(width, cx);
-  return (
-    <Svg
-      pointerEvents="none"
-      width={width + SHADOW_BLEED * 2}
-      height={BAR_H + SHADOW_BLEED * 2}
-      style={styles.shape}
-    >
-      <G transform={`translate(${SHADOW_BLEED}, ${SHADOW_BLEED + 3})`}>
-        {SHADOW_LAYERS.map((s) => (
-          <Path key={s.width} d={d} fill="none" stroke={brand.deep} strokeOpacity={s.opacity} strokeWidth={s.width} strokeLinejoin="round" />
-        ))}
-      </G>
-      <G transform={`translate(${SHADOW_BLEED}, ${SHADOW_BLEED})`}>
-        <Path d={d} fill={colors.white} stroke="rgba(124, 44, 245, 0.14)" strokeWidth={1} />
-      </G>
-    </Svg>
-  );
 }
 
 function TabItem({ name, focused, onPress, onLongPress, badge }) {
@@ -223,7 +172,17 @@ export default function BottomNav({ state, navigation, badges = {} }) {
       {/* Solid strip behind the phone's own navigation buttons, so content never scrolls under them. */}
       {insets.bottom ? <View pointerEvents="none" style={[styles.systemNavFill, { height: insets.bottom }]} /> : null}
       <View style={styles.bar} onLayout={(e) => setWidth(e.nativeEvent.layout.width)}>
-        {width ? <BarShape width={width} x={x} /> : null}
+        {width ? (
+          // Twice the bar's width with the notch in the middle, slid so the notch tracks `x`.
+          <Animated.View
+            pointerEvents="none"
+            style={[styles.fill, { width: width * 2, transform: [{ translateX: Animated.subtract(x, width) }] }]}
+          >
+            <Svg width={width * 2} height={BAR_H}>
+              <Path d={notchPath(width * 2, width)} fill={colors.white} />
+            </Svg>
+          </Animated.View>
+        ) : null}
 
         {state.routes.map((route, i) => {
           const focused = state.index === i;
@@ -283,8 +242,12 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     height: BAR_H,
     paddingHorizontal: BAR_INSET,
+    borderRadius: BAR_RADIUS,
+    overflow: "hidden",
+    // Outset box shadows render only outside the bar's box, so the see-through notch stays clear.
+    boxShadow: "0 6px 20px rgba(20, 10, 46, 0.16), 0 1px 4px rgba(20, 10, 46, 0.10)",
   },
-  shape: { position: "absolute", top: -SHADOW_BLEED, left: -SHADOW_BLEED },
+  fill: { position: "absolute", top: 0, left: 0, height: BAR_H },
   item: {
     flex: 1,
     alignItems: "center",
