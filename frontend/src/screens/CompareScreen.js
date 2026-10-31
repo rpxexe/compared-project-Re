@@ -17,6 +17,7 @@ import { useApi } from "../hooks/useApi";
 import { useEntrance } from "../hooks/useEntrance";
 import { isReducedMotion } from "../hooks/useReducedMotion";
 import { api } from "../services/api";
+import { addCompareHistory } from "../services/historyService";
 import { COMPARE_MAX, KEY_ROWS, LOCATION_ROWS, amenityMatrix, buildRows, insights, overallPick } from "../utils/compare";
 import { brand, colors, radius } from "../theme";
 import Text from "../components/AppText";
@@ -47,6 +48,11 @@ export default function CompareScreen({ navigation }) {
   useEffect(() => {
     if (data) cmp.prune(data.items.map((i) => i.id));
   }, [data]); // eslint-disable-line react-hooks/exhaustive-deps
+  // Remember each set of 2+ projects the user actually saw side by side (Home > Recent Compares).
+  const loadedKey = items.map((i) => i.id).join(",");
+  useEffect(() => {
+    if (items.length >= 2) addCompareHistory(items);
+  }, [loadedKey]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const keyRows = useMemo(() => buildRows(items, KEY_ROWS), [items]);
   const locationRows = useMemo(() => buildRows(items, LOCATION_ROWS), [items]);

@@ -4,6 +4,8 @@ const SEARCH_HISTORY_KEY = "cp_search_history";
 const VIEW_HISTORY_KEY = "cp_view_history";
 const MAX_SEARCH_HISTORY = 10;
 const MAX_VIEW_HISTORY = 15;
+const COMPARE_HISTORY_KEY = "cp_compare_history";
+const MAX_COMPARE_HISTORY = 10;
 
 const historyListeners = new Set();
 
@@ -145,6 +147,79 @@ export async function recordPropertyView(property) {
     await AsyncStorage.setItem(VIEW_HISTORY_KEY, JSON.stringify(updated));
   } catch (err) {
     console.log("[historyService] Error recording property view:", err?.message);
+  }
+}
+
+const compareListeners = new Set();
+
+/**
+ * Subscribe to compare history changes
+ */
+export function subscribeCompareHistory(listener) {
+  compareListeners.add(listener);
+  return () => {
+    compareListeners.delete(listener);
+  };
+}
+
+function notifyCompare(history) {
+  compareListeners.forEach((fn) => {
+    try {
+      fn(history);
+    } catch (e) {
+      console.log("[historyService] compare listener error:", e);
+    }
+  });
+}
+
+/**
+ * Get recently compared property sets, newest first
+ */
+export async function getCompareHistory() {
+  try {
+    const raw = await AsyncStorage.getItem(COMPARE_HISTORY_KEY);
+    const parsed = raw ? JSON.parse(raw) : [];
+    return Array.isArray(parsed) ? parsed : [];
+  } catch (err) {
+    console.log("[historyService] Error loading compare history:", err?.message);
+    return [];
+  }
+}
+
+/**
+ * Record a comparison of two or more properties. The same set (in any order) moves to the top
+ * instead of being added twice.
+ */
+export async function addCompareHistory(properties) {
+  const list = (properties || []).filter((p) => p && p.id);
+  if (list.length < 2) return;
+  const setKey = list.map((p) => p.id).sort().join(",");
+  try {
+    const existing = await getCompareHistory();
+    const filtered = existing.filter((it) => [...it.ids].sort().join(",") !== setKey);
+    const item = {
+      id: `ch_${Date.now()}`,
+      ids: list.map((p) => p.id),
+      properties: list.map((p) => ({ id: p.id, title: p.title, locality: p.locality, city: p.city })),
+      timestamp: Date.now(),
+    };
+    const updated = [item, ...filtered].slice(0, MAX_COMPARE_HISTORY);
+    await AsyncStorage.setItem(COMPARE_HISTORY_KEY, JSON.stringify(updated));
+    notifyCompare(updated);
+  } catch (err) {
+    console.log("[historyService] Error saving compare history:", err?.message);
+  }
+}
+
+/**
+ * Clear all compare history
+ */
+export async function clearCompareHistory() {
+  try {
+    await AsyncStorage.removeItem(COMPARE_HISTORY_KEY);
+    notifyCompare([]);
+  } catch (err) {
+    console.log("[historyService] Error clearing compare history:", err?.message);
   }
 }
 
