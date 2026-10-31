@@ -68,7 +68,7 @@ export default function NotificationScreen({ navigation }) {
       const result = await api.notifications();
       setNotifications(Array.isArray(result.items) ? result.items : []);
     } catch (e) {
-      setError(e?.message || "Could not load notifications. Please try again.");
+      setError(e?.signInRequired ? "Please sign in to see your notifications." : e?.message || "Could not load notifications. Please try again.");
     } finally {
       setLoading(false);
       setRefreshing(false);

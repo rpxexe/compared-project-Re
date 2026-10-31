@@ -13,7 +13,7 @@ function errorHandler(err, req, res, next) {
   else if (err.name === 'CastError') { status = 400; message = 'Invalid value supplied'; }
   else if (err.name === 'ValidationError') { status = 400; message = Object.values(err.errors || {})[0]?.message || 'Validation failed'; }
   else if (err.code === 11000) { status = 409; message = 'Duplicate entry'; }
-  if (status >= 500) {
+  if (status >= 500 && !err.expose) {
     if (!env.isTest) console.error(err);
     message = 'Something went wrong on our side. Please try again.';
   }

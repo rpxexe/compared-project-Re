@@ -317,7 +317,7 @@ const getCompareProperties = async (req, res) => {
         .filter(Boolean),
     ),
   ];
-  if (ids.length > 4) throw bad("You can compare up to 4 projects at a time");
+  if (ids.length > 3) throw bad("You can compare up to 3 projects at a time");
   if (ids.some((id) => !isPropertyId(id))) throw bad("Invalid property id");
   if (!ids.length) return res.json({ items: [] });
   const docs = await Property.find({

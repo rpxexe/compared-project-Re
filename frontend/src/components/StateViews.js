@@ -57,7 +57,7 @@ export function ErrorState({ title = 'Unable to load', error, onRetry }) {
     <View style={styles.center}>
       <View style={[styles.iconWrap, { backgroundColor: brand.errorSoft }]}><Ionicons name="cloud-offline-outline" size={30} color={colors.error} /></View>
       <Text style={styles.title}>{title}</Text>
-      <Text style={styles.msg}>{error?.message || 'Something went wrong. Tap to retry.'}</Text>
+      <Text style={styles.msg}>{error?.signInRequired ? 'Please sign in to see this.' : error?.message || 'Something went wrong. Tap to retry.'}</Text>
       {onRetry ? <Button title="Tap to retry" onPress={onRetry} small icon="refresh" style={{ marginTop: 18 }} /> : null}
     </View>
   );

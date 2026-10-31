@@ -2,6 +2,8 @@ const express = require("express");
 const { authRequired } = require("../middleware/auth");
 const postProperty = require("../controllers/postProperty-controller");
 const { str, cleanPhone, isValidPhone } = require("../utils/validate");
+const { rateLimit } = require("../utils/rateLimit");
+const { generateDescription } = require("../utils/gemini");
 
 const router = express.Router();
 const FURNISHING = ["unfurnished", "semi-furnished", "furnished"];
@@ -96,6 +98,21 @@ function parse(body = {}) {
   }
   return { d, opt, errors };
 }
+
+// AI-written description from the form's details. Limited per account, since each call costs quota.
+const describeLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000,
+  max: 20,
+  message: "You've used the AI writer 20 times this hour. Please try again a little later.",
+  key: (req) => (req.user?.id ? `u:${req.user.id}` : req.ip),
+});
+router.post("/describe", authRequired, describeLimiter, async (req, res, next) => {
+  try {
+    res.json({ description: await generateDescription(req.body) });
+  } catch (e) {
+    next(e);
+  }
+});
 
 router.post("/", authRequired, (req, res, next) => { req.postPropertyParsed = parse(req.body); next(); }, postProperty.postProperty);
 

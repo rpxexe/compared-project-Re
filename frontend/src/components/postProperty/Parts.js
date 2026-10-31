@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useEffect, useMemo, useRef, useState } from "react";
-import { ActivityIndicator, Animated, BackHandler, Easing, Image, Keyboard, Pressable, ScrollView, StyleSheet, View, useWindowDimensions } from "react-native";
+import { ActivityIndicator, Animated, BackHandler, Easing, Image, Keyboard, Pressable, ScrollView, StyleSheet, Text as RNText, View, useWindowDimensions } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
@@ -261,30 +261,100 @@ export function SelectField({ value, options, onChange, placeholder = "Select", 
 export const KeepVisibleContext = createContext(null);
 
 // Text input in the same box style as SelectField; `label` sits above it when given.
-export function TextField({ label, required, error, prefix, style, multiline, ...props }) {
+// `completion` is a fuller word for what has been typed: its missing letters show faintly after
+// the cursor, and the keyboard's submit key or the arrow button takes it (`onComplete`, else
+// onChangeText). The faint copy is a second, identical input behind the real one, so its letters
+// sit exactly where the typed ones do.
+export function TextField({ label, required, error, prefix, style, multiline, onFocus, onBlur, completion, onComplete, onSubmitEditing, ...props }) {
   const [focused, setFocused] = useState(false);
   const keepVisible = useContext(KeepVisibleContext);
   const box = useRef(null);
+  const typed = props.value || "";
+  const ghost = focused && !multiline && !!completion && !!typed && completion.length > typed.length
+    && completion.toLowerCase().startsWith(typed.toLowerCase()) ? completion : "";
+  const accept = () => (onComplete || props.onChangeText)?.(ghost);
   return (
     <View style={style}>
       {label ? <Text style={s.smallLabel}>{label}{required ? <Text style={{ color: colors.error }}> *</Text> : null}</Text> : null}
       <View ref={box} collapsable={false} style={[s.select, multiline && s.multiline, focused && s.fieldFocus, error && s.fieldErr]}>
         {prefix ? <View style={s.prefix}><Text style={s.prefixText}>{prefix}</Text></View> : null}
-        <TextInput
-          placeholderTextColor={brand.placeholder}
-          style={[s.input, multiline && { minHeight: 110, textAlignVertical: "top" }]}
-          multiline={multiline}
-          accessibilityLabel={label}
-          onFocus={() => {
-            setFocused(true);
-            keepVisible?.(box.current);
-          }}
-          onBlur={() => setFocused(false)}
-          {...props}
-        />
+        <View style={s.inputWrap}>
+          {ghost ? (
+            <TextInput editable={false} focusable={false} pointerEvents="none" importantForAccessibility="no-hide-descendants"
+              accessibilityElementsHidden style={[s.input, s.ghost]}>
+              <RNText style={{ color: "transparent" }}>{typed}</RNText>
+              <RNText style={{ color: brand.placeholder }}>{ghost.slice(typed.length)}</RNText>
+            </TextInput>
+          ) : null}
+          <TextInput
+            placeholderTextColor={brand.placeholder}
+            style={[s.input, multiline && { minHeight: 110, textAlignVertical: "top" }]}
+            multiline={multiline}
+            accessibilityLabel={label}
+            accessibilityHint={ghost ? `Suggests ${ghost}` : undefined}
+            onFocus={(e) => {
+              setFocused(true);
+              keepVisible?.(box.current);
+              onFocus?.(e);
+            }}
+            onBlur={(e) => {
+              setFocused(false);
+              onBlur?.(e);
+            }}
+            onSubmitEditing={(e) => {
+              if (ghost) accept();
+              onSubmitEditing?.(e);
+            }}
+            {...props}
+          />
+        </View>
+        {ghost ? (
+          <Appear scale>
+            <Pressable onPress={accept} hitSlop={8} style={s.acceptBtn} accessibilityRole="button" accessibilityLabel={`Use ${ghost}`}>
+              <Ionicons name="arrow-forward" size={14} color="#fff" />
+            </Pressable>
+          </Appear>
+        ) : null}
       </View>
       <ErrorText>{error}</ErrorText>
     </View>
+  );
+}
+
+// Matching part of a suggestion in bold, the rest in the regular weight.
+function Highlight({ text, query, style }) {
+  const i = query ? text.toLowerCase().indexOf(query.toLowerCase()) : -1;
+  if (i < 0) return <Text style={style} numberOfLines={1}>{text}</Text>;
+  return (
+    <Text style={style} numberOfLines={1}>
+      {text.slice(0, i)}<Text style={s.suggestMatch}>{text.slice(i, i + query.length)}</Text>{text.slice(i + query.length)}
+    </Text>
+  );
+}
+
+// Suggestions under a text field: `items` are { title, subtitle? }. Taps go straight through
+// (the form keeps taps for its buttons), and the list scrolls itself clear of the keyboard.
+export function SuggestionList({ items, query, icon = "location-outline", onPick }) {
+  const keepVisible = useContext(KeepVisibleContext);
+  const box = useRef(null);
+  useEffect(() => { keepVisible?.(box.current); }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  return (
+    <Appear from={-6}>
+      <View ref={box} collapsable={false} style={s.suggest} accessibilityRole="list">
+        {items.map((it, i) => (
+          <Pressable key={`${it.title}|${it.subtitle || ""}`} onPress={() => onPick(it)}
+            style={({ pressed }) => [s.suggestRow, i > 0 && s.suggestLine, pressed && s.optionPressed]}
+            accessibilityRole="button" accessibilityLabel={[it.title, it.subtitle].filter(Boolean).join(", ")}>
+            <View style={s.optionIcon}><Ionicons name={icon} size={15} color={brand.violet} /></View>
+            <View style={{ flex: 1 }}>
+              <Highlight text={it.title} query={query.trim()} style={s.suggestTitle} />
+              {it.subtitle ? <Text style={s.suggestSub} numberOfLines={1}>{it.subtitle}</Text> : null}
+            </View>
+            <Ionicons name="arrow-up-outline" size={15} color={brand.inkSoft} style={{ transform: [{ rotate: "-45deg" }] }} />
+          </Pressable>
+        ))}
+      </View>
+    </Appear>
   );
 }
 
@@ -376,6 +446,9 @@ const s = StyleSheet.create({
   multiline: { alignItems: "flex-start", paddingVertical: 10 },
   smallLabel: { fontSize: 12.5, fontWeight: "800", color: brand.ink, marginBottom: 6 },
   input: { flex: 1, fontSize: 14, fontWeight: "600", color: brand.ink, paddingVertical: 10 },
+  inputWrap: { flex: 1, alignSelf: "stretch", justifyContent: "center" },
+  ghost: { ...StyleSheet.absoluteFillObject, color: "transparent" },
+  acceptBtn: { width: 26, height: 26, borderRadius: 13, backgroundColor: brand.violet, alignItems: "center", justifyContent: "center", marginLeft: 6 },
   prefix: { marginLeft: -12, marginRight: 10, alignSelf: "stretch", width: 40, alignItems: "center", justifyContent: "center", borderRightWidth: 1.2, borderRightColor: LINE },
   prefixText: { fontSize: 15, fontWeight: "700", color: brand.violet },
   selectOpen: { borderColor: brand.violet },
@@ -392,6 +465,12 @@ const s = StyleSheet.create({
   optionText: { flex: 1, fontSize: 14, fontWeight: "600", color: brand.ink },
   optionTextOn: { color: brand.violet, fontWeight: "700" },
 
+  suggest: { marginTop: 8, borderWidth: 1.2, borderColor: LINE, borderRadius: 14, backgroundColor: "#fff", paddingHorizontal: 4, overflow: "hidden" },
+  suggestRow: { flexDirection: "row", alignItems: "center", gap: 10, minHeight: 48, paddingHorizontal: 8, paddingVertical: 6, borderRadius: 10 },
+  suggestLine: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: LINE },
+  suggestTitle: { fontSize: 14, fontWeight: "500", color: brand.ink },
+  suggestMatch: { fontWeight: "800", color: brand.violet },
+  suggestSub: { fontSize: 11.5, fontWeight: "600", color: brand.inkSoft, marginTop: 1 },
   tile: { flex: 1, height: 96, borderRadius: 16, borderWidth: 1.5, borderColor: LINE, backgroundColor: "#FCFAFF", alignItems: "center", justifyContent: "center", gap: 8 },
   tileOn: { borderColor: brand.violet, backgroundColor: brand.lavender },
   tileTick: { position: "absolute", top: 8, right: 8, width: 20, height: 20, borderRadius: 10, backgroundColor: brand.violet, alignItems: "center", justifyContent: "center" },
