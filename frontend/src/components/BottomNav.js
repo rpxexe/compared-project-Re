@@ -1,5 +1,5 @@
 import React, { useContext, useEffect, useRef, useState } from "react";
-import { Animated, Pressable, StyleSheet, View } from "react-native";
+import { Animated, Keyboard, Pressable, StyleSheet, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { BottomTabBarHeightCallbackContext } from "@react-navigation/bottom-tabs";
 import { LinearGradient } from "expo-linear-gradient";
@@ -139,6 +139,8 @@ export default function BottomNav({ state, navigation, badges = {} }) {
   const x = useRef(new Animated.Value(0)).current; // notch / bubble centre within the bar
   const pop = useRef(new Animated.Value(1)).current;
   const placed = useRef(false);
+  // The window resizes for the keyboard, which would lift the floating bar over the field being typed in.
+  const [keyboard, setKeyboard] = useState(false);
 
   const count = state.routes.length;
   const active = state.routes[state.index]?.name;
@@ -162,6 +164,14 @@ export default function BottomNav({ state, navigation, badges = {} }) {
     ]).start();
   }, [state.index, width, count]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  useEffect(() => {
+    const show = Keyboard.addListener("keyboardDidShow", () => setKeyboard(true));
+    const hide = Keyboard.addListener("keyboardDidHide", () => setKeyboard(false));
+    return () => { show.remove(); hide.remove(); };
+  }, []);
+
+  if (keyboard) return null;
+
   return (
     // Floats over the screens; they read its height (useBottomTabBarHeight) to keep content clear.
     <View
@@ -169,8 +179,6 @@ export default function BottomNav({ state, navigation, badges = {} }) {
       onLayout={(e) => onHeightChange?.(e.nativeEvent.layout.height)}
       style={[styles.wrapper, { paddingBottom: Math.max(insets.bottom, 10) }]}
     >
-      {/* Solid strip behind the phone's own navigation buttons, so content never scrolls under them. */}
-      {insets.bottom ? <View pointerEvents="none" style={[styles.systemNavFill, { height: insets.bottom }]} /> : null}
       <View style={styles.bar} onLayout={(e) => setWidth(e.nativeEvent.layout.width)}>
         {width ? (
           // Twice the bar's width with the notch in the middle, slid so the notch tracks `x`.
@@ -237,7 +245,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: GUTTER,
     paddingTop: BUBBLE_R - BUBBLE_Y,
   },
-  systemNavFill: { position: "absolute", left: 0, right: 0, bottom: 0, backgroundColor: colors.ivory },
   bar: {
     flexDirection: "row",
     height: BAR_H,

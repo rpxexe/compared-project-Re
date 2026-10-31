@@ -111,6 +111,7 @@ function normalizeProperty(doc) {
     totalFloors: textOf(p.totalFloors),
     wing: textOf(p.wing),
     ageOfProperty: textOf(p.ageOfProperty),
+    buildingGrade: textOf(p.buildingGrade),
     unitsAvailable: textOf(p.unitsAvailable),
     propertyType: type,
     propertyGroup: firstString(p.propertyGroup),

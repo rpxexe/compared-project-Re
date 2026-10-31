@@ -1,11 +1,11 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
-import { ActivityIndicator, Animated, BackHandler, Image, KeyboardAvoidingView, Pressable, ScrollView, StyleSheet, View } from "react-native";
+import { ActivityIndicator, Animated, BackHandler, Easing, Image, Keyboard, KeyboardAvoidingView, Pressable, ScrollView, StyleSheet, View } from "react-native";
 import { StatusBar } from "expo-status-bar";
 import * as ImagePicker from "expo-image-picker";
 import { Ionicons } from "@expo/vector-icons";
 import Button from "../components/Button";
 import {
-  Card, ChoicePill, ChoiceTile, DropdownHost, ErrorText, FieldLabel, KeepVisibleContext, LINE, SelectField, Stepper, TextField, TogglePill, UploadBox, WizardHeader,
+  Appear, Card, ChoicePill, ChoiceTile, DropdownHost, ErrorText, FieldLabel, KeepVisibleContext, LINE, SelectField, Stepper, TextField, UploadBox, WizardHeader,
 } from "../components/postProperty/Parts";
 import Submitted from "../components/postProperty/Submitted";
 import { useAuth } from "../context/AuthContext";
@@ -14,21 +14,29 @@ import { useBottomSpace } from "../hooks/useBottomSpace";
 import { useToast } from "../context/ToastContext";
 import { api } from "../services/api";
 import { formatInr } from "../utils/format";
+import PressableScale from "../components/PressableScale";
+import { isReducedMotion } from "../hooks/useReducedMotion";
 import { getCurrentUserLocation } from "../services/locationService";
 import {
-  AREA_UNITS, BATHROOMS, BHKS, CATEGORY_OPTIONS, CUSTOM_DATE, EMPTY_FORM, FACINGS, FURNISHING, FURNISHING_ICONS, LISTING_OPTIONS, MAX_PHOTOS, PARKING,
+  AREA_UNITS, BATHROOMS, BHKS, FLOORS, GROUND, CATEGORY_OPTIONS, CUSTOM_DATE, EMPTY_FORM, FACINGS, FURNISHING, FURNISHING_ICONS, LISTING_OPTIONS, MAX_PHOTOS, PARKING,
   PARKING_ICONS, TYPE_ICONS,
-  RENT_AVAILABILITY, SALE_POSSESSION, STEPS, amenitiesFor, availabilityText, buildPayload, firstInvalidStep,
-  maskDate, needsBhk, photoRoomsFor, priceLabel, sanitizeForType, showsBuildingFields, typeLabel, typesFor, validateStep,
+  PROPERTY_AGES, RENT_AVAILABILITY, SALE_POSSESSION, STEPS, MAX_AMENITIES, availabilityText, buildPayload, firstInvalidStep,
+  floorText, maskDate, needsBhk, photoRoomsFor, priceLabel, sanitizeForType, sectionsFor, showsAge, showsBuildingFields, showsFloor, typeLabel, typesFor, validateStep,
 } from "../utils/postPropertyFlow";
 import { brand, colors } from "../theme";
 import Text from "../components/AppText";
 
+// TESTING: true opens the form on the Amenities step alone, with a bar to switch the property
+// being previewed. Set back to false before shipping.
+const AMENITIES_ONLY = false;
+const STEP_LIST = AMENITIES_ONLY ? STEPS.filter((x) => x.key === "amenities") : STEPS;
+const TEST_FORM = { listingType: "sale", category: "residential", propertyType: "Flats/Apartments", furnishing: "Furnished" };
+
 // Which step owns a backend field error, so server-side validation can send the user to the right place.
 const FIELD_STEP = {
   listingType: 0, category: 0, title: 0, propertyType: 0, city: 0, locality: 0,
-  bhk: 1, area: 1, bathrooms: 1, totalFloors: 1, furnishing: 1,
-  price: 2, images: 4, description: 4,
+  bhk: 0, area: 0, bathrooms: 0, floor: 0, totalFloors: 0, furnishing: 0,
+  price: 0, possessionStatus: 0, ageOfProperty: 0, images: 2, description: 2,
 };
 
 const FIELD_GAP = 24;
@@ -52,6 +60,19 @@ function SpecRow({ icon, label, required, error, children }) {
   );
 }
 
+// Tick-box tile of the Amenities step; `radio` draws a round mark for single-choice sections.
+function CheckTile({ label, active, radio, onPress }) {
+  return (
+    <PressableScale to={0.96} onPress={onPress} style={[s.tile, active && s.tileOn]}
+      accessibilityRole={radio ? "radio" : "checkbox"} accessibilityState={{ checked: active }} accessibilityLabel={label}>
+      <View style={[s.tick, radio && s.tickRadio, active && s.tickOn]}>
+        {active ? <Appear scale><Ionicons name="checkmark" size={13} color="#fff" /></Appear> : null}
+      </View>
+      <Text style={[s.tileText, active && s.tileTextOn]} numberOfLines={2}>{label}</Text>
+    </PressableScale>
+  );
+}
+
 function Wizard({ navigation, initial }) {
   const { bottom } = useBottomSpace();
   const toast = useToast();
@@ -62,7 +83,7 @@ function Wizard({ navigation, initial }) {
   const scrollY = useRef(0);
   const viewportH = useRef(0);
   const [step, setStep] = useState(0);
-  const [form, setForm] = useState(() => sanitizeForType({ ...EMPTY_FORM, ...initial }));
+  const [form, setForm] = useState(() => sanitizeForType({ ...EMPTY_FORM, ...(AMENITIES_ONLY ? TEST_FORM : {}), ...initial }));
   const [errors, setErrors] = useState({});
   const [apiError, setApiError] = useState("");
   const [submitting, setSubmitting] = useState(false);
@@ -70,10 +91,21 @@ function Wizard({ navigation, initial }) {
   const [uploading, setUploading] = useState({ cover: false, photos: false });
   const [room, setRoom] = useState("");
   const [customAmenity, setCustomAmenity] = useState("");
+  const [sectionKey, setSectionKey] = useState(""); // Amenities tab on show; the first one by default
   const [locating, setLocating] = useState(false);
   const fade = useRef(new Animated.Value(1)).current;
-  const cur = STEPS[step];
-  const last = step === STEPS.length - 1;
+  const shake = useRef(new Animated.Value(0)).current;
+  // Which way the step content slides in: worked out while rendering the new step, so the very
+  // first frame of the transition already knows (1 moving forward, -1 going back).
+  const shownStep = useRef(0);
+  const dir = useRef(1);
+  if (step !== shownStep.current) {
+    dir.current = step > shownStep.current ? 1 : -1;
+    shownStep.current = step;
+    if (!isReducedMotion()) fade.setValue(0); // hidden from its first frame, then faded in below
+  }
+  const cur = STEP_LIST[step];
+  const last = step === STEP_LIST.length - 1;
   const rent = form.listingType === "rent";
   const building = showsBuildingFields(form.propertyType);
   const rooms = photoRoomsFor(form.category, form.propertyType);
@@ -89,8 +121,7 @@ function Wizard({ navigation, initial }) {
 
   // Animate between steps and keep the scroll position at the top of each step.
   useEffect(() => {
-    fade.setValue(0);
-    Animated.timing(fade, { toValue: 1, duration: 220, useNativeDriver: true }).start();
+    Animated.timing(fade, { toValue: 1, duration: 300, easing: Easing.out(Easing.cubic), useNativeDriver: true }).start();
     scroll.current?.scrollTo?.({ y: 0, animated: false });
     navigation.setOptions({ gestureEnabled: step === 0 && !done });
   }, [step]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -114,6 +145,7 @@ function Wizard({ navigation, initial }) {
   }, [navigation]);
 
   const goBack = useCallback(() => {
+    Keyboard.dismiss();
     if (step > 0) { setStep((n) => n - 1); setErrors({}); return true; }
     leave();
     return true;
@@ -131,33 +163,40 @@ function Wizard({ navigation, initial }) {
     message: "Please sign in or register to complete your property listing.",
   });
 
-  const jump = (i) => { setErrors({}); setStep(i); };
+  const jump = (i) => { Keyboard.dismiss(); setErrors({}); setStep(i); };
 
   // Once the keyboard has opened (and the scroll area has shrunk), make sure the whole focused
-  // field, border included, sits at least FIELD_GAP above the keyboard.
+  // field, border included, sits at least FIELD_GAP above the keyboard. The scroll area runs
+  // behind the floating tab bar, so with the keyboard closed the bar's height is not visible.
   const keepVisible = useCallback((node) => {
     setTimeout(() => {
       if (!node || !content.current) return;
       node.measureLayout(content.current, (x, y, w, h) => {
-        const needed = y + h + FIELD_GAP - viewportH.current;
+        const visible = viewportH.current - (Keyboard.isVisible() ? 0 : bottom);
+        const needed = y + h + FIELD_GAP - visible;
         if (needed > scrollY.current) scroll.current?.scrollTo({ y: needed, animated: true });
       }, () => {});
     }, 350);
-  }, []);
+  }, [bottom]);
 
   const next = () => {
+    Keyboard.dismiss();
     const e = validateStep(cur.key, form);
     setErrors(e);
     if (Object.keys(e).length) {
       toast.show("Please fix the highlighted fields", "error");
+      if (!isReducedMotion()) {
+        Animated.sequence([10, -10, 7, -7, 3, 0].map((x) => Animated.timing(shake, { toValue: x, duration: 55, useNativeDriver: true }))).start();
+      }
       return;
     }
     // Photos upload to the account, so sign-in is asked for before the details steps.
     if (step === 0 && !token) return askLogin();
-    setStep((n) => Math.min(n + 1, STEPS.length - 1));
+    setStep((n) => Math.min(n + 1, STEP_LIST.length - 1));
   };
 
   const locate = async () => {
+    Keyboard.dismiss();
     if (!(await ensureLocation("Allow location to fill in the property's city and locality from where you are now."))) return;
     setLocating(true);
     try {
@@ -173,6 +212,7 @@ function Wizard({ navigation, initial }) {
   };
 
   const pick = async (limit) => {
+    Keyboard.dismiss();
     const res = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ["images"],
       quality: 0.7,
@@ -220,12 +260,13 @@ function Wizard({ navigation, initial }) {
   const addCustomAmenity = () => {
     const a = customAmenity.trim().slice(0, 40);
     if (!a) return;
-    if (!form.amenities.some((x) => x.toLowerCase() === a.toLowerCase()) && form.amenities.length < 30) set("amenities", [...form.amenities, a]);
+    if (!form.amenities.some((x) => x.toLowerCase() === a.toLowerCase()) && form.amenities.length < MAX_AMENITIES) set("amenities", [...form.amenities, a]);
     setCustomAmenity("");
   };
 
   const submit = async () => {
     if (submitting || busy) return;
+    Keyboard.dismiss();
     if (!token) return askLogin();
     setApiError("");
     const bad = firstInvalidStep(form);
@@ -267,43 +308,59 @@ function Wizard({ navigation, initial }) {
 
   const priceNum = Number(form.price);
   const roomPhotos = form.photos.filter((p) => p.room === activeRoom);
+  const sections = sectionsFor(form);
+  const picked = form.amenities.length + form.facilities.length + (form.grade ? 1 : 0);
+  const sectionIdx = Math.max(0, sections.findIndex((x) => x.key === sectionKey));
+  const section = sections[sectionIdx];
+  const nextSection = sections[sectionIdx + 1];
+  const chosenIn = (sec) => (sec.field === "grade" ? [form.grade] : form[sec.field]);
+  const countIn = (sec) => sec.items.filter((i) => chosenIn(sec).includes(i)).length;
+  const allPicked = [...form.amenities.map((a) => ["amenities", a]), ...form.facilities.map((a) => ["facilities", a]), ...(form.grade ? [["grade", form.grade]] : [])];
+  const showSection = (key) => { Keyboard.dismiss(); setSectionKey(key); };
+  const setAll = (sec, on) => set(sec.field, on
+    ? [...form[sec.field], ...sec.items.filter((i) => !form[sec.field].includes(i))]
+    : form[sec.field].filter((i) => !sec.items.includes(i)));
+  const pickIn = (field, a) => (field === "grade" ? set("grade", form.grade === a ? "" : a) : set(field, toggle(form[field], a)));
   const summary = [
     ["swap-horizontal-outline", "Purpose", labelOf(LISTING_OPTIONS, form.listingType), 0],
     ["grid-outline", "Category", labelOf(CATEGORY_OPTIONS, form.category), 0],
     ["business-outline", "Type", typeLabel(form.propertyType), 0],
     ["location-outline", "Location", [form.locality.trim(), form.city.trim()].filter(Boolean).join(", "), 0],
-    ["bed-outline", "Bedrooms", needsBhk(form.category, form.propertyType) && form.bhk ? `${form.bhk} BHK` : "", 1],
-    ["water-outline", "Bathrooms", building ? form.bathrooms : "", 1],
-    ["resize-outline", "Area", form.area ? `${form.area} ${labelOf(AREA_UNITS, form.areaUnit)}` : "", 1],
-    ["layers-outline", "Total floors", building ? form.totalFloors : "", 1],
-    ["compass-outline", "Facing", form.facing, 1],
-    ["car-outline", "Parking", form.parking, 1],
-    ["bed-outline", "Furnishing", building ? form.furnishing : "", 1],
-    ["pricetag-outline", priceLabel(form.listingType), priceNum > 0 ? `${formatInr(priceNum)}${rent ? " / month" : ""}` : "", 2],
-    ["calendar-outline", rent ? "Available from" : "Possession", availabilityText(form), 2],
-    ["sparkles-outline", "Amenities", form.amenities.length ? `${form.amenities.length} selected` : "", 3],
-    ["images-outline", "Photos", `${(form.cover ? 1 : 0) + form.photos.length} added`, 4],
+    ["bed-outline", "Bedrooms", needsBhk(form.category, form.propertyType) && form.bhk ? `${form.bhk} BHK` : "", 0],
+    ["water-outline", "Bathrooms", building ? form.bathrooms : "", 0],
+    ["resize-outline", "Area", form.area ? `${form.area} ${labelOf(AREA_UNITS, form.areaUnit)}` : "", 0],
+    ["layers-outline", "Total floors", building ? form.totalFloors : "", 0],
+    ["business-outline", "Floor", showsFloor(form.propertyType) ? floorText(form) : "", 0],
+    ["compass-outline", "Facing", form.facing, 0],
+    ["car-outline", "Parking", form.parking, 0],
+    ["bed-outline", "Furnishing", building ? form.furnishing : "", 0],
+    ["pricetag-outline", priceLabel(form.listingType), priceNum > 0 ? `${formatInr(priceNum)}${rent ? " / month" : ""}` : "", 0],
+    ["calendar-outline", rent ? "Available from" : "Possession", availabilityText(form), 0],
+    ["time-outline", "Property age", showsAge(form) ? form.age : "", 0],
+    ["sparkles-outline", "Amenities", picked ? `${picked} selected` : "", 1],
+    ["ribbon-outline", "Building grade", form.grade, 1],
+    ["images-outline", "Photos", `${(form.cover ? 1 : 0) + form.photos.length} added`, 2],
   ].filter((r) => r[2]);
 
   return (
     <DropdownHost style={s.root}>
       <StatusBar style="dark" />
       <WizardHeader title={cur.heading || "Post your property"} subtitle={cur.subtitle} onBack={goBack} />
-      <Stepper steps={STEPS} step={step} onJump={jump} />
+      {AMENITIES_ONLY ? null : <Stepper steps={STEPS} step={step} onJump={jump} />}
 
-      {/* The scroll area stops at the system navigation bar, so the form never slides under it. */}
+      {/* The form scrolls on behind the see-through tab bar; the bottom padding lets its end clear the bar. */}
       {/* "padding" on Android too: the app draws edge-to-edge, so the window no longer shrinks for the keyboard. */}
-      <KeyboardAvoidingView style={{ flex: 1, marginBottom: bottom }} behavior="padding">
+      <KeyboardAvoidingView style={{ flex: 1 }} behavior="padding">
         <KeepVisibleContext.Provider value={keepVisible}>
-        <ScrollView ref={scroll} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 8 }}
+        <ScrollView ref={scroll} keyboardShouldPersistTaps="handled" keyboardDismissMode="on-drag" showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: bottom + 8 }}
           scrollEventThrottle={32} onScroll={(e) => { scrollY.current = e.nativeEvent.contentOffset.y; }}
           onLayout={(e) => { viewportH.current = e.nativeEvent.layout.height; }}>
           <View ref={content} collapsable={false} style={s.scroll}>
-          <Animated.View style={{ opacity: fade, transform: [{ translateY: fade.interpolate({ inputRange: [0, 1], outputRange: [12, 0] }) }] }}>
+          <Animated.View style={{ opacity: fade, transform: [{ translateX: Animated.add(shake, fade.interpolate({ inputRange: [0, 1], outputRange: [28 * dir.current, 0] })) }] }}>
             {apiError ? <View style={s.apiErr}><Ionicons name="alert-circle-outline" size={19} color={colors.error} /><Text style={s.apiErrText}>{apiError}</Text></View> : null}
 
             {cur.key === "purpose" ? (
-              <Card>
+              <Card index={0}>
                 <FieldLabel icon="swap-horizontal-outline">I want to</FieldLabel>
                 <View style={s.row} accessibilityRole="radiogroup">
                   {LISTING_OPTIONS.map((o) => (
@@ -335,8 +392,9 @@ function Wizard({ navigation, initial }) {
               </Card>
             ) : null}
 
-            {cur.key === "specs" ? (
-              <Card>
+            {cur.key === "purpose" ? (
+              <Card index={1} style={s.cardGap}>
+                <FieldLabel icon="options-outline">Specifications</FieldLabel>
                 {needsBhk(form.category, form.propertyType) ? (
                   <SpecRow icon="bed-outline" label="Bedrooms" required error={errors.bhk}>
                     <SelectField title="Bedrooms" value={form.bhk} options={BHKS} optionIcon="bed-outline" format={(b) => `${b} BHK`} onChange={(v) => set("bhk", v)} error={errors.bhk} />
@@ -356,6 +414,13 @@ function Wizard({ navigation, initial }) {
                     <SpecRow icon="layers-outline" label="Total floors" error={errors.totalFloors}>
                       <TextField value={form.totalFloors} onChangeText={(v) => set("totalFloors", v.replace(/\D/g, "").slice(0, 3))} placeholder="e.g. 10" keyboardType="number-pad" accessibilityLabel="Total floors" />
                     </SpecRow>
+                    {showsFloor(form.propertyType) ? (
+                      <Appear><SpecRow icon="business-outline" label="Floor no." error={errors.floor}>
+                        <SelectField title="Floor" value={form.floor} optionIcon="business-outline" error={errors.floor} onChange={(v) => set("floor", v)}
+                          options={FLOORS.filter((x) => x === GROUND || !form.totalFloors || Number(x) <= Number(form.totalFloors))}
+                          format={(x) => (x === GROUND ? "Ground floor" : `Floor ${x}`)} />
+                      </SpecRow></Appear>
+                    ) : null}
                   </>
                 ) : null}
                 {form.category === "residential" ? (
@@ -374,12 +439,12 @@ function Wizard({ navigation, initial }) {
               </Card>
             ) : null}
 
-            {cur.key === "pricing" ? (
-              <Card>
+            {cur.key === "purpose" ? (
+              <Card index={2} style={s.cardGap}>
                 <FieldLabel icon="pricetag-outline" required>{priceLabel(form.listingType)}</FieldLabel>
                 <TextField prefix="₹" value={form.price ? Number(form.price).toLocaleString("en-IN") : ""} onChangeText={(v) => set("price", v.replace(/\D/g, "").slice(0, 12))}
                   placeholder={rent ? "25,000" : "2,50,00,000"} keyboardType="number-pad" accessibilityLabel={priceLabel(form.listingType)} error={errors.price} />
-                {priceNum > 0 && !errors.price ? <Text style={s.priceHint}>{formatInr(priceNum)}{rent ? " per month" : ""}</Text> : null}
+                {priceNum > 0 && !errors.price ? <Appear from={-4}><Text style={s.priceHint}>{formatInr(priceNum)}{rent ? " per month" : ""}</Text></Appear> : null}
 
                 <FieldLabel icon="calendar-outline" style={s.gapLg}>{rent ? "Available from" : "Possession status"}</FieldLabel>
                 <View style={s.pillGrid} accessibilityRole="radiogroup">
@@ -388,28 +453,112 @@ function Wizard({ navigation, initial }) {
                   ))}
                 </View>
                 {rent && form.availability === CUSTOM_DATE ? (
-                  <TextField style={{ marginTop: 12 }} label="Available from" required value={form.availableDate} onChangeText={(v) => set("availableDate", maskDate(v))}
-                    placeholder="DD/MM/YYYY" keyboardType="number-pad" maxLength={10} error={errors.availableDate} />
+                  <Appear>
+                    <TextField style={{ marginTop: 12 }} label="Available from" required value={form.availableDate} onChangeText={(v) => set("availableDate", maskDate(v))}
+                      placeholder="DD/MM/YYYY" keyboardType="number-pad" maxLength={10} error={errors.availableDate} />
+                  </Appear>
                 ) : null}
               </Card>
             ) : null}
 
-            {cur.key === "amenities" ? (
-              <Card>
-                <FieldLabel icon="sparkles-outline" right={<Text style={s.count}>{form.amenities.length} selected</Text>}>Amenities & features</FieldLabel>
-                <View style={s.pillGrid}>
-                  {[...amenitiesFor(form.category), ...form.amenities.filter((a) => !amenitiesFor(form.category).includes(a))].map((a) => (
-                    <TogglePill key={a} label={a} active={form.amenities.includes(a)} onPress={() => set("amenities", toggle(form.amenities, a))} />
+            {cur.key === "purpose" && showsAge(form) ? (
+              <Card index={3} style={s.cardGap}>
+                <FieldLabel icon="time-outline">Property age</FieldLabel>
+                <View style={s.roomRow} accessibilityRole="radiogroup">
+                  {PROPERTY_AGES.map((x) => (
+                    <ChoicePill key={x} label={x} active={form.age === x} style={s.roomPill} onPress={() => set("age", form.age === x ? "" : x)} />
                   ))}
                 </View>
-                <View style={[s.addRow, s.gapLg]}>
-                  <TextField style={{ flex: 1 }} value={customAmenity} onChangeText={setCustomAmenity} placeholder="Add another, e.g. Terrace garden" maxLength={40}
-                    onSubmitEditing={addCustomAmenity} returnKeyType="done" accessibilityLabel="Add another amenity" />
-                  <Pressable onPress={addCustomAmenity} style={s.addBtn} accessibilityRole="button" accessibilityLabel="Add amenity">
-                    <Ionicons name="add" size={22} color="#fff" />
-                  </Pressable>
-                </View>
               </Card>
+            ) : null}
+
+            {cur.key === "amenities" ? (
+              <>
+                {AMENITIES_ONLY ? (
+                  <Card style={s.testBar}>
+                    <Text style={s.testTitle}>Testing · preview amenities for</Text>
+                    <View style={s.row}>
+                      <SelectField style={{ flex: 1 }} title="Category" value={form.category} options={CATEGORY_OPTIONS} icon={false} onChange={(v) => set("category", v)} />
+                      <SelectField style={{ flex: 1.3 }} title="Type" placeholder="Type" value={form.propertyType} icon={false}
+                        options={typesFor(form.category).map((t) => ({ label: typeLabel(t), value: t, icon: TYPE_ICONS[t] }))} onChange={(v) => set("propertyType", v)} />
+                    </View>
+                    <SelectField style={{ marginTop: 8 }} title="Furnishing" placeholder="Furnishing" value={form.furnishing} options={FURNISHING}
+                      optionIcon={(v) => FURNISHING_ICONS[v]} onChange={(v) => set("furnishing", v)} />
+                  </Card>
+                ) : null}
+                {/* Section tabs: one group of options on show at a time, each tab carrying its count. */}
+                <ScrollView horizontal showsHorizontalScrollIndicator={false} style={s.tabsWrap} contentContainerStyle={s.tabs}>
+                  {sections.map((sec) => {
+                    const on = sec.key === section?.key;
+                    const n = countIn(sec);
+                    return (
+                      <PressableScale key={sec.key} to={0.95} onPress={() => showSection(sec.key)} style={[s.tab, on && s.tabOn]}
+                        accessibilityRole="tab" accessibilityState={{ selected: on }} accessibilityLabel={`${sec.title}, ${n} selected`}>
+                        <Ionicons name={sec.icon} size={15} color={on ? "#fff" : brand.violet} />
+                        <Text style={[s.tabText, on && { color: "#fff" }]}>{sec.short}</Text>
+                        {n ? <Appear scale style={[s.tabBadge, on && s.tabBadgeOn]}><Text style={[s.tabBadgeText, on && { color: brand.violet }]}>{n}</Text></Appear> : null}
+                      </PressableScale>
+                    );
+                  })}
+                </ScrollView>
+
+                {section ? (
+                  <Card key={section.key} index={1}>
+                    <View style={s.secHead}>
+                      <View style={s.secIcon}><Ionicons name={section.icon} size={20} color={brand.violet} /></View>
+                      <View style={{ flex: 1 }}>
+                        <Text style={s.secTitle}>{section.title}</Text>
+                        <Text style={s.secSub}>
+                          {section.field === "grade" ? "Choose one" : `${countIn(section)} of ${section.items.length} selected`}
+                        </Text>
+                      </View>
+                      {section.field === "grade" ? null : (
+                        <Pressable onPress={() => setAll(section, countIn(section) < section.items.length)} hitSlop={8} style={s.secAll} accessibilityRole="button">
+                          <Text style={s.secAllText}>{countIn(section) < section.items.length ? "Select all" : "Clear"}</Text>
+                        </Pressable>
+                      )}
+                    </View>
+                    <View style={s.tileGrid}>
+                      {section.items.map((a) => (
+                        <CheckTile key={a} label={a} radio={section.field === "grade"} active={chosenIn(section).includes(a)} onPress={() => pickIn(section.field, a)} />
+                      ))}
+                    </View>
+                    {nextSection ? (
+                      <Pressable onPress={() => showSection(nextSection.key)} style={s.secNext} accessibilityRole="button">
+                        <Text style={s.secNextText}>Next: {nextSection.title}</Text>
+                        <Ionicons name="arrow-forward" size={15} color={brand.violet} />
+                      </Pressable>
+                    ) : null}
+                  </Card>
+                ) : null}
+
+                {/* Everything picked so far, across tabs; tap a chip to remove it. */}
+                <Card index={2} style={s.cardGap}>
+                  <FieldLabel icon="checkmark-done-outline" right={<View style={s.amenCount}><Text style={s.amenCountText}>{picked}</Text></View>}>Your selections</FieldLabel>
+                  {allPicked.length ? (
+                    <View style={s.chips}>
+                      {allPicked.map(([field, a]) => (
+                        <Appear key={`${field}:${a}`} scale style={{ maxWidth: "100%" }}>
+                          <PressableScale to={0.94} onPress={() => pickIn(field, a)} style={s.chip} accessibilityRole="button" accessibilityLabel={`Remove ${a}`}>
+                            <Text style={s.chipText} numberOfLines={1}>{a}</Text>
+                            <Ionicons name="close" size={13} color={brand.violet} />
+                          </PressableScale>
+                        </Appear>
+                      ))}
+                    </View>
+                  ) : (
+                    <Text style={s.note}>Nothing picked yet. Choose from the tabs above.</Text>
+                  )}
+                  <Text style={[s.smallHead, s.gapLg]}>Something else?</Text>
+                  <View style={s.addRow}>
+                    <TextField style={{ flex: 1 }} value={customAmenity} onChangeText={setCustomAmenity} placeholder="e.g. Terrace garden" maxLength={40}
+                      onSubmitEditing={addCustomAmenity} returnKeyType="done" accessibilityLabel="Add another amenity" />
+                    <Pressable onPress={addCustomAmenity} style={s.addBtn} accessibilityRole="button" accessibilityLabel="Add amenity">
+                      <Ionicons name="add" size={22} color="#fff" />
+                    </Pressable>
+                  </View>
+                </Card>
+              </>
             ) : null}
 
             {cur.key === "details" ? (
@@ -486,7 +635,7 @@ function Wizard({ navigation, initial }) {
                     </Pressable>
                   ))}
                 </View>
-                <Pressable onPress={() => set("agreed", !form.agreed)} style={s.agree} accessibilityRole="checkbox" accessibilityState={{ checked: form.agreed }}>
+                <Pressable onPress={() => { Keyboard.dismiss(); set("agreed", !form.agreed); }} style={s.agree} accessibilityRole="checkbox" accessibilityState={{ checked: form.agreed }}>
                   <View style={[s.box, form.agreed && s.boxOn, errors.agreed && { borderColor: colors.error }]}>
                     {form.agreed ? <Ionicons name="checkmark" size={15} color="#fff" /> : null}
                   </View>
@@ -501,7 +650,7 @@ function Wizard({ navigation, initial }) {
 
           {/* Sits right under the card, as in the design, rather than pinned to the screen bottom. */}
           <View style={s.actions}>
-            {last ? (
+            {AMENITIES_ONLY ? null : last ? (
               <Button title="Submit Property" icon="paper-plane-outline" loading={submitting} disabled={busy} onPress={submit} />
             ) : (
               <Button title="Continue" iconRight="arrow-forward" disabled={busy} onPress={next} />
@@ -532,13 +681,14 @@ const s = StyleSheet.create({
   row: { flexDirection: "row", gap: 12 },
   gap: { marginTop: 18 },
   gapLg: { marginTop: 22 },
+  cardGap: { marginTop: 14 },
   locate: { flexDirection: "row", alignItems: "center", gap: 5, paddingHorizontal: 10, minHeight: 30, borderRadius: 15, backgroundColor: brand.lavender },
   locateText: { fontSize: 11.5, fontWeight: "700", color: brand.violet },
 
   specRow: { flexDirection: "row", alignItems: "flex-start", gap: 10, paddingVertical: 10, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: LINE },
   specLabel: { flex: 1, flexDirection: "row", alignItems: "center", gap: 8, minHeight: 46 },
   specIcon: { width: 28, height: 28, borderRadius: 9, backgroundColor: brand.lavender, alignItems: "center", justifyContent: "center" },
-  specText: { flexShrink: 1, fontSize: 13.5, fontWeight: "700", color: brand.ink },
+  specText: { flexShrink: 1, fontSize: 13.5, fontWeight: "800", color: brand.ink },
   specControl: { width: "52%" },
   areaRow: { flexDirection: "row", gap: 6 },
   unit: { width: 86, paddingHorizontal: 8 },
@@ -548,6 +698,38 @@ const s = StyleSheet.create({
   half: { width: "48.5%" },
   count: { fontSize: 12, fontWeight: "600", color: brand.inkSoft },
   addRow: { flexDirection: "row", alignItems: "flex-start", gap: 10 },
+  testBar: { marginBottom: 12, borderStyle: "dashed", borderColor: "#C9B5F5", backgroundColor: "#FCFAFF" },
+  testTitle: { fontSize: 12, fontWeight: "800", color: brand.violet, marginBottom: 8, textTransform: "uppercase", letterSpacing: 0.4 },
+  amenCount: { paddingHorizontal: 10, minWidth: 28, minHeight: 24, borderRadius: 12, backgroundColor: brand.lavender, alignItems: "center", justifyContent: "center" },
+  amenCountText: { fontSize: 12, fontWeight: "800", color: brand.violet },
+  tabsWrap: { marginHorizontal: -16, marginBottom: 12 },
+  tabs: { paddingHorizontal: 16, gap: 8 },
+  tab: { flexDirection: "row", alignItems: "center", gap: 6, minHeight: 40, paddingHorizontal: 14, borderRadius: 20, borderWidth: 1.2, borderColor: LINE, backgroundColor: "#fff" },
+  tabOn: { backgroundColor: brand.violet, borderColor: brand.violet },
+  tabText: { fontSize: 13, fontWeight: "700", color: brand.ink },
+  tabBadge: { minWidth: 20, height: 20, borderRadius: 10, paddingHorizontal: 5, backgroundColor: brand.lavender, alignItems: "center", justifyContent: "center" },
+  tabBadgeOn: { backgroundColor: "#fff" },
+  tabBadgeText: { fontSize: 11, fontWeight: "800", color: brand.violet },
+  secHead: { flexDirection: "row", alignItems: "center", gap: 12, marginBottom: 14 },
+  secIcon: { width: 42, height: 42, borderRadius: 13, backgroundColor: brand.lavender, alignItems: "center", justifyContent: "center" },
+  secTitle: { fontSize: 16, fontWeight: "800", color: brand.ink },
+  secSub: { fontSize: 12, fontWeight: "600", color: brand.inkSoft, marginTop: 2 },
+  secAll: { minHeight: 32, paddingHorizontal: 12, borderRadius: 16, backgroundColor: brand.lavender, justifyContent: "center" },
+  secAllText: { fontSize: 12, fontWeight: "800", color: brand.violet },
+  tileGrid: { flexDirection: "row", flexWrap: "wrap", justifyContent: "space-between", rowGap: 8 },
+  tile: { width: "48.8%", minHeight: 50, flexDirection: "row", alignItems: "center", gap: 10, paddingHorizontal: 12, paddingVertical: 8, borderRadius: 14, borderWidth: 1.2, borderColor: LINE, backgroundColor: "#fff" },
+  tileOn: { borderColor: brand.violet, backgroundColor: brand.lavender },
+  tick: { width: 20, height: 20, borderRadius: 6, borderWidth: 1.5, borderColor: "#C9B5F5", alignItems: "center", justifyContent: "center" },
+  tickRadio: { borderRadius: 10 },
+  tickOn: { backgroundColor: brand.violet, borderColor: brand.violet },
+  tileText: { flex: 1, fontSize: 12.5, lineHeight: 16, fontWeight: "600", color: brand.ink },
+  tileTextOn: { color: brand.violet, fontWeight: "700" },
+  secNext: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6, minHeight: 44, marginTop: 14, borderRadius: 12, borderWidth: 1.2, borderStyle: "dashed", borderColor: "#C9B5F5" },
+  secNextText: { fontSize: 13, fontWeight: "800", color: brand.violet },
+  chips: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
+  chip: { flexDirection: "row", alignItems: "center", gap: 6, maxWidth: "100%", minHeight: 32, paddingHorizontal: 12, borderRadius: 16, backgroundColor: brand.lavender },
+  chipText: { flexShrink: 1, fontSize: 12.5, fontWeight: "700", color: brand.violet },
+  smallHead: { fontSize: 13, fontWeight: "800", color: brand.ink, marginBottom: 8 },
   addBtn: { width: 46, height: 46, borderRadius: 12, backgroundColor: brand.violet, alignItems: "center", justifyContent: "center" },
 
   cover: { height: 170, borderRadius: 16, overflow: "hidden", backgroundColor: brand.lavender },
