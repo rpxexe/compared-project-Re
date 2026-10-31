@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { formatInr, orNA, timeAgo, formatPhone, formatMobileInput, ratingLabel } from '../src/utils/format.js';
 import { phoneError, isValidIndianMobile, otpDigits, validatePost, nameError, cleanName } from '../src/utils/validators.js';
 import { normalizeError } from '../src/utils/errors.js';
-import { buildCompareTable, lowestPriceIndex, COMPARE_MAX } from '../src/utils/compare.js';
+import { buildCompareTable, lowestPriceIndex, COMPARE_MAX, KEY_ROWS, buildRows, winners, areaSqft, pricePerSqft, amenityMatrix, insights, overallPick } from '../src/utils/compare.js';
 
 test('formatInr', () => {
   assert.equal(formatInr(12500000), '₹1.25 Cr');
@@ -47,7 +47,8 @@ test('post-property validation mirrors the server', () => {
 test('normalizeError: offline, timeout, API message, 5xx', () => {
   assert.equal(normalizeError({}).network, true);
   assert.match(normalizeError({ code: 'ECONNABORTED' }).message, /too long/);
-  assert.equal(normalizeError({ response: { status: 401, data: { message: 'Incorrect OTP', code: 'OTP_INVALID' } } }).code, 'OTP_INVALID');
+  assert.equal(normalizeError({ config: { url: '/auth/verify-otp' }, response: { status: 401, data: { message: 'Incorrect OTP', code: 'OTP_INVALID' } } }).code, 'OTP_INVALID');
+  assert.equal(normalizeError({ config: { url: '/users/me' }, response: { status: 401, data: {} } }).signInRequired, true);
   assert.match(normalizeError({ response: { status: 500, data: {} } }).message, /Something went wrong/);
   assert.deepEqual(normalizeError({ response: { status: 400, data: { message: 'x', errors: { title: 'bad' } } } }).fieldErrors, { title: 'bad' });
 });
@@ -63,7 +64,38 @@ test('compare table: hides empty rows, shows N/A for gaps, finds the lowest pric
   assert.deepEqual(rows.find((r) => r.key === 'amenities').cells, ['Gym', 'N/A']);
   assert.equal(lowestPriceIndex([a, b]), 1);
   assert.equal(lowestPriceIndex([a]), -1);
-  assert.equal(COMPARE_MAX, 4);
+  assert.equal(COMPARE_MAX, 3);
+});
+
+test('compare winners: crowns the best parsed value, never ties or lone values', () => {
+  assert.deepEqual(winners([3, 1, 2], 'min'), [1]);
+  assert.deepEqual(winners([3, NaN, 3]), [], 'all equal -> no winner');
+  assert.deepEqual(winners([5, NaN]), [], 'only one comparable value');
+  assert.deepEqual(winners([4, 4, 2]), [0, 1]);
+  assert.equal(areaSqft({ area: '1,100 sq.ft' }), 1100);
+  assert.equal(Math.round(areaSqft({ area: '100 sq.m' })), 1076);
+  assert.equal(areaSqft({ area: '3 bigha' }), null, 'unknown unit is not compared');
+  assert.equal(pricePerSqft({ priceValue: 11500000, area: '825 sq.ft' }), 13939);
+});
+
+test('compare rows, amenities and insights', () => {
+  const a = { id: 'a', title: 'A', price: '₹1.15 Cr', priceValue: 11500000, area: '825 sq.ft', bhk: '2', possessionStatus: 'Under Construction', amenities: ['Gym', 'Pool'] };
+  const b = { id: 'b', title: 'B', price: '₹1.48 Cr', priceValue: 14800000, area: '1,100 sq.ft', bhk: '3', possessionStatus: 'Dec 2026', amenities: ['Gym'], security: ['CCTV'] };
+  const c = { id: 'c', title: 'C', price: '₹92 L', priceValue: 9200000, area: '780 sq.ft', bhk: '2', possessionStatus: 'Ready to Move', amenities: [] };
+  const rows = buildRows([a, b, c], KEY_ROWS);
+  const row = (k) => rows.find((r) => r.key === k);
+  assert.deepEqual(row('price').winners, [2]);
+  assert.deepEqual(row('bhk').winners, [1]);
+  assert.deepEqual(row('area').winners, [1]);
+  assert.deepEqual(row('possessionStatus').winners, [2]);
+  assert.deepEqual(row('pricePerSqft').winners, [2]);
+  assert.ok(!row('reraNumber'), 'no data -> row hidden');
+  assert.equal(overallPick(rows, 3), 2);
+  const m = amenityMatrix([a, b, c]);
+  assert.equal(m.rows[0].name, 'Gym');
+  assert.deepEqual(m.rows[0].has, [true, true, false]);
+  assert.deepEqual(m.counts, [2, 2, 0]);
+  assert.deepEqual(insights([a, b, c]).map((i) => [i.key, i.index]), [['price', 2], ['space', 1], ['value', 2]]);
 });
 
 test('misc formatting', () => {
