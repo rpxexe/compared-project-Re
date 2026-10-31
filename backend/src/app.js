@@ -44,6 +44,17 @@ function createApp() {
   app.use("/api/users", require("./routes/users"));
   app.use("/api/properties", require("./routes/properties"));
   app.use("/api/post-property", require("./routes/postProperty"));
+  app.use("/api/uploads", require("./routes/uploads"));
+  // Uploaded listing photos. Cross-origin so the web build can show them; nosniff + fixed
+  // image extensions keep them from being served as anything but images.
+  app.use(
+    "/uploads",
+    express.static(require("./routes/uploads").UPLOAD_DIR, {
+      maxAge: "30d",
+      index: false,
+      setHeaders: (res) => res.set("Cross-Origin-Resource-Policy", "cross-origin"),
+    }),
+  );
   app.use("/api/enquiries", require("./routes/enquiries"));
   app.use("/api/notifications", require("./routes/notifications"));
   app.use("/api/admin", require("./routes/admin"));

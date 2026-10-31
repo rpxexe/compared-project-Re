@@ -1,8 +1,12 @@
 import React, { useCallback, useMemo, useState } from "react";
 import { Pressable, ScrollView, StatusBar, StyleSheet, View, ActivityIndicator, RefreshControl } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
+import { useFocusEffect } from "@react-navigation/native";
 import { LinearGradient } from "expo-linear-gradient";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import PressableScale from "../components/PressableScale";
+import { useBottomSpace } from "../hooks/useBottomSpace";
+import { api } from "../services/api";
 import { colors, fonts, radius, shadow } from "../theme";
 import Text from "../components/AppText";
 
@@ -49,6 +53,8 @@ const ICONS = {
 };
 
 export default function NotificationScreen({ navigation }) {
+  const insets = useSafeAreaInsets();
+  const { bottom } = useBottomSpace();
   const [notifications, setNotifications] = useState([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -123,7 +129,7 @@ export default function NotificationScreen({ navigation }) {
   };
 
   return (
-    <SafeAreaProvider style={styles.safeArea}>
+    <View style={[styles.safeArea, { paddingTop: insets.top }]}>
       <StatusBar barStyle="dark-content" backgroundColor={colors.ivory} />
 
       <View style={styles.header}>
@@ -165,7 +171,7 @@ export default function NotificationScreen({ navigation }) {
 
       <ScrollView
         showsVerticalScrollIndicator={false}
-        contentContainerStyle={styles.content}
+        contentContainerStyle={[styles.content, { paddingBottom: bottom + 24 }]}
         refreshControl={
           <RefreshControl
             refreshing={refreshing}
@@ -254,7 +260,7 @@ export default function NotificationScreen({ navigation }) {
           </View>
         ) : null}
       </ScrollView>
-    </SafeAreaProvider>
+    </View>
   );
 }
 

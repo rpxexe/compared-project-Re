@@ -7,6 +7,7 @@ import { AuthProvider, useAuth } from './src/context/AuthContext';
 import { ToastProvider } from './src/context/ToastContext';
 import { SavedProvider } from './src/context/SavedContext';
 import { CompareProvider } from './src/context/CompareContext';
+import { LocationAccessProvider } from './src/context/LocationAccessContext';
 import AppNavigator from './src/navigation/AppNavigator';
 import SplashScreen from './src/screens/SplashScreen';
 import LoginRequiredDialog from './src/components/LoginRequiredDialog';
@@ -79,7 +80,9 @@ export default function App() {
         <ToastProvider>
           <SavedProvider>
             <CompareProvider>
-              <Root />
+              <LocationAccessProvider>
+                <Root />
+              </LocationAccessProvider>
             </CompareProvider>
           </SavedProvider>
         </ToastProvider>

@@ -2,6 +2,8 @@ const { User, Property, Enquiry, Review } = require("../models");
 const { AppError, bad } = require("../utils/errors");
 const {
   requireObjectId,
+  requirePropertyId,
+  propertyIdMatch,
   paging,
   str,
   escapeRegex,
@@ -119,7 +121,7 @@ const getProperties = async (req, res) => {
 };
 
 const updateProperty = async (req, res) => {
-  requireObjectId(req.params.id, "property id");
+  requirePropertyId(req.params.id);
   const set = {};
   const b = req.body || {};
   if (b.approvalStatus !== undefined) {
@@ -134,7 +136,7 @@ const updateProperty = async (req, res) => {
   if (typeof b.featured === "boolean") set.featured = b.featured;
   if (!Object.keys(set).length) throw bad("Nothing to update");
   const doc = await Property.findOneAndUpdate(
-    { _id: req.params.id },
+    { _id: propertyIdMatch(req.params.id) },
     { $set: set },
     { new: true },
   ).lean();
@@ -144,15 +146,15 @@ const updateProperty = async (req, res) => {
 
 // Only submissions created through the app can be deleted; imported source data is protected.
 const deleteProperty = async (req, res) => {
-  requireObjectId(req.params.id, "property id");
-  const doc = await Property.findById(req.params.id).lean();
+  requirePropertyId(req.params.id);
+  const doc = await Property.findOne({ _id: propertyIdMatch(req.params.id) }).lean();
   if (!doc) throw new AppError(404, "Property not found");
   if (doc.dataSource !== "manual")
     throw new AppError(
       403,
       "Imported properties cannot be deleted from the app",
     );
-  await Property.deleteOne({ _id: req.params.id });
+  await Property.deleteOne({ _id: doc._id });
   res.json({ deleted: true });
 };
 

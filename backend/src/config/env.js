@@ -23,7 +23,9 @@ function load() {
       token: process.env.TWILIO_AUTH_TOKEN || '',
       from: process.env.TWILIO_PHONE_NUMBER || '',
     },
-    corsOrigins: String(process.env.CORS_ORIGINS || '').split(',').map((s) => s.trim()).filter(Boolean),
+    // Public origin used in uploaded image URLs (e.g. https://api.example.com); defaults to the request host.
+    publicUrl: String(process.env.PUBLIC_URL || '').trim().replace(/\/+$/, ''),
+    corsOrigins:String(process.env.CORS_ORIGINS || '').split(',').map((s) => s.trim()).filter(Boolean),
     adminPhones: list(process.env.ADMIN_PHONES),
     superadminPhones: list(process.env.SUPERADMIN_PHONES),
     autoApprovePosts: String(process.env.AUTO_APPROVE_POSTS || 'false').toLowerCase() === 'true',

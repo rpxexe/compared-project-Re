@@ -18,6 +18,14 @@ export const POPULAR_CITIES = [
   "Gurugram",
 ];
 
+// Administrative names like "Mumbai Suburban District", "Mumbai Zone 4" or "Thane Subdistrict"
+// reduced to the city they belong to.
+const ADMIN_WORDS = /\b(suburban|sub-?district|district|zone\s*\d+|ward\s*\d*|municipal corporation|corporation|urban|rural|taluka|tehsil|division)\b/gi;
+export function cityFromAdminName(name) {
+  return String(name || "").replace(ADMIN_WORDS, "").replace(/\s{2,}/g, " ").trim();
+}
+const isAdminArea = (name) => /\b(zone\s*\d+|ward\s*\d*)\b/i.test(name || "");
+
 /**
  * Format address details into clean Zomato/Rapido style Title, Subtitle, and Full Address.
  */
@@ -29,16 +37,20 @@ export function formatAddressDetails(addr = {}, displayName = "") {
     addr.quarter ||
     addr.subdivision ||
     addr.residential ||
-    addr.city_district ||
+    (isAdminArea(addr.city_district) ? "" : addr.city_district) ||
     addr.district ||
     ""
   ).trim();
+  // Big cities often come back without `city`: Mumbai's suburbs only carry
+  // state_district "Mumbai Suburban District" and city_district "Mumbai Zone 4".
   const city = (
     addr.city ||
     addr.town ||
     addr.village ||
     addr.municipality ||
-    addr.county ||
+    cityFromAdminName(addr.city_district) ||
+    cityFromAdminName(addr.state_district) ||
+    cityFromAdminName(addr.county) ||
     ""
   ).trim();
   const state = (addr.state || "").trim();
@@ -317,6 +329,16 @@ export async function checkLocationPermission() {
   }
 }
 
+// A fresh fix can stall indoors or while the phone is stationary, so wait at most 12s and then
+// settle for a recent last-known position.
+async function currentPosition() {
+  const fresh = Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
+  const pos = await Promise.race([fresh, new Promise((resolve) => setTimeout(() => resolve(null), 12000))]);
+  if (pos) return pos;
+  const last = await Location.getLastKnownPositionAsync({ maxAge: 30 * 60 * 1000 }).catch(() => null);
+  return last || fresh;
+}
+
 /**
  * Get current user location with full address, title, subtitle, and city.
  * Only triggers system permission prompt if requestIfMissing is true.
@@ -334,14 +356,22 @@ export async function getCurrentUserLocation(availableCities = [], requestIfMiss
     }
 
     if (status === "granted") {
-      const pos = await Location.getCurrentPositionAsync({
-        accuracy: Location.Accuracy.Balanced,
-      });
-
+      const pos = await currentPosition();
       const { latitude, longitude } = pos.coords;
 
       // Reverse geocode via Nominatim for full address
       let reverseResult = await reverseGeocodeWithNominatim(latitude, longitude);
+
+      // Nominatim answered but had no city for this spot: take the city from the phone's geocoder.
+      if (reverseResult?.fullAddress && !reverseResult.city) {
+        try {
+          const [a] = await Location.reverseGeocodeAsync({ latitude, longitude });
+          const city = cityFromAdminName(a?.city || a?.subregion || "");
+          if (city) reverseResult = { ...reverseResult, city };
+        } catch {
+          // fall through to the IP lookup below
+        }
+      }
 
       // If Nominatim failed, try native expo reverse geocode
       if (!reverseResult || !reverseResult.fullAddress) {
@@ -398,6 +428,12 @@ export async function getCurrentUserLocation(availableCities = [], requestIfMiss
     }
   } catch (error) {
     console.log("[LocationService] GPS query error:", error?.message);
+  }
+
+  // GPS found the area but nothing named its city: borrow just the city from the IP lookup.
+  if (locationResult && !locationResult.city) {
+    const ip = await getCityFromIP().catch(() => null);
+    if (ip?.city) locationResult.city = matchWithAvailableCities(ip.city, availableCities);
   }
 
   // IP fallback

@@ -263,6 +263,15 @@ export const api = {
   deleteMyReview: (id) => call(client.delete(`/properties/${id}/reviews/mine`)),
 
   postProperty: (payload) => call(client.post("/post-property", payload)),
+  // `asset` is an expo-image-picker asset; resolves to { url } of the stored image.
+  uploadImage: async (asset) => {
+    const type = asset.mimeType || "image/jpeg";
+    const name = asset.fileName || `photo.${type.split("/")[1] || "jpg"}`;
+    const form = new FormData();
+    if (Platform.OS === "web") form.append("image", await (await fetch(asset.uri)).blob(), name);
+    else form.append("image", { uri: asset.uri, name, type });
+    return call(client.post("/uploads", form, { headers: { "Content-Type": "multipart/form-data" }, timeout: 60000 }));
+  },
   enquire: (propertyId, message, name) =>
     call(client.post("/enquiries", { propertyId, message, name })),
 

@@ -21,7 +21,6 @@ import SettingsScreen from "../screens/SettingsScreen";
 import NotificationScreen from "../screens/NotificationScreen";
 import LocationScreen from "../screens/LocationScreen";
 import PostPropertyFormScreen from "../screens/PostPropertyFormScreen";
-import PostPropertyScreen from "../screens/PostPropertyScreen";
 import {
   SavedScreen,
   MyPropertiesScreen,
@@ -39,7 +38,49 @@ import SignUpScreen from "../screens/SignUp";
 const Stack = createNativeStackNavigator();
 const Tab = createBottomTabNavigator();
 
-const EmptyTab = () => null;
+// Screens reachable from every tab. Each tab runs its own stack that includes them, so they open
+// inside the tab and the bottom bar stays visible (the auth screens below stay outside the tabs).
+function sharedScreens(isStaff, except) {
+  const screens = [
+    ["Search", SearchScreen],
+    ["SearchFilters", SearchFiltersScreen, { animation: "slide_from_bottom" }],
+    ["NewProject", NewProjectScreen],
+    ["Notification", NotificationScreen],
+    ["Location", LocationScreen, { animation: "slide_from_bottom" }],
+    ["PrePostPropertyType", PrePostPropertyTypeScreen],
+    ["PostPropertyForm", PostPropertyFormScreen],
+    ["PropertyDetails", PropertyDetailsScreen, { animation: "slide_from_bottom" }],
+    ["Settings", SettingsScreen],
+    ["Saved", SavedScreen],
+    ["MyProperties", MyPropertiesScreen],
+    ["MyEnquiries", MyEnquiriesScreen],
+    ...(isStaff
+      ? [["AdminDashboard", AdminDashboard], ["AdminProperties", AdminProperties], ["AdminEnquiries", AdminEnquiries], ["AdminUsers", AdminUsers]]
+      : []),
+  ];
+  return screens
+    .filter(([name]) => name !== except)
+    .map(([name, component, options]) => <Stack.Screen key={name} name={name} component={component} options={options} />);
+}
+
+// One stack per tab, starting at that tab's own screen.
+function tabStack(rootName, RootComponent) {
+  return function TabStack() {
+    const { isStaff } = useAuth();
+    return (
+      <Stack.Navigator screenOptions={base}>
+        <Stack.Screen name={rootName} component={RootComponent} />
+        {sharedScreens(isStaff, rootName)}
+      </Stack.Navigator>
+    );
+  };
+}
+
+const HomeStack = tabStack("HomeMain", HomeScreen);
+const SearchStack = tabStack("SearchFilters", SearchFiltersScreen);
+const PostStack = tabStack("PostPropertyForm", PostPropertyFormScreen);
+const CompareStack = tabStack("CompareMain", CompareScreen);
+const ProfileStack = tabStack("ProfileMain", ProfileScreen);
 
 function Tabs() {
   const { count } = useCompare();
@@ -54,21 +95,11 @@ function Tabs() {
       )}
       screenOptions={{ headerShown: false, lazy: true, animation: "fade" }}
     >
-      <Tab.Screen name="Home" component={HomeScreen} />
-      {/* The bar's "Search" button opens the Search & Filters screen; this tab never shows. */}
-      <Tab.Screen
-        name="Explore"
-        component={EmptyTab}
-        listeners={({ navigation }) => ({
-          tabPress: (e) => {
-            e.preventDefault();
-            navigation.navigate("SearchFilters");
-          },
-        })}
-      />
-      <Tab.Screen name="Post" component={PostPropertyScreen} />
-      <Tab.Screen name="Compare" component={CompareScreen} />
-      <Tab.Screen name="Profile" component={ProfileScreen} />
+      <Tab.Screen name="Home" component={HomeStack} />
+      <Tab.Screen name="Explore" component={SearchStack} />
+      <Tab.Screen name="Post" component={PostStack} />
+      <Tab.Screen name="Compare" component={CompareStack} />
+      <Tab.Screen name="Profile" component={ProfileStack} />
     </Tab.Navigator>
   );
 }
@@ -80,7 +111,7 @@ const base = {
 };
 
 export default function AppNavigator({ hasStarted = true }) {
-  const { token, isGuest, isStaff } = useAuth();
+  const { token, isGuest } = useAuth();
   const authenticated = !!token || isGuest;
   // Splash → Welcome (first launch only) → Login → Otp → Tabs
   const initialRouteName = authenticated ? "Tabs" : hasStarted ? "Login" : "Welcome";
@@ -92,35 +123,6 @@ export default function AppNavigator({ hasStarted = true }) {
         component={Tabs}
         options={{ animation: "fade" }}
       />
-      <Stack.Screen name="Search" component={SearchScreen} />
-      <Stack.Screen name="SearchFilters" component={SearchFiltersScreen} options={{ animation: "slide_from_bottom" }} />
-      <Stack.Screen name="NewProject" component={NewProjectScreen} />
-      <Stack.Screen name="Notification" component={NotificationScreen} />
-      <Stack.Screen
-        name="Location"
-        component={LocationScreen}
-        options={{ animation: "slide_from_bottom" }}
-      />
-
-      <Stack.Screen
-        name="PrePostPropertyType"
-        component={PrePostPropertyTypeScreen}
-      />
-      <Stack.Screen
-        name="PostPropertyForm"
-        component={PostPropertyFormScreen}
-      />
-
-      <Stack.Screen
-        name="PropertyDetails"
-        component={PropertyDetailsScreen}
-        options={{ animation: "slide_from_bottom" }}
-      />
-      <Stack.Screen name="Profile" component={ProfileScreen} />
-      <Stack.Screen name="Settings" component={SettingsScreen} />
-      <Stack.Screen name="Saved" component={SavedScreen} />
-      <Stack.Screen name="MyProperties" component={MyPropertiesScreen} />
-      <Stack.Screen name="MyEnquiries" component={MyEnquiriesScreen} />
       <Stack.Screen name="SignUp" component={SignUpScreen} />
       <Stack.Screen
         name="Welcome"
@@ -142,14 +144,6 @@ export default function AppNavigator({ hasStarted = true }) {
         component={AuthWelcomeScreen}
         options={{ gestureEnabled: false, animation: "fade" }}
       />
-      {isStaff ? (
-        <>
-          <Stack.Screen name="AdminDashboard" component={AdminDashboard} />
-          <Stack.Screen name="AdminProperties" component={AdminProperties} />
-          <Stack.Screen name="AdminEnquiries" component={AdminEnquiries} />
-          <Stack.Screen name="AdminUsers" component={AdminUsers} />
-        </>
-      ) : null}
     </Stack.Navigator>
   );
 }

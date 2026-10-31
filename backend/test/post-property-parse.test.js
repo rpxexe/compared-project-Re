@@ -48,3 +48,13 @@ test('full payload from the new form (amenities array, image urls, furnishing, p
 test('bad purpose is rejected', () => {
   assert.ok(parse({ ...base, propertyType: 'Villa', bhk: '2', listingType: 'resale' }).errors.listingType);
 });
+
+test('total floors and key highlights are kept; bad floor counts are rejected', () => {
+  const ok = parse({ ...base, propertyType: 'Villa', bhk: '3', totalFloors: '12', highlights: ['Near Metro', 'Near Metro', 'Park Facing'] });
+  assert.deepEqual(ok.errors, {});
+  assert.equal(ok.opt.totalFloors, 12);
+  assert.deepEqual(ok.opt.highlights, ['Near Metro', 'Park Facing']);
+  for (const totalFloors of ['0', '2.5', '500', 'ten']) {
+    assert.ok(parse({ ...base, propertyType: 'Villa', bhk: '3', totalFloors }).errors.totalFloors, totalFloors);
+  }
+});

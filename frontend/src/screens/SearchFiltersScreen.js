@@ -4,6 +4,7 @@ import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
 import { StatusBar } from "expo-status-bar";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { useBottomSpace } from "../hooks/useBottomSpace";
 import Button from "../components/Button";
 import PressableScale from "../components/PressableScale";
 import RollingPlaceholder from "../components/RollingPlaceholder";
@@ -43,6 +44,7 @@ const hasAny = (p) => Object.entries(p || {}).some(([k, v]) => !k.startsWith("_"
 // Opened from Home (new search) or from the results screen (refine, `returnTo`).
 export default function SearchFiltersScreen({ navigation, route }) {
   const insets = useSafeAreaInsets();
+  const { bottom, tabBar, inset } = useBottomSpace();
   const { width } = useWindowDimensions();
   const params = route.params || {};
   const [draft, setDraft] = useState(() => fromQueryParams(params, config, DEFAULT_CONTEXT));
@@ -100,6 +102,8 @@ export default function SearchFiltersScreen({ navigation, route }) {
   const submit = () => {
     const p = { ...queryParams, _applied: Date.now() };
     if (params.returnTo === "Search") navigation.popTo("Search", p);
+    // As the Search tab's first screen it stays underneath the results; elsewhere it is swapped out.
+    else if ((navigation.getState()?.index ?? 0) === 0) navigation.navigate("Search", p);
     else navigation.replace("Search", p);
   };
 
@@ -110,9 +114,12 @@ export default function SearchFiltersScreen({ navigation, route }) {
       <StatusBar style="light" />
       <LinearGradient colors={[brand.deep, brand.violet]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={[styles.band, { paddingTop: insets.top + 6 }]}>
         <View style={styles.headRow}>
-          <PressableScale onPress={() => navigation.goBack()} hitSlop={10} style={styles.iconBtn} accessibilityRole="button" accessibilityLabel="Back" accessibilityHint="Discards changes">
-            <Ionicons name="arrow-back" size={24} color={colors.white} />
-          </PressableScale>
+          {/* No back arrow when this is the Search tab's own first screen. */}
+          {(navigation.getState()?.index ?? 0) > 0 ? (
+            <PressableScale onPress={() => navigation.goBack()} hitSlop={10} style={styles.iconBtn} accessibilityRole="button" accessibilityLabel="Back" accessibilityHint="Discards changes">
+              <Ionicons name="arrow-back" size={24} color={colors.white} />
+            </PressableScale>
+          ) : null}
           <Text style={styles.headTitle} accessibilityRole="header">
             Search & Filters
           </Text>
@@ -161,7 +168,8 @@ export default function SearchFiltersScreen({ navigation, route }) {
         </View>
       )}
 
-      <View style={[styles.footer, { paddingBottom: Math.max(insets.bottom, 10) + 6 }]}>
+      {/* Runs on behind the floating tab bar, so there's no dead strip or hard edge between the two. */}
+      <View style={[styles.footer, { paddingBottom: tabBar ? tabBar + 10 : Math.max(inset, 10) + 6 }]}>
         <Text style={styles.match} accessibilityLiveRegion="polite">
           {live.error ? " " : live.loading || live.count == null ? "Counting matches…" : `${live.count.toLocaleString("en-IN")} ${live.count === 1 ? "property matches" : "properties match"}`}
         </Text>
@@ -177,7 +185,7 @@ export default function SearchFiltersScreen({ navigation, route }) {
             <Text style={styles.clearAllText}>Clear All</Text>
           </Pressable>
           <View style={{ flex: 1 }}>
-            <Button title="Apply Filters" onPress={submit} disabled={!ready} accessibilityHint="Shows the properties that match" />
+            <Button small title="Apply Filters" onPress={submit} disabled={!ready} accessibilityHint="Shows the properties that match" />
           </View>
         </View>
       </View>
@@ -254,16 +262,16 @@ const styles = StyleSheet.create({
     borderTopRightRadius: radius.lg,
     ...shadow.float,
   },
-  match: { textAlign: "center", fontSize: 13, color: colors.muted, fontWeight: "600", marginBottom: 6 },
-  actions: { flexDirection: "row", alignItems: "center", gap: 12 },
+  match: { textAlign: "center", fontSize: 12.5, color: colors.muted, fontWeight: "600", marginBottom: 8 },
+  actions: { flexDirection: "row", alignItems: "center", gap: 10 },
   clearAll: {
-    minHeight: 50,
-    paddingHorizontal: 18,
-    borderRadius: radius.md,
+    minHeight: 44,
+    paddingHorizontal: 20,
+    borderRadius: radius.pill,
     borderWidth: 1.4,
     borderColor: brand.violet,
     alignItems: "center",
     justifyContent: "center",
   },
-  clearAllText: { fontSize: 15, fontWeight: "800", color: brand.violet },
+  clearAllText: { fontSize: 14, fontWeight: "800", color: brand.violet },
 });

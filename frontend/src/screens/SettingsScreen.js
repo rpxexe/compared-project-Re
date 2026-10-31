@@ -10,6 +10,7 @@ import FilterChip from '../components/FilterChip';
 import { PURPOSES } from './RoleScreen';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
+import { useLocationAccess } from '../context/LocationAccessContext';
 import { api, API_URL } from '../services/api';
 import { formatPhone } from '../utils/format';
 import { getCurrentUserLocation } from '../services/locationService';
@@ -17,6 +18,7 @@ import { colors, radius } from '../theme';
 import Text from "../components/AppText";
 
 export default function SettingsScreen() {
+  const { ensureLocation } = useLocationAccess();
   const { user, updateUser } = useAuth();
   const toast = useToast();
   const [name, setName] = useState(user?.name || '');
@@ -27,6 +29,7 @@ export default function SettingsScreen() {
   const dirty = name.trim() !== (user?.name || '') || city.trim() !== (user?.city || '') || purpose !== (user?.purpose || '');
 
   const detectCity = async () => {
+    if (!(await ensureLocation("Allow location to detect your city."))) return;
     setLocatingCity(true);
     try {
       const res = await getCurrentUserLocation();

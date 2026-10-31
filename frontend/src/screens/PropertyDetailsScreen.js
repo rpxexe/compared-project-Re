@@ -3,6 +3,7 @@ import { Animated, Dimensions, FlatList, Image, Linking, Pressable, ScrollView, 
 import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { useBottomSpace } from "../hooks/useBottomSpace";
 import { StatusBar } from "expo-status-bar";
 import { Cover, badgeFor } from "../components/PropertyCard";
 import HeartButton from "../components/HeartButton";
@@ -87,6 +88,7 @@ function Gallery({ images }) {
 export default function PropertyDetailsScreen({ navigation, route }) {
   const { id, preview } = route.params;
   const insets = useSafeAreaInsets();
+  const { bottom, tabBar, inset } = useBottomSpace();
   const toast = useToast();
   const cmp = useCompare();
   const { user, token, openLoginPrompt } = useAuth();
@@ -186,7 +188,7 @@ export default function PropertyDetailsScreen({ navigation, route }) {
       <StatusBar style="light" />
       <ScrollView
         showsVerticalScrollIndicator={false}
-        contentContainerStyle={{ paddingBottom: 130 + insets.bottom }}
+        contentContainerStyle={{ paddingBottom: 130 + bottom }}
       >
         <Gallery
           images={
@@ -442,7 +444,8 @@ export default function PropertyDetailsScreen({ navigation, route }) {
         <HeartButton id={p.id} size={21} style={{ width: 44, height: 44, borderRadius: 22 }} />
       </View>
 
-      <View style={[styles.cta, { paddingBottom: Math.max(insets.bottom, 10) + 4 }]}>
+      {/* Sits on top of the tab bar when shown inside the tabs, else above the system navigation bar. */}
+      <View style={[styles.cta, { bottom: tabBar, paddingBottom: tabBar ? 12 : Math.max(inset, 10) + 4 }]}>
         {/* Frosted Glass Layers */}
         <LinearGradient
           colors={["rgba(255, 255, 255, 0.95)", "rgba(246, 242, 255, 0.9)"]}

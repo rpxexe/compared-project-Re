@@ -59,12 +59,21 @@ function parse(body = {}) {
   }
   if (body.facing) opt.facing = str(body.facing, 20);
   if (body.floor) opt.floor = str(body.floor, 20);
+  if (body.totalFloors !== undefined && body.totalFloors !== "") {
+    const n = num(body.totalFloors);
+    if (!(Number.isInteger(n) && n >= 1 && n <= 200)) errors.totalFloors = "Enter total floors between 1 and 200";
+    else opt.totalFloors = n;
+  }
   if (body.possessionStatus)
     opt.possessionStatus = str(body.possessionStatus, 40);
   if (Array.isArray(body.amenities))
     opt.amenities = [
       ...new Set(body.amenities.map((a) => str(a, 40)).filter(Boolean)),
     ].slice(0, 30);
+  if (Array.isArray(body.highlights))
+    opt.highlights = [
+      ...new Set(body.highlights.map((h) => str(h, 40)).filter(Boolean)),
+    ].slice(0, 12);
   if (Array.isArray(body.images)) {
     const urls = body.images.map((u) => str(u, 500)).filter(Boolean);
     if (urls.some((u) => !/^https?:\/\/\S+$/i.test(u)))

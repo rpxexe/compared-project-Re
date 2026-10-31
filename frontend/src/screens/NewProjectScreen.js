@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { ActivityIndicator, FlatList, ScrollView, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useBottomSpace } from '../hooks/useBottomSpace';
 import { StatusBar } from 'expo-status-bar';
 import ScreenHeader from '../components/ScreenHeader';
 import FilterChip from '../components/FilterChip';
@@ -19,6 +20,7 @@ const CATS = [
 
 export default function NewProjectScreen() {
   const insets = useSafeAreaInsets();
+  const { bottom, tabBar, inset } = useBottomSpace();
   const cats = useApi(() => api.categories(), []);
   const [active, setActive] = useState('projects');
   const [items, setItems] = useState([]);
@@ -54,7 +56,7 @@ export default function NewProjectScreen() {
         : st.error && !items.length ? <ErrorState title="Unable to load projects" error={st.error} onRetry={() => load(1, false)} />
           : (
             <FlatList
-              data={items} keyExtractor={(i) => i.id} contentContainerStyle={{ padding: 20, paddingTop: 4, paddingBottom: insets.bottom + 24, gap: 14 }}
+              data={items} keyExtractor={(i) => i.id} contentContainerStyle={{ padding: 20, paddingTop: 4, paddingBottom: bottom + 24, gap: 14 }}
               renderItem={({ item, index }) => <PropertyCard property={item} index={index} />}
               onEndReachedThreshold={0.4} onEndReached={() => { if (!st.more && !st.loading && pg.page < pg.pages) load(pg.page + 1, true); }}
               ListEmptyComponent={<EmptyState icon="business-outline" title="No projects found" message="There are no projects in this category yet." />}

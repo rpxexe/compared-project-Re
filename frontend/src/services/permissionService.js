@@ -37,6 +37,46 @@ export async function requestLocation() {
   }
 }
 
+// Location is only usable when the app has permission AND the device's location switch is on.
+// "off" means permission is granted but the switch is off.
+async function servicesOn() {
+  try {
+    return await Location.hasServicesEnabledAsync();
+  } catch {
+    return false;
+  }
+}
+
+export async function getLocationAccess() {
+  const status = await getLocationStatus();
+  if (status !== "granted") return status;
+  return (await servicesOn()) ? "granted" : "off";
+}
+
+// Asks for whatever is missing: the OS permission prompt if it can still be shown, then (on
+// Android) the system "turn on location" dialog if the switch is off.
+export async function requestLocationAccess() {
+  const status = await requestLocation();
+  if (status !== "granted") return status;
+  if (await servicesOn()) return "granted";
+  if (Platform.OS === "android") {
+    try {
+      await Location.enableNetworkProviderAsync();
+    } catch {
+      // user declined the dialog
+    }
+  }
+  return (await servicesOn()) ? "granted" : "off";
+}
+
+// The device's location settings page (Android); iOS can only open this app's settings.
+export function openLocationSettings() {
+  if (Platform.OS === "android") {
+    return Linking.sendIntent("android.settings.LOCATION_SOURCE_SETTINGS").catch(openAppSettings);
+  }
+  return openAppSettings();
+}
+
 // Android 13+ is the only platform where this build can show a notification prompt.
 // Android 12 and below deliver notifications without a runtime permission. iOS needs
 // expo-notifications, which this app does not include yet, so it is reported as unavailable
