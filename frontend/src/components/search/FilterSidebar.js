@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { Animated, Pressable, ScrollView, StyleSheet, View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { brand, colors } from "../../theme";
@@ -7,6 +7,7 @@ import Text from "../AppText";
 
 const ITEM_H = 54;
 const INSET = 5; // gap between the selection pill and its row's edges
+const TRACK_INSET = 8; // scroll bar gap from the top and bottom
 
 // Vertical list of filter categories for the active tab: icon + one-line label per row, hairline
 // separators, a highlight that slides to the selected row, and rows that fade in one by one when
@@ -34,10 +35,29 @@ export default function FilterSidebar({ categories, value, counts, onSelect, wid
     ).start();
   }, [animKey]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Always-visible thin scroll bar (the native one only flashes while scrolling), so it's clear
+  // more categories sit below the fold. Hidden when everything fits.
+  const scrollY = useRef(new Animated.Value(0)).current;
+  const [viewH, setViewH] = useState(0);
+  const [contentH, setContentH] = useState(0);
+  const scrollable = viewH > 0 && contentH > viewH + 1;
+  const thumbH = scrollable ? Math.max(28, (viewH * viewH) / contentH) : 0;
+  const trackH = viewH - TRACK_INSET * 2;
+  const thumbY = scrollable
+    ? scrollY.interpolate({ inputRange: [0, contentH - viewH], outputRange: [0, trackH - thumbH], extrapolate: "clamp" })
+    : 0;
+
   return (
     <View style={[styles.root, { width }]}>
       {/* "handled": with the search field focused, the first tap still picks a category. */}
-      <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
+      <ScrollView
+        showsVerticalScrollIndicator={false}
+        keyboardShouldPersistTaps="handled"
+        onLayout={(e) => setViewH(e.nativeEvent.layout.height)}
+        onContentSizeChange={(_, h) => setContentH(h)}
+        onScroll={Animated.event([{ nativeEvent: { contentOffset: { y: scrollY } } }], { useNativeDriver: false })}
+        scrollEventThrottle={16}
+      >
         <View>
           <Animated.View pointerEvents="none" style={[styles.highlight, { transform: [{ translateY: y }] }]}>
             <View style={styles.bar} />
@@ -80,6 +100,11 @@ export default function FilterSidebar({ categories, value, counts, onSelect, wid
           })}
         </View>
       </ScrollView>
+      {scrollable ? (
+        <View pointerEvents="none" style={[styles.track, { height: trackH }]}>
+          <Animated.View style={[styles.thumb, { height: thumbH, transform: [{ translateY: thumbY }] }]} />
+        </View>
+      ) : null}
     </View>
   );
 }
@@ -106,6 +131,8 @@ const styles = StyleSheet.create({
   pressTint: { position: "absolute", top: INSET, bottom: INSET, left: 8, right: 8, borderRadius: 14, backgroundColor: "rgba(124, 44, 245, 0.08)" },
   sep: { position: "absolute", left: 22, right: 20, bottom: 0, height: StyleSheet.hairlineWidth, backgroundColor: "rgba(124, 44, 245, 0.18)" },
   dot: { position: "absolute", top: -2, right: -4, width: 8, height: 8, borderRadius: 4, backgroundColor: brand.magenta, borderWidth: 1.5, borderColor: colors.white },
+  track: { position: "absolute", right: 2, bottom: TRACK_INSET, width: 3, borderRadius: 1.5, backgroundColor: "rgba(124, 44, 245, 0.12)" },
+  thumb: { width: 3, borderRadius: 1.5, backgroundColor: "rgba(124, 44, 245, 0.55)" },
   label: { flex: 1, fontSize: 13.5, fontWeight: "600", color: colors.muted },
   labelOn: { color: brand.ink, fontWeight: "800" },
 });

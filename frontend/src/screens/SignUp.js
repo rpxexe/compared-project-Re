@@ -29,7 +29,7 @@ export default function SignUpScreen({ navigation }) {
   const a = useEntrance(0);
   const b = useEntrance(120);
   const c = useEntrance(220);
-  const CRITERIA = ["Owner", "Broker", "Developer"];
+  const CRITERIA = ["Owner", "Agent", "Developer"];
 
   const submit = async () => {
     console.log("1232121");

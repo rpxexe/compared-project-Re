@@ -25,12 +25,15 @@ import {
   SavedScreen,
   MyPropertiesScreen,
   MyEnquiriesScreen,
+  RecentSearchesScreen,
+  ViewedPropertiesScreen,
 } from "../screens/ListScreens";
 import {
   AdminDashboard,
   AdminProperties,
   AdminEnquiries,
   AdminUsers,
+  AdminLeads,
 } from "../screens/AdminScreens";
 import PrePostPropertyTypeScreen from "../screens/PrePostPropertyTypeScreen";
 import SignUpScreen from "../screens/SignUp";
@@ -54,8 +57,10 @@ function sharedScreens(isStaff, except) {
     ["Saved", SavedScreen],
     ["MyProperties", MyPropertiesScreen],
     ["MyEnquiries", MyEnquiriesScreen],
+    ["RecentSearches", RecentSearchesScreen],
+    ["ViewedProperties", ViewedPropertiesScreen],
     ...(isStaff
-      ? [["AdminDashboard", AdminDashboard], ["AdminProperties", AdminProperties], ["AdminEnquiries", AdminEnquiries], ["AdminUsers", AdminUsers]]
+      ? [["AdminDashboard", AdminDashboard], ["AdminProperties", AdminProperties], ["AdminEnquiries", AdminEnquiries], ["AdminUsers", AdminUsers], ["AdminLeads", AdminLeads]]
       : []),
   ];
   return screens

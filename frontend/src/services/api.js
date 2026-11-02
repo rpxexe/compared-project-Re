@@ -158,7 +158,13 @@ export const api = {
   me: () => call(client.get("/users/me")),
   updateMe: (patch) => call(client.patch("/users/me", patch)),
   myProperties: () => call(client.get("/users/me/properties")),
+  // The user's own posted listing: raw values for editing, update (not location/BHK/type), delete.
+  myProperty: (id) => call(client.get(`/users/me/properties/${id}`)),
+  updateMyProperty: (id, patch) => call(client.patch(`/users/me/properties/${id}`, patch)),
+  deleteMyProperty: (id) => call(client.delete(`/users/me/properties/${id}`)),
   myEnquiries: () => call(client.get("/users/me/enquiries")),
+  myViews: () => call(client.get("/users/me/views")),
+  clearMyViews: () => call(client.delete("/users/me/views")),
   notifications: () => call(client.get("/notifications")),
   markNotificationRead: (id) => call(client.patch(`/notifications/${id}/read`)),
   markAllNotificationsRead: () => call(client.patch("/notifications/read-all")),
@@ -248,9 +254,13 @@ export const api = {
     call(client.get("/properties/top-rated", { params: { limit } })),
   compare: (ids) =>
     call(client.get("/properties/compare", { params: { ids: ids.join(",") } })),
+  propertiesByIds: (ids) =>
+    call(client.get("/properties/by-ids", { params: { ids: ids.join(",") } })),
   saved: () => call(client.get("/properties/saved/list")),
   setSaved: (id, saved) =>
     call(client.post(`/properties/${id}/save`, { saved })),
+  // Lead tracking: stores that the signed-in user opened this listing.
+  recordView: (id) => call(client.post(`/properties/${id}/view`)),
 
   reviews: (id, params) =>
     call(client.get(`/properties/${id}/reviews`, { params })),
@@ -285,6 +295,8 @@ export const api = {
       call(client.get("/admin/enquiries", { params: clean(params) })),
     updateEnquiry: (id, status) =>
       call(client.patch(`/admin/enquiries/${id}`, { status })),
+    leads: (params) =>
+      call(client.get("/admin/leads", { params: clean(params) })),
   },
   signin: (data) => call(client.post("/auth/signin", { data })),
   signup: (data) => call(client.post("/auth/signup", { data })),

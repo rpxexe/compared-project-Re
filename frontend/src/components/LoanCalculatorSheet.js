@@ -31,9 +31,10 @@ function Field({ label, value, onChangeText, suffix, hint }) {
 
 // EMI and loan-eligibility estimates. Pure maths on the user's own inputs: no lender data and
 // no rate offers are implied, and the copy says so.
-export default function LoanCalculatorSheet({ visible, onClose, initialTab = "emi" }) {
+// `initialAmount` prefills the loan amount (e.g. a property's price).
+export default function LoanCalculatorSheet({ visible, onClose, initialTab = "emi", initialAmount }) {
   const [tab, setTab] = useState(initialTab);
-  const [amount, setAmount] = useState("5000000");
+  const [amount, setAmount] = useState(initialAmount > 0 ? String(Math.round(initialAmount)) : "5000000");
   const [rate, setRate] = useState("8.5");
   const [years, setYears] = useState("20");
   const [income, setIncome] = useState("100000");

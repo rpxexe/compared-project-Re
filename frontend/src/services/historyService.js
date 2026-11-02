@@ -125,6 +125,31 @@ export async function clearSearchHistory() {
 }
 
 /**
+ * Get recently viewed properties, newest first
+ */
+export async function getViewHistory() {
+  try {
+    const raw = await AsyncStorage.getItem(VIEW_HISTORY_KEY);
+    const parsed = raw ? JSON.parse(raw) : [];
+    return Array.isArray(parsed) ? parsed : [];
+  } catch (err) {
+    console.log("[historyService] Error loading view history:", err?.message);
+    return [];
+  }
+}
+
+/**
+ * Clear recently viewed properties
+ */
+export async function clearViewHistory() {
+  try {
+    await AsyncStorage.removeItem(VIEW_HISTORY_KEY);
+  } catch (err) {
+    console.log("[historyService] Error clearing view history:", err?.message);
+  }
+}
+
+/**
  * Record a property view
  */
 export async function recordPropertyView(property) {

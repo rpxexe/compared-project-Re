@@ -24,6 +24,9 @@ router.get("/enquiries", Admin.getEnquiries);
 
 router.patch("/enquiries/:id", Admin.updateEnquiry);
 
+// Signed-in users' property views, newest first, for lead follow-up.
+router.get("/leads", Admin.getLeads);
+
 // Review moderation is an admin task (README: "admins can remove abusive reviews").
 router.delete("/reviews/:id", Admin.deleteReview);
 

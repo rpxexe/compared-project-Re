@@ -1,4 +1,4 @@
-const { User, Property, Enquiry, Review } = require("../models");
+const { User, Property, Enquiry, Review, PropertyView } = require("../models");
 const { AppError, bad } = require("../utils/errors");
 const {
   requireObjectId,
@@ -14,7 +14,7 @@ const { publicUser } = require("../utils/user");
 const { recompute } = require("./properties-controller");
 
 const getStats = async (req, res) => {
-  const [users, properties, manual, pending, enquiries, newEnquiries, reviews] =
+  const [users, properties, manual, pending, enquiries, newEnquiries, reviews, leads] =
     await Promise.all([
       User.countDocuments({}),
       Property.countDocuments({}),
@@ -23,6 +23,7 @@ const getStats = async (req, res) => {
       Enquiry.countDocuments({}),
       Enquiry.countDocuments({ status: "new" }),
       Review.countDocuments({}),
+      PropertyView.countDocuments({}),
     ]);
   res.json({
     users,
@@ -32,6 +33,7 @@ const getStats = async (req, res) => {
     enquiries,
     newEnquiries,
     reviews,
+    leads,
   });
 };
 
@@ -192,6 +194,50 @@ const getEnquiries = async (req, res) => {
   });
 };
 
+const getLeads = async (req, res) => {
+  const { page, limit, skip } = paging(req.query, {
+    defLimit: 20,
+    maxLimit: 50,
+  });
+  const search = str(req.query.search, 40);
+  const filter = search
+    ? {
+        $or: [
+          { phone: new RegExp(escapeRegex(search)) },
+          { name: new RegExp(escapeRegex(search), "i") },
+          { propertyTitle: new RegExp(escapeRegex(search), "i") },
+        ],
+      }
+    : {};
+  const [items, total] = await Promise.all([
+    PropertyView.find(filter)
+      .sort({ lastViewedAt: -1, _id: -1 })
+      .skip(skip)
+      .limit(limit)
+      .lean(),
+    PropertyView.countDocuments(filter),
+  ]);
+  res.json({
+    items: items.map((v) => ({
+      id: String(v._id),
+      user: String(v.user),
+      phone: v.phone,
+      name: v.name,
+      email: v.email,
+      city: v.city,
+      purpose: v.purpose,
+      property: String(v.property),
+      propertyTitle: v.propertyTitle,
+      propertyLocation: v.propertyLocation,
+      views: v.views,
+      firstViewedAt: v.firstViewedAt,
+      lastViewedAt: v.lastViewedAt,
+    })),
+    total,
+    page,
+  });
+};
+
 const updateEnquiry = async (req, res) => {
   requireObjectId(req.params.id, "enquiry id");
   if (!["new", "contacted", "closed"].includes(req.body?.status))
@@ -221,5 +267,6 @@ exports.getProperties = getProperties;
 exports.updateProperty = updateProperty;
 exports.deleteProperty = deleteProperty;
 exports.getEnquiries = getEnquiries;
+exports.getLeads = getLeads;
 exports.updateEnquiry = updateEnquiry;
 exports.deleteReview = deleteReview;

@@ -15,7 +15,7 @@ import { useApi } from '../hooks/useApi';
 import { useToast } from '../context/ToastContext';
 import { useAuth } from '../context/AuthContext';
 import { api } from '../services/api';
-import { formatPhone, timeAgo } from '../utils/format';
+import { formatPhone, roleLabel, timeAgo } from '../utils/format';
 import { colors, fonts, radius, shadow } from '../theme';
 import Text from "../components/AppText";
 
@@ -29,6 +29,7 @@ export function AdminDashboard({ navigation }) {
     ['Users', data.users, 'people-outline', 'AdminUsers'], ['Properties', data.properties, 'business-outline', 'AdminProperties'],
     ['Pending approval', data.pendingApprovals, 'time-outline', 'AdminProperties', { approval: 'pending' }], ['Posted in app', data.manualProperties, 'document-text-outline', 'AdminProperties', { approval: '', source: 'manual' }],
     ['Enquiries', data.enquiries, 'chatbubble-ellipses-outline', 'AdminEnquiries'], ['New enquiries', data.newEnquiries, 'sparkles-outline', 'AdminEnquiries', { status: 'new' }],
+    ['Property view leads', data.leads ?? 0, 'eye-outline', 'AdminLeads'],
   ] : [];
   return (
     <Screen>
@@ -124,6 +125,35 @@ export function AdminEnquiries({ route }) {
   );
 }
 
+// Signed-in users who opened a listing, most recent first: who, how to reach them, and how often.
+export function AdminLeads() {
+  const [q, setQ] = useState('');
+  const { data, loading, error, reload } = useApi(() => api.admin.leads({ search: q.trim(), limit: 40 }), [q]);
+  return (
+    <Screen>
+      <ScreenHeader title="Leads" subtitle={data ? `${data.total} property views` : ' '} back />
+      <View style={{ paddingHorizontal: 20, marginBottom: 14 }}><SearchBar value={q} onChangeText={setQ} onSubmit={() => {}} placeholder="Search name, number or property" /></View>
+      <View style={{ paddingHorizontal: 20, gap: 12 }}>
+        {loading && !data ? <LoadingState rows={4} /> : error && !data ? <ErrorState title="Unable to load leads" error={error} onRetry={reload} />
+          : data.items.length ? data.items.map((l) => (
+            <View key={l.id} style={styles.card}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+                <View style={styles.av}><Text style={styles.avT}>{(l.name || l.phone || '?').charAt(0).toUpperCase()}</Text></View>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.cT}>{l.name || formatPhone(l.phone)}</Text>
+                  <Text style={styles.cS}>{[l.name ? formatPhone(l.phone) : '', l.email, roleLabel(l.purpose)].filter(Boolean).join(' · ') || '—'}</Text>
+                </View>
+                <View style={styles.role}><Text style={styles.roleT}>{l.views}×</Text></View>
+              </View>
+              <Text style={[styles.cT, { marginTop: 10 }]} numberOfLines={2}>{l.propertyTitle || 'Property'}</Text>
+              <Text style={styles.cS}>{[l.propertyLocation, `last viewed ${timeAgo(l.lastViewedAt)}`].filter(Boolean).join(' · ')}</Text>
+            </View>
+          )) : <EmptyState icon="eye-outline" title="No leads yet" message="Property views by signed-in users will show up here." />}
+      </View>
+    </Screen>
+  );
+}
+
 export function AdminUsers() {
   const [q, setQ] = useState('');
   const { data, loading, error, reload } = useApi(() => api.admin.users({ search: q.trim(), limit: 40 }), [q]);
@@ -136,8 +166,8 @@ export function AdminUsers() {
           : data.items.length ? data.items.map((u) => (
             <View key={u.id} style={[styles.card, { flexDirection: 'row', alignItems: 'center', gap: 12 }]}>
               <View style={styles.av}><Text style={styles.avT}>{(u.name || u.phone).charAt(0).toUpperCase()}</Text></View>
-              <View style={{ flex: 1 }}><Text style={styles.cT}>{u.name || formatPhone(u.phone)}</Text><Text style={styles.cS}>{u.name ? `${formatPhone(u.phone)} · ` : ''}{u.purpose || 'no purpose'}</Text></View>
-              <View style={styles.role}><Text style={styles.roleT}>{u.role}</Text></View>
+              <View style={{ flex: 1 }}><Text style={styles.cT}>{u.name || formatPhone(u.phone)}</Text><Text style={styles.cS}>{u.name ? `${formatPhone(u.phone)} · ` : ''}{roleLabel(u.purpose) || 'no purpose'}</Text></View>
+              <View style={styles.role}><Text style={styles.roleT}>{roleLabel(u.role)}</Text></View>
             </View>
           )) : <EmptyState icon="people-outline" title="No users found" />}
       </View>

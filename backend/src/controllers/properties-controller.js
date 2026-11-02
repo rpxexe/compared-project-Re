@@ -1,5 +1,5 @@
 const mongoose = require("mongoose");
-const { Property, User, Review, PropertyRating } = require("../models");
+const { Property, User, Review, PropertyRating, SignUpUser, PropertyView } = require("../models");
 const { AppError, bad } = require("../utils/errors");
 const {
   isPropertyId,
@@ -308,24 +308,34 @@ const getTopRatedProperties = async (req, res) => {
   res.json({ items: await withRatings(docs.slice(0, limit)) });
 };
 
-const getCompareProperties = async (req, res) => {
+// Public listings for a comma-separated `ids` query, returned in the order asked for.
+async function listingsByIds(query, max, tooMany) {
   const ids = [
     ...new Set(
-      str(req.query.ids, 300)
+      str(query.ids, max * 30)
         .split(",")
         .map((s) => s.trim())
         .filter(Boolean),
     ),
   ];
-  if (ids.length > 3) throw bad("You can compare up to 3 projects at a time");
+  if (ids.length > max) throw bad(tooMany);
   if (ids.some((id) => !isPropertyId(id))) throw bad("Invalid property id");
-  if (!ids.length) return res.json({ items: [] });
+  if (!ids.length) return [];
   const docs = await Property.find({
     $and: [PUBLIC, { _id: { $in: ids.flatMap(propertyIdValues) } }],
   }).lean();
   const items = await withRatings(docs);
   items.sort((a, b) => ids.indexOf(a.id) - ids.indexOf(b.id));
-  res.json({ items });
+  return items;
+}
+
+const getCompareProperties = async (req, res) => {
+  res.json({ items: await listingsByIds(req.query, 3, "You can compare up to 3 projects at a time") });
+};
+
+// Full cards for lists the app keeps on the device (e.g. recently viewed).
+const getPropertiesByIds = async (req, res) => {
+  res.json({ items: await listingsByIds(req.query, 20, "Up to 20 properties at a time") });
 };
 
 const getSavedProperties = async (req, res) => {
@@ -353,6 +363,38 @@ const getProperty = async (req, res) => {
     throw new AppError(404, "Property not found");
   const [item] = await withRatings([doc]);
   res.json({ property: { ...item, isOwner } });
+};
+
+// Guests have no contact details to follow up on, so only signed-in views are kept.
+const recordView = async (req, res) => {
+  const doc = await findListing(req.params.id);
+  if (!doc) throw new AppError(404, "Property not found");
+  if (!req.user) return res.status(204).end();
+  const account =
+    (await User.findById(req.user.id).lean()) ||
+    (SignUpUser ? await SignUpUser.findById(req.user.id).lean() : null);
+  const p = normalizeProperty(doc);
+  const now = new Date();
+  await PropertyView.findOneAndUpdate(
+    { user: new mongoose.Types.ObjectId(req.user.id), property: doc._id },
+    {
+      $set: {
+        phone: req.user.phone,
+        name: req.user.name,
+        email: account?.email || "",
+        city: account?.city || "",
+        purpose: account?.purpose || "",
+        propertyTitle: p.title,
+        propertyLocation: [p.locality, p.city].filter(Boolean).join(", "),
+        lastViewedAt: now,
+        hiddenByUser: false,
+      },
+      $inc: { views: 1 },
+      $setOnInsert: { firstViewedAt: now, source: "mobile-app" },
+    },
+    { upsert: true },
+  );
+  res.status(204).end();
 };
 
 async function setSaved(req, res, desired) {
@@ -495,8 +537,10 @@ exports.getLocations = getLocations;
 exports.getInsights = getInsights;
 exports.getTopRatedProperties = getTopRatedProperties;
 exports.getCompareProperties = getCompareProperties;
+exports.getPropertiesByIds = getPropertiesByIds;
 exports.getSavedProperties = getSavedProperties;
 exports.getProperty = getProperty;
+exports.recordView = recordView;
 exports.saveProperty = saveProperty;
 exports.deleteSavedProperty = deleteSavedProperty;
 exports.getReviews = getReviews;
@@ -504,3 +548,4 @@ exports.postReview = postReview;
 exports.deleteReview = deleteReview;
 // Used by admin review moderation to refresh a property's rating summary.
 exports.recompute = recompute;
+exports.withRatings = withRatings;

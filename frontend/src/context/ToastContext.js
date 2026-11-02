@@ -1,5 +1,5 @@
 import React, { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react';
-import { Animated, StyleSheet, View } from 'react-native';
+import { Animated, Pressable, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { colors, radius, shadow } from '../theme';
@@ -14,16 +14,23 @@ export function ToastProvider({ children }) {
   const timer = useRef(null);
   const insets = useSafeAreaInsets();
 
-  // show(message, kind, { title }): a title adds a bold first line. An empty message shows nothing,
-  // which is how "please sign in" errors stay quiet while the sign-in dialog opens instead.
-  const show = useCallback((message, kind = 'info', { title } = {}) => {
+  const hide = useCallback(() => {
+    clearTimeout(timer.current);
+    Animated.timing(anim, { toValue: 0, duration: 220, useNativeDriver: true }).start(() => setToast(null));
+  }, [anim]);
+
+  // show(message, kind, { title, action }): a title adds a bold first line; `action`
+  // ({ label, onPress }) adds a tappable button that runs it and closes the toast. An empty message
+  // shows nothing, which is how "please sign in" errors stay quiet while the sign-in dialog opens.
+  const show = useCallback((message, kind = 'info', { title, action } = {}) => {
     if (!message) return;
     clearTimeout(timer.current);
-    setToast({ message, kind, title });
+    setToast({ message, kind, title, action });
     Animated.spring(anim, { toValue: 1, useNativeDriver: true, friction: 8 }).start();
-    const stay = title ? 4500 : kind === 'error' ? 3500 : 2600;
-    timer.current = setTimeout(() => Animated.timing(anim, { toValue: 0, duration: 220, useNativeDriver: true }).start(() => setToast(null)), stay);
-  }, [anim]);
+    // Toasts with a button stay a little longer so there's time to reach it.
+    const stay = title || action ? 4500 : kind === 'error' ? 3500 : 2600;
+    timer.current = setTimeout(hide, stay);
+  }, [anim, hide]);
   useEffect(() => () => clearTimeout(timer.current), []);
 
   const icon = toast?.kind === 'error' ? 'alert-circle' : toast?.kind === 'success' ? 'checkmark-circle' : 'information-circle';
@@ -32,12 +39,24 @@ export function ToastProvider({ children }) {
     <ToastContext.Provider value={{ show }}>
       {children}
       {toast ? (
-        <Animated.View pointerEvents="none" style={[styles.wrap, { top: insets.top + 10, opacity: anim, transform: [{ translateY: anim.interpolate({ inputRange: [0, 1], outputRange: [-20, 0] }) }] }]}>
+        <Animated.View pointerEvents={toast.action ? 'box-none' : 'none'} style={[styles.wrap, { top: insets.top + 10, opacity: anim, transform: [{ translateY: anim.interpolate({ inputRange: [0, 1], outputRange: [-20, 0] }) }] }]}>
           <Ionicons name={icon} size={20} color={tint} />
           <View style={{ flex: 1 }}>
             {toast.title ? <Text style={styles.title} numberOfLines={1}>{toast.title}</Text> : null}
             <Text style={styles.text} numberOfLines={4}>{toast.message}</Text>
           </View>
+          {toast.action ? (
+            <Pressable
+              onPress={() => { hide(); toast.action.onPress(); }}
+              hitSlop={8}
+              style={({ pressed }) => [styles.action, pressed && { opacity: 0.7 }]}
+              accessibilityRole="button"
+              accessibilityLabel={toast.action.label}
+            >
+              <Text style={styles.actionText}>{toast.action.label}</Text>
+              <Ionicons name="chevron-forward" size={14} color={colors.rose} />
+            </Pressable>
+          ) : null}
         </Animated.View>
       ) : null}
     </ToastContext.Provider>
@@ -48,4 +67,6 @@ const styles = StyleSheet.create({
   wrap: { position: 'absolute', left: 16, right: 16, zIndex: 999, flexDirection: 'row', alignItems: 'center', gap: 10, backgroundColor: colors.ink, borderRadius: radius.md, paddingHorizontal: 16, paddingVertical: 13, ...shadow.float },
   title: { color: colors.ivory, fontSize: 14, fontWeight: '800', marginBottom: 2 },
   text: { color: colors.ivory, fontSize: 13.5, fontWeight: '600', lineHeight: 18 },
+  action: { flexDirection: 'row', alignItems: 'center', gap: 2, minHeight: 32, paddingHorizontal: 10, borderRadius: radius.pill, backgroundColor: 'rgba(199, 125, 255, 0.16)' },
+  actionText: { color: colors.rose, fontSize: 13, fontWeight: '800' },
 });

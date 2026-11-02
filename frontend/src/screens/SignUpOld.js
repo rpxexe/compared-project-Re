@@ -85,7 +85,7 @@ export default function SignUpScreen({ navigation }) {
     ``;
   };
 
-  const CRITERIA = ["Owner", "Broker", "Developer"];
+  const CRITERIA = ["Owner", "Agent", "Developer"];
 
   const [emailErrorText, setEmailErrorText] = useState("");
   const isValidEmail = (data) => {

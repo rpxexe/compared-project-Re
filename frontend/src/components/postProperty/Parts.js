@@ -205,7 +205,8 @@ function DropdownMenu({ rect, host, options, value, format, optionIcon, title, o
 
 // Select box whose options float just below it (or above it near the bottom of the screen).
 // Needs a DropdownHost around the screen; tapping outside the menu closes it.
-export function SelectField({ value, options, onChange, placeholder = "Select", title, icon, optionIcon, error, style, format }) {
+// `disabled` shows the value greyed out with a lock, and the menu can't be opened.
+export function SelectField({ value, options, onChange, placeholder = "Select", title, icon, optionIcon, error, style, format, disabled }) {
   const host = useContext(DropdownContext);
   const [rect, setRect] = useState(null); // field position inside the host while open
   const field = useRef(null);
@@ -245,14 +246,18 @@ export function SelectField({ value, options, onChange, placeholder = "Select", 
   }, [open]);
 
   return (
-    <Pressable ref={field} collapsable={false} onPress={show} style={[s.select, open && s.selectOpen, error && s.fieldErr, style]}
-      accessibilityRole="button" accessibilityState={{ expanded: open }}
-      accessibilityLabel={`${title || placeholder}: ${shown || "not selected"}`}>
+    <Pressable ref={field} collapsable={false} onPress={show} disabled={disabled} style={[s.select, open && s.selectOpen, error && s.fieldErr, disabled && s.locked, style]}
+      accessibilityRole="button" accessibilityState={{ expanded: open, disabled: !!disabled }}
+      accessibilityLabel={`${title || placeholder}: ${shown || "not selected"}${disabled ? ", locked" : ""}`}>
       {fieldIcon ? <Ionicons name={fieldIcon} size={17} color={brand.violet} style={{ marginRight: 8 }} /> : null}
-      <Text style={[s.selectText, !shown && { color: brand.placeholder }]} numberOfLines={1}>{shown || placeholder}</Text>
-      <Animated.View style={{ transform: [{ rotate: turn.interpolate({ inputRange: [0, 1], outputRange: ["0deg", "180deg"] }) }] }}>
-        <Ionicons name="chevron-down" size={16} color={open ? brand.violet : brand.inkSoft} />
-      </Animated.View>
+      <Text style={[s.selectText, !shown && { color: brand.placeholder }, disabled && s.lockedText]} numberOfLines={1}>{shown || placeholder}</Text>
+      {disabled ? (
+        <Ionicons name="lock-closed" size={14} color={brand.inkSoft} />
+      ) : (
+        <Animated.View style={{ transform: [{ rotate: turn.interpolate({ inputRange: [0, 1], outputRange: ["0deg", "180deg"] }) }] }}>
+          <Ionicons name="chevron-down" size={16} color={open ? brand.violet : brand.inkSoft} />
+        </Animated.View>
+      )}
     </Pressable>
   );
 }
@@ -265,7 +270,8 @@ export const KeepVisibleContext = createContext(null);
 // the cursor, and the keyboard's submit key or the arrow button takes it (`onComplete`, else
 // onChangeText). The faint copy is a second, identical input behind the real one, so its letters
 // sit exactly where the typed ones do.
-export function TextField({ label, required, error, prefix, style, multiline, onFocus, onBlur, completion, onComplete, onSubmitEditing, ...props }) {
+// `disabled`: read-only, greyed, with a lock.
+export function TextField({ label, required, error, prefix, style, multiline, onFocus, onBlur, completion, onComplete, onSubmitEditing, disabled, ...props }) {
   const [focused, setFocused] = useState(false);
   const keepVisible = useContext(KeepVisibleContext);
   const box = useRef(null);
@@ -275,8 +281,8 @@ export function TextField({ label, required, error, prefix, style, multiline, on
   const accept = () => (onComplete || props.onChangeText)?.(ghost);
   return (
     <View style={style}>
-      {label ? <Text style={s.smallLabel}>{label}{required ? <Text style={{ color: colors.error }}> *</Text> : null}</Text> : null}
-      <View ref={box} collapsable={false} style={[s.select, multiline && s.multiline, focused && s.fieldFocus, error && s.fieldErr]}>
+      {label ? <Text style={[s.smallLabel, disabled && { opacity: 0.45 }]}>{label}{required ? <Text style={{ color: colors.error }}> *</Text> : null}</Text> : null}
+      <View ref={box} collapsable={false} style={[s.select, multiline && s.multiline, focused && s.fieldFocus, error && s.fieldErr, disabled && s.locked]}>
         {prefix ? <View style={s.prefix}><Text style={s.prefixText}>{prefix}</Text></View> : null}
         <View style={s.inputWrap}>
           {ghost ? (
@@ -288,7 +294,7 @@ export function TextField({ label, required, error, prefix, style, multiline, on
           ) : null}
           <TextInput
             placeholderTextColor={brand.placeholder}
-            style={[s.input, multiline && { minHeight: 110, textAlignVertical: "top" }]}
+            style={[s.input, multiline && { minHeight: 110, textAlignVertical: "top" }, disabled && s.lockedText]}
             multiline={multiline}
             accessibilityLabel={label}
             accessibilityHint={ghost ? `Suggests ${ghost}` : undefined}
@@ -306,8 +312,10 @@ export function TextField({ label, required, error, prefix, style, multiline, on
               onSubmitEditing?.(e);
             }}
             {...props}
+            editable={disabled ? false : props.editable}
           />
         </View>
+        {disabled ? <Ionicons name="lock-closed" size={14} color={brand.inkSoft} accessibilityLabel="Locked" /> : null}
         {ghost ? (
           <Appear scale>
             <Pressable onPress={accept} hitSlop={8} style={s.acceptBtn} accessibilityRole="button" accessibilityLabel={`Use ${ghost}`}>
@@ -452,6 +460,8 @@ const s = StyleSheet.create({
   prefix: { marginLeft: -12, marginRight: 10, alignSelf: "stretch", width: 40, alignItems: "center", justifyContent: "center", borderRightWidth: 1.2, borderRightColor: LINE },
   prefixText: { fontSize: 15, fontWeight: "700", color: brand.violet },
   selectOpen: { borderColor: brand.violet },
+  locked: { backgroundColor: "#F1EEF7", borderColor: "#E4DFEE" },
+  lockedText: { color: brand.inkSoft },
   layer: { ...StyleSheet.absoluteFillObject, zIndex: 100, elevation: 20 },
   menu: {
     position: "absolute", backgroundColor: "#FFFFFF", borderRadius: 14, borderWidth: 1.2, borderColor: LINE, padding: 4, overflow: "hidden",

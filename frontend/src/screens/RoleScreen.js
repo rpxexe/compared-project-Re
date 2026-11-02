@@ -37,7 +37,7 @@ export const PURPOSES = [
   },
   {
     key: "broker",
-    label: "Broker",
+    label: "Agent",
     note: "Post and manage listings for clients",
     icon: "briefcase-outline",
   },
