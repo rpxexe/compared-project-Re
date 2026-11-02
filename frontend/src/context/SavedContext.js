@@ -2,6 +2,10 @@ import React, { createContext, useCallback, useContext, useEffect, useMemo, useR
 import { api } from '../services/api';
 import { useAuth } from './AuthContext';
 import { useToast } from './ToastContext';
+import { navigationRef } from '../navigation/navigationRef';
+
+// Opens the wishlist from wherever the heart was tapped; Saved is in every tab's stack.
+const openSaved = () => { if (navigationRef.isReady()) navigationRef.navigate('Saved'); };
 
 const SavedContext = createContext(null);
 export const useSaved = () => useContext(SavedContext);
@@ -24,7 +28,11 @@ export function SavedProvider({ children }) {
     setIds((prev) => { const n = new Set(prev); want ? n.add(id) : n.delete(id); return n; }); // optimistic
     try {
       await api.setSaved(id, want);
-      toast.show(want ? 'Saved to your list' : 'Removed from saved', 'success');
+      toast.show(
+        want ? 'Saved to your wishlist' : 'Removed from saved',
+        'success',
+        want ? { action: { label: 'View', onPress: openSaved } } : undefined,
+      );
     } catch (e) {
       setIds((prev) => { const n = new Set(prev); want ? n.delete(id) : n.add(id); return n; }); // roll back
       toast.show(e.message, 'error');

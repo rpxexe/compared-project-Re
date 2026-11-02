@@ -1,7 +1,8 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import { ActivityIndicator, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, View, useWindowDimensions } from "react-native";
+import { ActivityIndicator, Keyboard, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, View, useWindowDimensions } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
+import { resultsLabel } from "../components/filters/ApplyBar";
 import { StatusBar } from "expo-status-bar";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useBottomSpace } from "../hooks/useBottomSpace";
@@ -33,9 +34,12 @@ import Text, { AppTextInput as TextInput } from "../components/AppText";
 
 const config = filterConfig;
 const DEFAULT_CONTEXT = "buy_residential";
-// The three tabs on top. A search opened in another context (Commercial, Plots) gets its own tab.
+// The three tabs on top.
 const MAIN_TABS = ["buy_residential", "rent_residential", "new_projects"];
 const TAB_LABELS = { rent_residential: "Rent" };
+// Only Buy / Rent / Projects are offered here; any other context (commercial, plots - from the
+// onboarding intent, last use or a caller) opens on Buy instead of adding a fourth tab.
+const mainContext = (c) => (MAIN_TABS.includes(c) ? c : DEFAULT_CONTEXT);
 const hasAny = (p) => Object.entries(p || {}).some(([k, v]) => !k.startsWith("_") && k !== "returnTo" && v !== "" && v != null && v !== false);
 
 // The search form: Buy / Rent / Projects tabs, a search field, and a sidebar of filter categories
@@ -47,12 +51,21 @@ export default function SearchFiltersScreen({ navigation, route }) {
   const insets = useSafeAreaInsets();
   const { bottom, tabBar, inset } = useBottomSpace();
   const { width } = useWindowDimensions();
-  const params = route.params || {};
+  const rawParams = route.params || {};
+  const params = rawParams.context ? { ...rawParams, context: mainContext(rawParams.context) } : rawParams;
   const [draft, setDraft] = useState(() => fromQueryParams(params, config, DEFAULT_CONTEXT));
   const [ready, setReady] = useState(!!params.context);
   const [categoryId, setCategoryId] = useState(null);
   const stash = useRef({}); // per-tab filters left behind when switching tabs
   const contentRef = useRef(null);
+  // The floating tab bar unmounts while the keyboard is up (see BottomNav), so its height must not
+  // be reserved then - otherwise the footer's dead space hides the list being typed into.
+  const [keyboardUp, setKeyboardUp] = useState(false);
+  useEffect(() => {
+    const show = Keyboard.addListener("keyboardDidShow", () => setKeyboardUp(true));
+    const hide = Keyboard.addListener("keyboardDidHide", () => setKeyboardUp(false));
+    return () => { show.remove(); hide.remove(); };
+  }, []);
 
   // No explicit context: open on the last used one (or the onboarding intent) with its saved filters.
   useEffect(() => {
@@ -60,7 +73,7 @@ export default function SearchFiltersScreen({ navigation, route }) {
     let alive = true;
     (async () => {
       const { last, intent } = await loadDefaultContext();
-      const ctx = [last, INTENT_CONTEXT[intent], DEFAULT_CONTEXT].find((c) => c && getContext(config, c)?.id === c);
+      const ctx = [last, INTENT_CONTEXT[intent], DEFAULT_CONTEXT].find((c) => MAIN_TABS.includes(c) && getContext(config, c)?.id === c);
       const saved = hasAny(params) ? null : await loadFilters(ctx);
       if (alive) {
         setDraft(fromQueryParams({ ...(saved || {}), ...params, context: ctx }, config, ctx));
@@ -76,8 +89,11 @@ export default function SearchFiltersScreen({ navigation, route }) {
   const categoryFilters = (category?.filters || []).map((id) => ctx.filters.find((f) => f.id === id)).filter(Boolean);
   const counts = Object.fromEntries(sidebar.map((c) => [c.id, categoryCount(draft, c)]));
   const selected = activeFilterIds(draft, config).length + ["search", "city", "locality"].filter((k) => draft.query[k]).length;
+  // The Clear / Apply footer only appears once something is selected.
+  const showFooter = ready && selected > 0;
+  const footerPad = keyboardUp ? 10 : tabBar ? tabBar + 8 : Math.max(inset, 10) + 4;
 
-  const tabs = [...MAIN_TABS, ...(MAIN_TABS.includes(draft.context) ? [] : [draft.context])]
+  const tabs = MAIN_TABS
     .filter((id) => config.contexts[id])
     .map((id) => ({ id, label: TAB_LABELS[id] || config.contexts[id].label, icon: config.contexts[id].icon }));
 
@@ -139,7 +155,9 @@ export default function SearchFiltersScreen({ navigation, route }) {
       {!ready ? (
         <ActivityIndicator color={brand.violet} style={{ marginTop: 40, flex: 1 }} />
       ) : (
-        <View style={styles.split}>
+        // The white panel ends above the footer / tab bar with a lavender gap, so its rounded
+        // bottom corner is always fully visible instead of running under them.
+        <View style={[styles.split, { paddingBottom: showFooter ? 10 : footerPad + 10 }]}>
           <FilterSidebar
             categories={sidebar}
             value={category?.id}
@@ -153,6 +171,7 @@ export default function SearchFiltersScreen({ navigation, route }) {
             style={styles.content}
             contentContainerStyle={styles.contentInner}
             keyboardShouldPersistTaps="handled"
+            keyboardDismissMode="on-drag"
             showsVerticalScrollIndicator={false}
           >
             <FilterContent
@@ -169,27 +188,37 @@ export default function SearchFiltersScreen({ navigation, route }) {
         </View>
       )}
 
-      {/* Runs on behind the floating tab bar, so there's no dead strip or hard edge between the two. */}
-      <Reveal delay={120} distance={28} style={[styles.footer, { paddingBottom: tabBar ? tabBar + 10 : Math.max(inset, 10) + 6 }]}>
-        <Text style={styles.match} accessibilityLiveRegion="polite">
-          {live.error ? " " : live.loading || live.count == null ? "Counting matches…" : `${live.count.toLocaleString("en-IN")} ${live.count === 1 ? "property matches" : "properties match"}`}
-        </Text>
-        <View style={styles.actions}>
-          <Pressable
-            onPress={() => setDraft((d) => clearEverything(d, config))}
-            disabled={!selected}
-            style={({ pressed }) => [styles.clearAll, !selected && { opacity: 0.45 }, pressed && { opacity: 0.7 }]}
-            accessibilityRole="button"
-            accessibilityLabel="Clear all filters"
-            accessibilityState={{ disabled: !selected }}
-          >
-            <Text style={styles.clearAllText}>Clear All</Text>
-          </Pressable>
-          <View style={{ flex: 1 }}>
-            <Button small title="Apply Filters" onPress={submit} disabled={!ready} accessibilityHint="Shows the properties that match" />
+      {/* Runs on behind the floating tab bar, so there's no dead strip or hard edge between the two.
+          Mounted only while filters are selected, so it slides up on the first pick. */}
+      {showFooter ? (
+        <Reveal delay={0} distance={28} style={[styles.footer, { paddingBottom: footerPad }]}>
+          {/* One compact row: the live match count rides in the Apply button, so the footer takes
+              a single button's height and leaves the rest of the screen to the filters. */}
+          <View style={styles.actions}>
+            <Pressable
+              onPress={() => setDraft((d) => clearEverything(d, config))}
+              disabled={!selected}
+              style={({ pressed }) => [styles.clearAll, !selected && { opacity: 0.45 }, pressed && { opacity: 0.7 }]}
+              accessibilityRole="button"
+              accessibilityLabel="Clear all filters"
+              accessibilityState={{ disabled: !selected }}
+            >
+              <Ionicons name="refresh" size={16} color={brand.violet} />
+              <Text style={styles.clearAllText}>Clear</Text>
+            </Pressable>
+            <View style={{ flex: 1 }} accessibilityLiveRegion="polite">
+              <Button
+                small
+                title={resultsLabel(live)}
+                onPress={submit}
+                disabled={!ready}
+                accessibilityLabel={live.loading || live.count == null ? "Apply filters, counting matches" : `Apply filters, ${resultsLabel(live)}`}
+                accessibilityHint="Shows the properties that match"
+              />
+            </View>
           </View>
-        </View>
-      </Reveal>
+        </Reveal>
+      ) : null}
     </KeyboardAvoidingView>
   );
 }
@@ -207,7 +236,7 @@ function SearchField({ value, onChange }) {
   };
   return (
     <View style={styles.search}>
-      <Ionicons name="search" size={18} color={colors.muted} />
+      <Ionicons name="search" size={16} color={colors.muted} />
       <View style={styles.searchBox}>
         {/* Rolling examples stand in for the placeholder until the user types. */}
         {text ? null : <RollingPlaceholder style={StyleSheet.absoluteFill} />}
@@ -230,44 +259,45 @@ function SearchField({ value, onChange }) {
 
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: brand.bg },
-  band: { paddingBottom: 16, borderBottomLeftRadius: radius.lg, borderBottomRightRadius: radius.lg },
+  band: { paddingBottom: 12, borderBottomLeftRadius: radius.lg, borderBottomRightRadius: radius.lg },
   headRow: { flexDirection: "row", alignItems: "center", paddingHorizontal: 10, minHeight: 52 },
   iconBtn: { width: 44, height: 44, alignItems: "center", justifyContent: "center" },
   headTitle: { flex: 1, fontSize: 20, fontWeight: "700", color: colors.white, marginLeft: 6 },
   headBadge: { paddingHorizontal: 10, paddingVertical: 5, borderRadius: radius.pill, backgroundColor: "rgba(255, 255, 255, 0.18)", marginRight: 6 },
   headBadgeText: { fontSize: 12.5, fontWeight: "800", color: colors.white },
-  headBody: { paddingHorizontal: 16, gap: 12, marginTop: 4 },
+  headBody: { paddingHorizontal: 16, gap: 10, marginTop: 2 },
   search: {
     flexDirection: "row",
     alignItems: "center",
     gap: 8,
-    minHeight: 48,
-    paddingLeft: 14,
+    minHeight: 38,
+    paddingLeft: 12,
     paddingRight: 6,
     borderRadius: radius.md,
     backgroundColor: colors.white,
   },
   searchBox: { flex: 1, justifyContent: "center" },
   // No horizontal padding, so typed text starts exactly where the rolling hint does.
-  searchInput: { fontSize: 14.5, color: colors.ink, paddingVertical: 10, paddingHorizontal: 0 },
-  searchClear: { width: 36, height: 36, alignItems: "center", justifyContent: "center" },
+  searchInput: { fontSize: 14.5, color: colors.ink, paddingVertical: 6, paddingHorizontal: 0 },
+  searchClear: { width: 30, height: 30, alignItems: "center", justifyContent: "center" },
   // Lavender behind both columns; the white content panel is a rounded card beside the sidebar.
   split: { flex: 1, flexDirection: "row", backgroundColor: brand.lavender, paddingTop: 10 },
   content: { flex: 1, backgroundColor: colors.white, borderTopLeftRadius: radius.lg, borderBottomLeftRadius: radius.lg },
   contentInner: { padding: 16, paddingBottom: 28 },
   footer: {
     paddingHorizontal: 16,
-    paddingTop: 8,
+    paddingTop: 10,
     backgroundColor: colors.white,
     borderTopLeftRadius: radius.lg,
     borderTopRightRadius: radius.lg,
     ...shadow.float,
   },
-  match: { textAlign: "center", fontSize: 12.5, color: colors.muted, fontWeight: "600", marginBottom: 8 },
   actions: { flexDirection: "row", alignItems: "center", gap: 10 },
   clearAll: {
+    flexDirection: "row",
+    gap: 6,
     minHeight: 44,
-    paddingHorizontal: 20,
+    paddingHorizontal: 16,
     borderRadius: radius.pill,
     borderWidth: 1.4,
     borderColor: brand.violet,

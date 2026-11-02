@@ -1,20 +1,18 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ActivityIndicator, Animated, Easing, FlatList, Pressable, StyleSheet, View } from "react-native";
+import { ActivityIndicator, Animated, FlatList, Pressable, ScrollView, StyleSheet, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { LinearGradient } from "expo-linear-gradient";
 import { StatusBar } from "expo-status-bar";
 import { Ionicons } from "@expo/vector-icons";
 import { useBottomSpace } from "../hooks/useBottomSpace";
 import FilterChip from "../components/FilterChip";
-import PropertyCard from "../components/PropertyCard";
+import { badgeFor } from "../components/PropertyCard";
+import ListingCard from "../components/search/ListingCard";
 import BottomSheet from "../components/BottomSheet";
 import Button from "../components/Button";
 import CountUp from "../components/CountUp";
 import Reveal from "../components/Reveal";
 import { EmptyState, ErrorState, LoadingState } from "../components/StateViews";
-import QuickFilterBar from "../components/filters/QuickFilterBar";
 import QuickFilterSheet from "../components/filters/QuickFilterSheet";
-import ContextTabs from "../components/search/ContextTabs";
 import { api } from "../services/api";
 import PressableScale from "../components/PressableScale";
 import { brand, colors, radius, shadow } from "../theme";
@@ -22,18 +20,17 @@ import { addSearchHistory } from "../services/historyService";
 import { useFilterState } from "../hooks/useFilterState";
 import { useRemovalCounts } from "../hooks/useLiveCount";
 import { isReducedMotion } from "../hooks/useReducedMotion";
-import { contextIds, getContext, getFilter } from "../utils/filterConfig";
-import { chipLabel, fromQueryParams, toQueryParams, withoutEach } from "../utils/filterState";
-import Text, { AppTextInput as TextInput } from "../components/AppText";
+import { getContext, getFilter } from "../utils/filterConfig";
+import { activeFilterIds, chipLabel, fromQueryParams, toQueryParams, withoutEach } from "../utils/filterState";
+import Text from "../components/AppText";
+import { useAuth } from "../context/AuthContext";
 
 const PAGE_SIZE = 12;
 const MAX_SUGGESTIONS = 4;
 const TOP_BUTTON_AFTER = 700; // px scrolled before "back to top" appears
 
-// Results for a search. Same violet header band as the Search & Filters form it comes from, so the
-// two read as one flow: back, title + location, search field, then the listing-type tabs.
-// Opened from Home's "Resume Search" with `_resumed`, it greets the user with a resume banner
-// until they change the search.
+// Results for a search: a light header (back, title + live count, notifications, filters), one row
+// of location / budget / active-filter chips with Sort on the right, then the listing cards.
 export default function SearchScreen({ navigation, route }) {
   const insets = useSafeAreaInsets();
   const { bottom } = useBottomSpace();
@@ -43,10 +40,8 @@ export default function SearchScreen({ navigation, route }) {
   const ctx = getContext(config, fs.context);
   const canPop = (navigation.getState()?.index ?? 0) > 0;
 
-  const [text, setText] = useState(init.search || "");
   const [quickFor, setQuickFor] = useState(null);
   const [sortSheet, setSortSheet] = useState(false);
-  const [resumed, setResumed] = useState(!!init._resumed);
 
   const [items, setItems] = useState([]);
   const [total, setTotal] = useState(0);
@@ -58,17 +53,13 @@ export default function SearchScreen({ navigation, route }) {
   const inflight = useRef(null);
   const listRef = useRef(null);
 
-  // The restored state may carry a search term (deep link); show it in the box.
-  useEffect(() => {
-    if (ready) setText(fs.query.search);
-  }, [ready]); // eslint-disable-line react-hooks/exhaustive-deps
-  useEffect(() => {
-    if (!ready) return undefined;
-    const t = setTimeout(() => {
-      if (text.trim() !== fs.query.search) filters.setQuery({ search: text.trim() });
-    }, 400);
-    return () => clearTimeout(t);
-  }, [text, ready]); // eslint-disable-line react-hooks/exhaustive-deps -- debounce typing only
+  // Unread notifications (signed-in users only) for the bell's dot; refreshed on focus.
+  const { token } = useAuth();
+  const [unread, setUnread] = useState(0);
+  useEffect(() => navigation.addListener("focus", () => {
+    if (!token) return setUnread(0);
+    api.notifications().then((r) => setUnread(r?.unreadCount || 0)).catch(() => {});
+  }), [navigation, token]);
 
   // Coming back from the filter form with a new search (`_applied` changes each time).
   const applied = route.params?._applied;
@@ -77,7 +68,6 @@ export default function SearchScreen({ navigation, route }) {
     const next = fromQueryParams(route.params, config, fs.context);
     if (filters.isSame(next)) return; // first mount already started from these params
     filters.replace(next);
-    setText(next.query.search);
   }, [applied, ready]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const openFilters = () =>
@@ -110,14 +100,9 @@ export default function SearchScreen({ navigation, route }) {
   );
   useEffect(() => () => inflight.current?.abort(), []);
 
-  const firstSearch = useRef(null);
   useEffect(() => {
     if (!ready) return;
     load(1, false);
-    // The resume banner describes the search the user left off at; drop it once they change it.
-    const key = JSON.stringify(listParams);
-    if (firstSearch.current == null) firstSearch.current = key;
-    else if (key !== firstSearch.current) setResumed(false);
     const { search, city, locality, propertyType } = fs.query;
     const typeLabel = propertyType || chipLabel(fs, config, "propertyType") || "";
     const bhk = (fs.values.bhk || []).join(",");
@@ -142,8 +127,12 @@ export default function SearchScreen({ navigation, route }) {
   const sortValue = fs.values[ctx?.sort] ?? sortFilter?.default;
   const sortLabel = sortFilter?.options.find((o) => o.value === sortValue)?.label || "Sort";
 
-  const tabs = contextIds(config).map((id) => ({ id, label: config.contexts[id].label, icon: config.contexts[id].icon }));
   const place = [fs.query.locality, fs.query.city].filter(Boolean).join(", ") || "All India";
+  const budget = ctx?.filters.find((f) => f.id === "budget");
+  // Every other active filter stays visible (and removable), so nothing narrowing results hides.
+  const extraFilters = activeFilterIds(fs, config).filter((id) => id !== budget?.id && id !== ctx?.sort);
+  // Listings carry no sale/rent flag; the search's context says which it is.
+  const tagFor = (p) => (fs.context === "rent_residential" ? "For Rent" : fs.context === "new_projects" ? badgeFor(p) || "New Project" : "For Sale");
 
   const apply = (next) => {
     setQuickFor(null);
@@ -166,93 +155,109 @@ export default function SearchScreen({ navigation, route }) {
 
   const firstLoad = !ready || (st.loading && !items.length);
 
+
   return (
     <View style={styles.root}>
-      <StatusBar style="light" />
-      <LinearGradient colors={[brand.deep, brand.violet]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={[styles.band, { paddingTop: insets.top + 6 }]}>
-        <Reveal distance={8} style={styles.headRow}>
-          {canPop ? (
-            <PressableScale onPress={() => navigation.goBack()} to={0.88} hitSlop={10} style={styles.iconBtn} accessibilityRole="button" accessibilityLabel="Go back">
-              <Ionicons name="arrow-back" size={24} color={colors.white} />
-            </PressableScale>
-          ) : null}
-          <View style={styles.headText}>
-            <Text style={styles.headTitle} accessibilityRole="header">
-              Search Results
-            </Text>
-            <View style={styles.placeRow}>
-              <Ionicons name="location" size={12} color="rgba(255, 255, 255, 0.8)" />
-              <Text style={styles.placeText} numberOfLines={1}>
-                {place}
-              </Text>
-            </View>
-          </View>
-          {activeCount ? (
-            <View style={styles.headBadge}>
-              <Text style={styles.headBadgeText}>{`${activeCount} filter${activeCount === 1 ? "" : "s"}`}</Text>
-            </View>
-          ) : null}
-        </Reveal>
-
-        <Reveal delay={60} distance={10} style={styles.headBody}>
-          <SearchField
-            value={text}
-            onChange={setText}
-            onSubmit={() => filters.setQuery({ search: text.trim() })}
-            autoFocus={!init.city && !init.propertyType && !init.featured && !init.sort && !init.context && !init._resumed}
-            onFilter={openFilters}
-            filterCount={activeCount}
-          />
-        </Reveal>
-        <Reveal delay={110} distance={10} style={styles.tabsWrap}>
-          <ContextTabs tabs={tabs} value={fs.context} onChange={filters.setContext} />
-        </Reveal>
-      </LinearGradient>
-
-      <Reveal delay={160} distance={10}>
-        <QuickFilterBar
-          state={fs}
-          config={config}
-          activeCount={activeCount}
-          onOpenAll={openFilters}
-          onOpenFilter={setQuickFor}
-          onRemove={filters.clear}
-          style={styles.quick}
-        />
-
-        <View style={styles.bar}>
-          {/* Fixed label so screen readers announce the result, not every step of the count-up. */}
-          <View
-            style={styles.countRow}
-            accessible
-            accessibilityLiveRegion="polite"
-            accessibilityLabel={firstLoad ? "Searching" : `${total.toLocaleString("en-IN")} propert${total === 1 ? "y" : "ies"} found`}
-          >
+      <StatusBar style="dark" />
+      <Reveal distance={8} style={[styles.headRow, { paddingTop: insets.top + 6 }]}>
+        {canPop ? (
+          <PressableScale onPress={() => navigation.goBack()} to={0.88} hitSlop={10} style={styles.iconBtn} accessibilityRole="button" accessibilityLabel="Go back">
+            <Ionicons name="arrow-back" size={24} color={brand.ink} />
+          </PressableScale>
+        ) : null}
+        {/* Fixed label so screen readers announce the result, not every step of the count-up. */}
+        <View
+          style={styles.headText}
+          accessible
+          accessibilityRole="header"
+          accessibilityLiveRegion="polite"
+          accessibilityLabel={firstLoad ? "Search results, searching" : `Search results, ${total.toLocaleString("en-IN")} propert${total === 1 ? "y" : "ies"} found`}
+        >
+          <Text style={styles.headTitle}>Search Results</Text>
+          <View style={styles.countRow}>
             {firstLoad ? (
-              <Text style={styles.countMuted}>Searching…</Text>
+              <Text style={styles.count}>Searching…</Text>
             ) : (
               <Text style={styles.count}>
-                <CountUp value={total} style={styles.countNum} />
-                {` propert${total === 1 ? "y" : "ies"} found`}
+                <CountUp value={total} style={styles.count} />
+                {` Propert${total === 1 ? "y" : "ies"} Found`}
               </Text>
             )}
             {st.loading && items.length ? <ActivityIndicator size="small" color={brand.violet} /> : null}
           </View>
-          {sortFilter ? (
-            <PressableScale
-              onPress={() => setSortSheet(true)}
-              to={0.94}
-              style={styles.sort}
-              hitSlop={6}
-              accessibilityRole="button"
-              accessibilityLabel={`Sort: ${sortLabel}`}
-            >
-              <Ionicons name="swap-vertical" size={14} color={brand.violet} />
-              <Text style={styles.sortText} numberOfLines={1}>{sortLabel}</Text>
-              <Ionicons name="chevron-down" size={13} color={brand.ink} />
-            </PressableScale>
-          ) : null}
         </View>
+        <PressableScale
+          onPress={() => navigation.navigate("Notification")}
+          to={0.88}
+          hitSlop={6}
+          style={styles.iconBtn}
+          accessibilityRole="button"
+          accessibilityLabel={unread ? `Notifications, ${unread} unread` : "Notifications"}
+        >
+          <Ionicons name="notifications-outline" size={22} color={brand.ink} />
+          {unread ? <View style={styles.bellDot} /> : null}
+        </PressableScale>
+        <PressableScale
+          onPress={openFilters}
+          to={0.88}
+          hitSlop={6}
+          style={styles.iconBtn}
+          accessibilityRole="button"
+          accessibilityLabel={activeCount ? `Filters, ${activeCount} active` : "Filters"}
+        >
+          <Ionicons name="options-outline" size={23} color={brand.ink} />
+          {activeCount ? (
+            <View style={styles.filterDot}>
+              <Text style={styles.filterDotText}>{activeCount > 9 ? "9+" : activeCount}</Text>
+            </View>
+          ) : null}
+        </PressableScale>
+      </Reveal>
+
+      {/* Location, budget and any other active filter, with Sort pinned on the right. */}
+      <Reveal delay={60} distance={10} style={styles.bar}>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chips} keyboardShouldPersistTaps="handled" style={{ flex: 1 }}>
+          <Pill
+            icon="location-outline"
+            label={place}
+            onPress={openFilters}
+            onClear={fs.query.city || fs.query.locality ? () => filters.setQuery({ city: "", locality: "" }) : null}
+            accessibilityLabel={`Location: ${place}`}
+          />
+          {fs.query.search ? (
+            <Pill icon="search" label={`"${fs.query.search}"`} onClear={() => filters.setQuery({ search: "" })} accessibilityLabel={`Search: ${fs.query.search}`} />
+          ) : null}
+          {budget ? (
+            <Pill
+              label={chipLabel(fs, config, budget.id) || "Budget"}
+              active={!!chipLabel(fs, config, budget.id)}
+              trailing="chevron-down"
+              onPress={() => setQuickFor(budget.id)}
+              accessibilityLabel={`Budget: ${chipLabel(fs, config, budget.id) || "any"}`}
+            />
+          ) : null}
+          {extraFilters.map((id) => {
+            const label = ctx.filters.find((x) => x.id === id)?.label || "Filter";
+            const value = chipLabel(fs, config, id);
+            return <Pill key={id} label={value} active onClear={() => filters.clear(id)} accessibilityLabel={`${label}: ${value}`} />;
+          })}
+        </ScrollView>
+        {sortFilter ? (
+          <PressableScale
+            onPress={() => setSortSheet(true)}
+            to={0.94}
+            style={styles.sort}
+            hitSlop={6}
+            accessibilityRole="button"
+            accessibilityLabel={`Sort: ${sortLabel}`}
+          >
+            <Text style={styles.sortText} numberOfLines={1}>
+              <Text style={styles.sortMuted}>Sort: </Text>
+              {sortLabel}
+            </Text>
+            <Ionicons name="chevron-down" size={13} color={brand.ink} />
+          </PressableScale>
+        ) : null}
       </Reveal>
 
       {firstLoad ? (
@@ -268,15 +273,14 @@ export default function SearchScreen({ navigation, route }) {
           data={items}
           keyExtractor={(i) => i.id}
           keyboardShouldPersistTaps="handled"
-          contentContainerStyle={{ padding: 20, paddingTop: 2, paddingBottom: bottom + 30, gap: 14 }}
-          renderItem={({ item, index }) => <PropertyCard property={item} index={index} />}
+          contentContainerStyle={{ padding: 16, paddingTop: 4, paddingBottom: bottom + 30, gap: 12 }}
+          renderItem={({ item, index }) => <ListingCard property={item} index={index} tag={tagFor(item)} />}
           onScroll={onScroll}
           scrollEventThrottle={32}
           onEndReachedThreshold={0.4}
           onEndReached={() => {
             if (!st.more && !st.loading && page < pages) load(page + 1, true);
           }}
-          ListHeaderComponent={resumed && items.length ? <ResumeBanner place={place} onClose={() => setResumed(false)} /> : null}
           ListEmptyComponent={
             <View>
               <EmptyState
@@ -368,158 +372,72 @@ export default function SearchScreen({ navigation, route }) {
   );
 }
 
-// White search field on the violet band, with the filter button tucked in at the end.
-function SearchField({ value, onChange, onSubmit, autoFocus, onFilter, filterCount }) {
+// Rounded chip for the filter row: optional icon, tap to edit, x to clear.
+function Pill({ icon, label, active, trailing, onPress, onClear, accessibilityLabel, accessibilityHint }) {
   return (
-    <View style={styles.search}>
-      <Ionicons name="search" size={18} color={colors.muted} />
-      <TextInput
-        value={value}
-        onChangeText={onChange}
-        onSubmitEditing={onSubmit}
-        placeholder="Search city, locality, project, developer"
-        placeholderTextColor={brand.placeholder}
-        style={styles.searchInput}
-        returnKeyType="search"
-        autoFocus={autoFocus}
-        autoCorrect={false}
-        accessibilityLabel="Search by city, locality, project or developer"
-      />
-      {value ? (
-        <Pressable onPress={() => onChange("")} hitSlop={10} style={styles.searchClear} accessibilityRole="button" accessibilityLabel="Clear search">
-          <Ionicons name="close-circle" size={18} color={colors.muted} />
+    <PressableScale
+      onPress={onPress || onClear}
+      to={0.95}
+      style={[styles.pill, active && styles.pillOn]}
+      accessibilityRole="button"
+      accessibilityLabel={accessibilityLabel}
+      accessibilityHint={accessibilityHint || (onPress ? "Edit" : "Removes this filter")}
+    >
+      {icon ? <Ionicons name={icon} size={14} color={brand.ink} /> : null}
+      <Text style={styles.pillText} numberOfLines={1}>{label}</Text>
+      {onClear ? (
+        <Pressable onPress={onClear} hitSlop={10} accessibilityRole="button" accessibilityLabel={`Remove ${label}`}>
+          <Ionicons name="close" size={14} color={brand.ink} />
         </Pressable>
+      ) : trailing ? (
+        <Ionicons name={trailing} size={13} color={brand.ink} />
       ) : null}
-      <PressableScale
-        onPress={onFilter}
-        to={0.9}
-        style={styles.filterBtn}
-        accessibilityRole="button"
-        accessibilityLabel={filterCount ? `Filters, ${filterCount} active` : "Filters"}
-      >
-        <LinearGradient colors={[brand.violet, brand.deep]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={StyleSheet.absoluteFill} />
-        <Ionicons name="options-outline" size={18} color={colors.white} />
-        {filterCount ? (
-          <View style={styles.filterDot}>
-            <Text style={styles.filterDotText}>{filterCount > 9 ? "9+" : filterCount}</Text>
-          </View>
-        ) : null}
-      </PressableScale>
-    </View>
-  );
-}
-
-// "Picking up where you left off" - shown above the results when opened from Resume Search.
-function ResumeBanner({ place, onClose }) {
-  const v = useRef(new Animated.Value(1)).current;
-  const close = () => {
-    if (isReducedMotion()) return onClose();
-    Animated.timing(v, { toValue: 0, duration: 200, easing: Easing.in(Easing.cubic), useNativeDriver: true }).start(onClose);
-  };
-  return (
-    <Reveal delay={200} distance={10}>
-      <Animated.View style={[styles.resume, { opacity: v, transform: [{ scale: v.interpolate({ inputRange: [0, 1], outputRange: [0.94, 1] }) }] }]}>
-        <View style={styles.resumeIcon}>
-          <Ionicons name="play-forward" size={17} color="#E0457B" />
-        </View>
-        <View style={{ flex: 1 }}>
-          <Text style={styles.resumeTitle}>Picking up where you left off</Text>
-          <Text style={styles.resumeSub} numberOfLines={1}>
-            {`Your last search in ${place}`}
-          </Text>
-        </View>
-        <PressableScale onPress={close} to={0.85} hitSlop={10} style={styles.resumeClose} accessibilityRole="button" accessibilityLabel="Dismiss">
-          <Ionicons name="close" size={16} color={brand.inkSoft} />
-        </PressableScale>
-      </Animated.View>
-    </Reveal>
+    </PressableScale>
   );
 }
 
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: brand.bg },
-  band: { paddingBottom: 14, borderBottomLeftRadius: radius.lg, borderBottomRightRadius: radius.lg },
-  headRow: { flexDirection: "row", alignItems: "center", paddingHorizontal: 10, minHeight: 52 },
-  iconBtn: { width: 44, height: 44, alignItems: "center", justifyContent: "center" },
-  headText: { flex: 1, marginLeft: 6, minWidth: 0 },
-  headTitle: { fontSize: 20, fontWeight: "700", color: colors.white },
-  placeRow: { flexDirection: "row", alignItems: "center", gap: 4, marginTop: 1 },
-  placeText: { flexShrink: 1, fontSize: 12.5, fontWeight: "600", color: "rgba(255, 255, 255, 0.82)" },
-  headBadge: { paddingHorizontal: 10, paddingVertical: 5, borderRadius: radius.pill, backgroundColor: "rgba(255, 255, 255, 0.18)", marginRight: 6 },
-  headBadgeText: { fontSize: 12.5, fontWeight: "800", color: colors.white },
-  headBody: { paddingHorizontal: 16, marginTop: 6 },
-  tabsWrap: { marginTop: 12 },
-  search: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-    minHeight: 50,
-    paddingLeft: 14,
-    paddingRight: 5,
-    borderRadius: radius.md,
-    backgroundColor: colors.white,
-    ...shadow.card,
-  },
-  searchInput: { flex: 1, fontSize: 14.5, color: colors.ink, paddingVertical: 10, paddingHorizontal: 0 },
-  searchClear: { width: 32, height: 40, alignItems: "center", justifyContent: "center" },
-  filterBtn: { width: 40, height: 40, borderRadius: 12, overflow: "hidden", alignItems: "center", justifyContent: "center" },
+  headRow: { flexDirection: "row", alignItems: "center", paddingHorizontal: 8, paddingBottom: 4 },
+  iconBtn: { width: 42, height: 44, alignItems: "center", justifyContent: "center" },
+  headText: { flex: 1, marginLeft: 4, minWidth: 0 },
+  headTitle: { fontSize: 21, fontWeight: "800", color: brand.ink },
+  countRow: { flexDirection: "row", alignItems: "center", gap: 8, marginTop: 1 },
+  count: { fontSize: 12.5, fontWeight: "600", color: brand.inkSoft },
+  bellDot: { position: "absolute", top: 10, right: 10, width: 8, height: 8, borderRadius: 4, backgroundColor: colors.error, borderWidth: 1.5, borderColor: brand.bg },
   filterDot: {
     position: "absolute",
-    top: 4,
-    right: 4,
+    top: 5,
+    right: 3,
     minWidth: 15,
     height: 15,
     borderRadius: 8,
     paddingHorizontal: 3,
-    backgroundColor: brand.goldBright,
+    backgroundColor: brand.violet,
     alignItems: "center",
     justifyContent: "center",
   },
-  filterDotText: { fontSize: 9, fontWeight: "800", color: brand.ink },
-  quick: { paddingTop: 14 },
-  bar: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    gap: 10,
-    paddingHorizontal: 20,
-    paddingTop: 12,
-    paddingBottom: 10,
-  },
-  countRow: { flexDirection: "row", alignItems: "center", gap: 8, flexShrink: 1 },
-  count: { fontSize: 14, fontWeight: "600", color: brand.inkSoft },
-  countNum: { fontSize: 15, fontWeight: "800", color: brand.ink },
-  countMuted: { fontSize: 14, fontWeight: "600", color: brand.inkSoft },
-  sort: {
+  filterDotText: { fontSize: 9, fontWeight: "800", color: colors.white },
+  bar: { flexDirection: "row", alignItems: "center", gap: 8, paddingRight: 16, paddingTop: 6, paddingBottom: 8 },
+  chips: { paddingLeft: 16, paddingRight: 4, gap: 8, alignItems: "center" },
+  pill: {
     flexDirection: "row",
     alignItems: "center",
     gap: 5,
-    maxWidth: 180,
-    height: 36,
+    maxWidth: 220,
+    height: 34,
     paddingHorizontal: 12,
     borderRadius: radius.pill,
     backgroundColor: colors.white,
     borderWidth: 1,
     borderColor: brand.lavenderMid,
   },
-  sortText: { flexShrink: 1, fontSize: 12.5, fontWeight: "700", color: brand.ink },
+  pillOn: { backgroundColor: brand.lavender, borderColor: brand.violet },
+  pillText: { flexShrink: 1, fontSize: 12.5, fontWeight: "700", color: brand.ink },
+  sort: { flexDirection: "row", alignItems: "center", gap: 3, maxWidth: 150, height: 34 },
+  sortText: { flexShrink: 1, fontSize: 12.5, fontWeight: "800", color: brand.ink },
+  sortMuted: { fontWeight: "600", color: brand.inkSoft },
   suggest: { flexDirection: "row", flexWrap: "wrap", justifyContent: "center", gap: 8, paddingHorizontal: 20 },
-  resume: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 12,
-    padding: 12,
-    marginBottom: 2,
-    borderRadius: radius.lg,
-    backgroundColor: colors.white,
-    borderWidth: 1,
-    borderColor: "#FFD3E2",
-    ...shadow.card,
-  },
-  resumeIcon: { width: 38, height: 38, borderRadius: 12, backgroundColor: "#FFE4EE", alignItems: "center", justifyContent: "center" },
-  resumeTitle: { fontSize: 14, fontWeight: "800", color: brand.ink },
-  resumeSub: { fontSize: 12, color: brand.inkSoft, marginTop: 1 },
-  resumeClose: { width: 30, height: 30, borderRadius: 15, backgroundColor: brand.lavender, alignItems: "center", justifyContent: "center" },
   topBtnWrap: { position: "absolute", right: 20 },
   topBtn: {
     width: 48,

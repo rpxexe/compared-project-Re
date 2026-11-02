@@ -27,12 +27,13 @@ import { formatMobileInput } from "../utils/format";
 import { brand, colors, fonts, gradients, radius, surfaces } from "../theme";
 import Text, { AppTextInput as TextInput } from "../components/AppText";
 
-// `id` is what the rest of the flow expects: Owner/Broker sign in with a phone OTP
+// `id` is what the rest of the flow expects (the Agent card keeps id "Broker", which becomes the
+// stored `broker` purpose): Owner/Agent sign in with a phone OTP
 // (and become the matching `purpose` after verification); Developer uses the
 // builder-portal email + password sign-in.
 const ROLES = [
   { id: "Owner", title: "Owner", subtitle: "List, Buy or Rent", icon: "home-outline" },
-  { id: "Broker", title: "Broker", subtitle: "Connect Clients", icon: "briefcase-outline" },
+  { id: "Broker", title: "Agent", subtitle: "Connect Clients", icon: "briefcase-outline" },
   { id: "Developer", title: "Developer", subtitle: "Build & Sell", icon: "business-outline" },
 ];
 
@@ -106,7 +107,7 @@ export default function LoginScreen({ navigation }) {
   const [phone, setPhone] = useState("");
   const [phoneTouched, setPhoneTouched] = useState(false);
   const [phoneFocused, setPhoneFocused] = useState(false);
-  // Optional name for Owner / Broker; saved to the profile after OTP verification.
+  // Optional name for Owner / Agent; saved to the profile after OTP verification.
   const [name, setName] = useState("");
   const [nameTouched, setNameTouched] = useState(false);
   const [nameFocused, setNameFocused] = useState(false);

@@ -29,6 +29,9 @@ export const formatMobileInput = (digits) => {
   return d.length > 5 ? `${d.slice(0, 5)} ${d.slice(5)}` : d;
 };
 
+// Stored role/purpose values shown to people; `broker` is still the value in the database.
+export const roleLabel = (v) => (v === 'broker' ? 'agent' : v || '');
+
 export const formatPhone = (p) => (p && p.length === 10 ? `+91 ${p.slice(0, 5)} ${p.slice(5)}` : p || '');
 
 export function propertyFacts(p) {

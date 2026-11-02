@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import { ActivityIndicator, Alert, Animated, BackHandler, Easing, Image, Keyboard, KeyboardAvoidingView, Pressable, ScrollView, StyleSheet, View } from "react-native";
 import { StatusBar } from "expo-status-bar";
+import { ErrorState, LoadingState } from "../components/StateViews";
 import * as ImagePicker from "expo-image-picker";
 import { Ionicons } from "@expo/vector-icons";
 import Button from "../components/Button";
@@ -20,7 +21,7 @@ import { POPULAR_CITIES, getCurrentUserLocation } from "../services/locationServ
 import {
   AREA_UNITS, BATHROOMS, BHKS, FLOORS, GROUND, CATEGORY_OPTIONS, CUSTOM_DATE, EMPTY_FORM, FACINGS, FURNISHING, FURNISHING_ICONS, LISTING_OPTIONS, MAX_PHOTOS, PARKING,
   PARKING_ICONS, TYPE_ICONS,
-  PROPERTY_AGES, RENT_AVAILABILITY, SALE_POSSESSION, STEPS, MAX_AMENITIES, availabilityText, buildPayload, firstInvalidStep,
+  PROPERTY_AGES, RENT_AVAILABILITY, SALE_POSSESSION, STEPS, availabilityText, buildPayload, firstInvalidStep, formFromListing,
   floorText, maskDate, needsBhk, photoRoomsFor, priceLabel, sanitizeForType, sectionsFor, showsAge, showsBuildingFields, showsFloor, typeLabel, typesFor, validateStep,
 } from "../utils/postPropertyFlow";
 import { LinearGradient } from "expo-linear-gradient";
@@ -86,10 +87,10 @@ const toggle = (list, v) => (list.includes(v) ? list.filter((x) => x !== v) : [.
 let photoSeq = 0;
 
 // Label on the left, control on the right - the layout of the Specifications step.
-function SpecRow({ icon, label, required, error, children }) {
+function SpecRow({ icon, label, required, error, locked, children }) {
   return (
     <View style={s.specRow}>
-      <View style={s.specLabel}>
+      <View style={[s.specLabel, locked && s.faded]}>
         <View style={s.specIcon}><Ionicons name={icon} size={16} color={brand.violet} /></View>
         <Text style={s.specText}>{label}{required ? <Text style={{ color: colors.error }}> *</Text> : null}</Text>
       </View>
@@ -114,7 +115,10 @@ function CheckTile({ label, active, radio, onPress }) {
   );
 }
 
-function Wizard({ navigation, initial }) {
+// `editId`: edit one of the user's own listings instead of posting a new one. The form starts
+// filled in, and the details fixed at posting (category, type, city, locality, BHK) are locked.
+function Wizard({ navigation, initial, editId }) {
+  const editing = !!editId;
   const { bottom } = useBottomSpace();
   const toast = useToast();
   const { token, openLoginPrompt } = useAuth();
@@ -131,7 +135,6 @@ function Wizard({ navigation, initial }) {
   const [done, setDone] = useState(null);
   const [uploading, setUploading] = useState({ cover: false, photos: false });
   const [room, setRoom] = useState("");
-  const [customAmenity, setCustomAmenity] = useState("");
   const [sectionKey, setSectionKey] = useState(""); // Amenities tab on show; the first one by default
   const [locating, setLocating] = useState(false);
   const [writing, setWriting] = useState(false); // AI description request in flight
@@ -329,13 +332,6 @@ function Wizard({ navigation, initial }) {
     if (failed) toast.show(`${failed} photo${failed > 1 ? "s" : ""} could not be uploaded`, "error");
   };
 
-  const addCustomAmenity = () => {
-    const a = customAmenity.trim().slice(0, 40);
-    if (!a) return;
-    if (!form.amenities.some((x) => x.toLowerCase() === a.toLowerCase()) && form.amenities.length < MAX_AMENITIES) set("amenities", [...form.amenities, a]);
-    setCustomAmenity("");
-  };
-
   // Asks the server (Gemini) to write the description from everything filled in so far. An
   // existing description is sent as a draft to improve, after the user agrees to replace it.
   const writeWithAi = (confirmed = false) => {
@@ -399,8 +395,8 @@ function Wizard({ navigation, initial }) {
     }
     setSubmitting(true);
     try {
-      const result = await api.postProperty(buildPayload(form));
-      setDone(result?.message || "Submitted for review. It will appear once approved.");
+      const result = editing ? await api.updateMyProperty(editId, buildPayload(form)) : await api.postProperty(buildPayload(form));
+      setDone(result?.message || (editing ? "Changes saved." : "Submitted for review. It will appear once approved."));
     } catch (error) {
       if (error?.signInRequired) return; // the sign-in dialog is already open
       const fe = error?.fieldErrors;
@@ -421,8 +417,8 @@ function Wizard({ navigation, initial }) {
   if (done) {
     return (
       <Submitted message={done}>
-        <Button title="View my properties" icon="list" onPress={() => navigation.navigate("MyProperties")} />
-        <Button title="Post another property" variant="ghost" onPress={() => navigation.replace("PostPropertyForm")} />
+        <Button title="View my properties" icon="list" onPress={() => (editing ? navigation.goBack() : navigation.navigate("MyProperties"))} />
+        {editing ? null : <Button title="Post another property" variant="ghost" onPress={() => navigation.replace("PostPropertyForm")} />}
         <Button title="Back to Home" variant="ghost" onPress={() => navigation.navigate("Tabs", { screen: "Home" })} />
       </Submitted>
     );
@@ -459,7 +455,6 @@ function Wizard({ navigation, initial }) {
   const nextSection = sections[sectionIdx + 1];
   const chosenIn = (sec) => (sec.field === "grade" ? [form.grade] : form[sec.field]);
   const countIn = (sec) => sec.items.filter((i) => chosenIn(sec).includes(i)).length;
-  const allPicked = [...form.amenities.map((a) => ["amenities", a]), ...form.facilities.map((a) => ["facilities", a]), ...(form.grade ? [["grade", form.grade]] : [])];
   const showSection = (key) => { Keyboard.dismiss(); setSectionKey(key); };
   const setAll = (sec, on) => set(sec.field, on
     ? [...form[sec.field], ...sec.items.filter((i) => !form[sec.field].includes(i))]
@@ -489,7 +484,7 @@ function Wizard({ navigation, initial }) {
   return (
     <DropdownHost style={s.root}>
       <StatusBar style="dark" />
-      <WizardHeader title={cur.heading || "Post your property"} subtitle={cur.subtitle} onBack={goBack} />
+      <WizardHeader title={editing ? "Edit your property" : cur.heading || "Post your property"} subtitle={cur.subtitle} onBack={goBack} />
       {ONLY_STEP ? null : <Stepper steps={STEPS} step={step} onJump={jump} />}
 
       {/* The form scrolls on behind the see-through tab bar; the bottom padding lets its end clear the bar. */}
@@ -527,30 +522,36 @@ function Wizard({ navigation, initial }) {
                 </View>
                 <ErrorText>{errors.listingType}</ErrorText>
 
-                <FieldLabel icon="grid-outline" style={s.gap}>Property category</FieldLabel>
+                <FieldLabel icon="grid-outline" style={[s.gap, editing && s.faded]}>Property category</FieldLabel>
                 <SelectField title="Property category" placeholder="Select category" value={form.category} options={CATEGORY_OPTIONS}
-                  onChange={(v) => set("category", v)} error={errors.category} />
+                  onChange={(v) => set("category", v)} error={errors.category} disabled={editing} />
                 <ErrorText>{errors.category}</ErrorText>
 
-                <FieldLabel icon="business-outline" style={s.gap}>Property type</FieldLabel>
+                <FieldLabel icon="business-outline" style={[s.gap, editing && s.faded]}>Property type</FieldLabel>
                 <SelectField title="Property type" placeholder={form.category ? "Select type" : "Choose a category first"} value={form.propertyType}
-                  options={typesFor(form.category).map((t) => ({ label: typeLabel(t), value: t, icon: TYPE_ICONS[t] }))} onChange={(v) => set("propertyType", v)} error={errors.propertyType} />
+                  options={typesFor(form.category).map((t) => ({ label: typeLabel(t), value: t, icon: TYPE_ICONS[t] }))} onChange={(v) => set("propertyType", v)} error={errors.propertyType} disabled={editing} />
                 <ErrorText>{errors.propertyType}</ErrorText>
 
-                <FieldLabel icon="location-outline" style={s.gap} right={
+                <FieldLabel icon="location-outline" style={[s.gap, editing && s.faded]} right={editing ? null : (
                   <Pressable onPress={locate} disabled={locating} style={s.locate} accessibilityRole="button" accessibilityLabel="Use current location">
                     {locating ? <ActivityIndicator size="small" color={brand.violet} /> : <Ionicons name="navigate-outline" size={13} color={brand.violet} />}
                     <Text style={s.locateText}>{locating ? "Locating…" : "Use current location"}</Text>
                   </Pressable>
-                }>Location</FieldLabel>
+                )}>Location</FieldLabel>
                 <View style={s.row}>
-                  <TextField style={{ flex: 1 }} label="City" required value={form.city} onChangeText={(v) => set("city", v)} placeholder="e.g. Mumbai" autoCapitalize="words" maxLength={60} error={errors.city}
+                  <TextField style={{ flex: 1 }} label="City" required value={form.city} onChangeText={(v) => set("city", v)} placeholder="e.g. Mumbai" autoCapitalize="words" maxLength={60} error={errors.city} disabled={editing}
                     onFocus={() => setLocFocus("city")} onBlur={() => setLocFocus((f) => (f === "city" ? null : f))} autoComplete="off" autoCorrect={false}
                     completion={cityCompletion?.title} onComplete={() => pickPlace(cityCompletion, "city")} returnKeyType="next" />
-                  <TextField style={{ flex: 1 }} label="Locality / Area" required value={form.locality} onChangeText={(v) => set("locality", v)} placeholder="e.g. Andheri West" autoCapitalize="words" maxLength={80} error={errors.locality}
+                  <TextField style={{ flex: 1 }} label="Locality / Area" required value={form.locality} onChangeText={(v) => set("locality", v)} placeholder="e.g. Andheri West" autoCapitalize="words" maxLength={80} error={errors.locality} disabled={editing}
                     onFocus={() => setLocFocus("locality")} onBlur={() => setLocFocus((f) => (f === "locality" ? null : f))} autoComplete="off" autoCorrect={false}
                     completion={localityCompletion?.title} onComplete={() => pickPlace(localityCompletion, "locality")} returnKeyType="done" />
                 </View>
+                {editing ? (
+                  <View style={s.lockNote}>
+                    <Ionicons name="lock-closed" size={13} color={brand.inkSoft} />
+                    <Text style={s.lockNoteText}>Property type, location and bedrooms can't be changed after posting. To change them, delete the listing and post it again.</Text>
+                  </View>
+                ) : null}
                 {citySuggestions.length ? (
                   <SuggestionList key="city" items={citySuggestions} query={form.city} icon="business-outline" onPick={pickPlace} />
                 ) : localitySuggestions.length ? (
@@ -563,8 +564,8 @@ function Wizard({ navigation, initial }) {
               <Card index={1} style={s.cardGap}>
                 <FieldLabel icon="options-outline">Specifications</FieldLabel>
                 {needsBhk(form.category, form.propertyType) ? (
-                  <SpecRow icon="bed-outline" label="Bedrooms" required error={errors.bhk}>
-                    <SelectField title="Bedrooms" value={form.bhk} options={BHKS} optionIcon="bed-outline" format={(b) => `${b} BHK`} onChange={(v) => set("bhk", v)} error={errors.bhk} />
+                  <SpecRow icon="bed-outline" label="Bedrooms" required error={errors.bhk} locked={editing}>
+                    <SelectField title="Bedrooms" value={form.bhk} options={BHKS} optionIcon="bed-outline" format={(b) => `${b} BHK`} onChange={(v) => set("bhk", v)} error={errors.bhk} disabled={editing} />
                   </SpecRow>
                 ) : null}
                 <SpecRow icon="resize-outline" label="Area" required error={errors.area}>
@@ -687,32 +688,6 @@ function Wizard({ navigation, initial }) {
                   </Card>
                 ) : null}
 
-                {/* Everything picked so far, across tabs; tap a chip to remove it. */}
-                <Card index={2} style={s.cardGap}>
-                  <FieldLabel icon="checkmark-done-outline" right={<View style={s.amenCount}><Text style={s.amenCountText}>{picked}</Text></View>}>Your selections</FieldLabel>
-                  {allPicked.length ? (
-                    <View style={s.chips}>
-                      {allPicked.map(([field, a]) => (
-                        <Appear key={`${field}:${a}`} scale style={{ maxWidth: "100%" }}>
-                          <PressableScale to={0.94} onPress={() => pickIn(field, a)} style={s.chip} accessibilityRole="button" accessibilityLabel={`Remove ${a}`}>
-                            <Text style={s.chipText} numberOfLines={1}>{a}</Text>
-                            <Ionicons name="close" size={13} color={brand.violet} />
-                          </PressableScale>
-                        </Appear>
-                      ))}
-                    </View>
-                  ) : (
-                    <Text style={s.note}>Nothing picked yet. Choose from the tabs above.</Text>
-                  )}
-                  <Text style={[s.smallHead, s.gapLg]}>Something else?</Text>
-                  <View style={s.addRow}>
-                    <TextField style={{ flex: 1 }} value={customAmenity} onChangeText={setCustomAmenity} placeholder="e.g. Terrace garden" maxLength={40}
-                      onSubmitEditing={addCustomAmenity} returnKeyType="done" accessibilityLabel="Add another amenity" />
-                    <Pressable onPress={addCustomAmenity} style={s.addBtn} accessibilityRole="button" accessibilityLabel="Add amenity">
-                      <Ionicons name="add" size={22} color="#fff" />
-                    </Pressable>
-                  </View>
-                </Card>
               </>
             ) : null}
 
@@ -841,8 +816,27 @@ function Wizard({ navigation, initial }) {
 
 // Purpose and category may arrive as route params (e.g. from an older entry point); anything
 // else starts the wizard empty.
+// Loads one of the user's listings and opens the form on it in edit mode.
+function EditLoader({ navigation, editId }) {
+  const [state, setState] = useState({ form: null, error: null });
+  const load = useCallback(() => {
+    setState({ form: null, error: null });
+    api.myProperty(editId)
+      .then((r) => setState({ form: formFromListing(r.property), error: null }))
+      .catch((error) => setState({ form: null, error }));
+  }, [editId]);
+  useEffect(load, [load]);
+  if (state.form) return <Wizard navigation={navigation} initial={state.form} editId={editId} />;
+  return (
+    <View style={[s.root, { paddingTop: 80, paddingHorizontal: 20 }]}>
+      {state.error ? <ErrorState title="Unable to load this property" error={state.error} onRetry={load} /> : <LoadingState rows={3} />}
+    </View>
+  );
+}
+
 export default function PostPropertyFormScreen({ navigation, route }) {
-  const { listingType, category } = route?.params || {};
+  const { listingType, category, editId } = route?.params || {};
+  if (editId) return <EditLoader navigation={navigation} editId={editId} />;
   const initial = {
     ...(["rent", "sale"].includes(listingType) ? { listingType } : {}),
     ...(["residential", "commercial"].includes(category) ? { category } : {}),
@@ -857,6 +851,9 @@ const s = StyleSheet.create({
   gap: { marginTop: 18 },
   gapLg: { marginTop: 22 },
   cardGap: { marginTop: 14 },
+  faded: { opacity: 0.45 },
+  lockNote: { flexDirection: "row", alignItems: "center", gap: 6, marginTop: 10 },
+  lockNoteText: { flex: 1, fontSize: 11.5, lineHeight: 16, color: brand.inkSoft },
   locate: { flexDirection: "row", alignItems: "center", gap: 5, paddingHorizontal: 10, minHeight: 30, borderRadius: 15, backgroundColor: brand.lavender },
   locateText: { fontSize: 11.5, fontWeight: "700", color: brand.violet },
 
@@ -872,7 +869,6 @@ const s = StyleSheet.create({
   pillGrid: { flexDirection: "row", flexWrap: "wrap", justifyContent: "space-between", rowGap: 10 },
   half: { width: "48.5%" },
   count: { fontSize: 12, fontWeight: "600", color: brand.inkSoft },
-  addRow: { flexDirection: "row", alignItems: "flex-start", gap: 10 },
   testBar: { marginBottom: 12, borderStyle: "dashed", borderColor: "#C9B5F5", backgroundColor: "#FCFAFF" },
   testTitle: { fontSize: 12, fontWeight: "800", color: brand.violet, marginBottom: 8, textTransform: "uppercase", letterSpacing: 0.4 },
   aiRow: { flexDirection: "row", alignItems: "center", gap: 12, marginBottom: 10 },
@@ -881,8 +877,6 @@ const s = StyleSheet.create({
   aiUndo: { flexDirection: "row", alignItems: "center", gap: 4, minHeight: 32 },
   aiUndoText: { fontSize: 13, fontWeight: "800", color: brand.violet },
   aiNote: { fontSize: 11.5, color: brand.inkSoft, marginTop: 6 },
-  amenCount: { paddingHorizontal: 10, minWidth: 28, minHeight: 24, borderRadius: 12, backgroundColor: brand.lavender, alignItems: "center", justifyContent: "center" },
-  amenCountText: { fontSize: 12, fontWeight: "800", color: brand.violet },
   tabsWrap: { marginHorizontal: -16, marginBottom: 12 },
   tabs: { paddingHorizontal: 16, gap: 8 },
   tab: { flexDirection: "row", alignItems: "center", gap: 6, minHeight: 40, paddingHorizontal: 14, borderRadius: 20, borderWidth: 1.2, borderColor: LINE, backgroundColor: "#fff" },
@@ -907,11 +901,7 @@ const s = StyleSheet.create({
   tileTextOn: { color: brand.violet, fontWeight: "700" },
   secNext: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6, minHeight: 44, marginTop: 14, borderRadius: 12, borderWidth: 1.2, borderStyle: "dashed", borderColor: "#C9B5F5" },
   secNextText: { fontSize: 13, fontWeight: "800", color: brand.violet },
-  chips: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
-  chip: { flexDirection: "row", alignItems: "center", gap: 6, maxWidth: "100%", minHeight: 32, paddingHorizontal: 12, borderRadius: 16, backgroundColor: brand.lavender },
-  chipText: { flexShrink: 1, fontSize: 12.5, fontWeight: "700", color: brand.violet },
   smallHead: { fontSize: 13, fontWeight: "800", color: brand.ink, marginBottom: 8 },
-  addBtn: { width: 46, height: 46, borderRadius: 12, backgroundColor: brand.violet, alignItems: "center", justifyContent: "center" },
 
   cover: { height: 170, borderRadius: 16, overflow: "hidden", backgroundColor: brand.lavender },
   coverActions: { position: "absolute", right: 10, bottom: 10, flexDirection: "row", gap: 8 },

@@ -5,7 +5,9 @@ import Screen from "../components/Screen";
 import ScreenHeader from "../components/ScreenHeader";
 import Button from "../components/Button";
 import PressableScale from "../components/PressableScale";
-import PropertyCard from "../components/PropertyCard";
+// Aliased: this screen has its own index-based `badgeFor` for the compared projects' cards.
+import { badgeFor as listingBadge } from "../components/PropertyCard";
+import ListingCard from "../components/search/ListingCard";
 import SectionHeader from "../components/SectionHeader";
 import ProjectCard, { AddSlot } from "../components/compare/ProjectCard";
 import CompareTabs from "../components/compare/CompareTabs";
@@ -162,12 +164,12 @@ export default function CompareScreen({ navigation }) {
 
           <View style={{ marginTop: 10 }}>
             {tab === "key" ? (
-              <View key="key" style={styles.flat}>
+              <Section key="key" title="Key Comparison" icon="bar-chart-outline">
                 <Grid items={items} labelW={labelW} colW={colW} fits={fits}>
                   {renderRows(keyRows)}
                   <DetailsRow items={items} labelW={labelW} colW={colW} pick={pick} onOpen={open} />
                 </Grid>
-              </View>
+              </Section>
             ) : tab === "amenities" ? (
               <Section key="amenities" title="Amenities" icon="star-outline">
                 {amenities.rows.length ? (
@@ -238,9 +240,9 @@ export default function CompareScreen({ navigation }) {
       {cmp.count < COMPARE_MAX && suggestions.length ? (
         <View style={{ marginTop: 28 }}>
           <SectionHeader title="Add projects" subtitle="Tap the compare icon to add" />
-          <View style={{ paddingHorizontal: 20, gap: 14 }}>
+          <View style={{ paddingHorizontal: 16, gap: 12 }}>
             {suggestions.slice(0, 6).map((p, i) => (
-              <PropertyCard key={p.id} property={p} index={i} />
+              <ListingCard key={p.id} property={p} index={i} tag={listingBadge(p)} />
             ))}
           </View>
           <Button
@@ -269,7 +271,6 @@ const styles = StyleSheet.create({
   },
   clearText: { fontSize: 12.5, fontWeight: "800", color: colors.error },
   cards: { paddingHorizontal: 16, gap: GAP, paddingTop: 2, paddingBottom: 14 },
-  flat: { marginHorizontal: 16 },
   mapBtn: { flexDirection: "row", alignItems: "center", gap: 4 },
   mapText: { fontSize: 12, fontWeight: "800", color: brand.violet },
   none: { padding: 16, fontSize: 13, color: colors.muted },

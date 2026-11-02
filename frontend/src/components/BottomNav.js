@@ -7,6 +7,8 @@ import Svg, { Path } from "react-native-svg";
 import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import { brand, colors, gradients } from "../theme";
 import { useAuth } from "../context/AuthContext";
+import { useCompare } from "../context/CompareContext";
+import CompareTray from "./CompareTray";
 import { isReducedMotion } from "../hooks/useReducedMotion";
 import Text from "./AppText";
 
@@ -144,6 +146,11 @@ export default function BottomNav({ state, navigation, badges = {} }) {
 
   const count = state.routes.length;
   const active = state.routes[state.index]?.name;
+  const { count: compareCount } = useCompare();
+  // Only the tabs' own first screens show the bar; anything pushed on top (search results,
+  // property details, settings...) is an inner screen and gets the full height.
+  const inner = (state.routes[state.index]?.state?.index ?? 0) > 0;
+  const showTray = compareCount > 0 && active !== "Compare";
   const activeCfg = tabConfig(active);
 
   useEffect(() => {
@@ -170,7 +177,13 @@ export default function BottomNav({ state, navigation, badges = {} }) {
     return () => { show.remove(); hide.remove(); };
   }, []);
 
-  if (keyboard) return null;
+  // Hidden bar = no height, so screens stop reserving space for it.
+  const hidden = keyboard || (inner && !showTray);
+  useEffect(() => {
+    if (hidden) onHeightChange?.(0);
+  }, [hidden]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  if (hidden) return null;
 
   return (
     // Floats over the screens; they read its height (useBottomTabBarHeight) to keep content clear.
@@ -179,59 +192,69 @@ export default function BottomNav({ state, navigation, badges = {} }) {
       onLayout={(e) => onHeightChange?.(e.nativeEvent.layout.height)}
       style={[styles.wrapper, { paddingBottom: Math.max(insets.bottom, 10) }]}
     >
-      <View style={styles.bar} onLayout={(e) => setWidth(e.nativeEvent.layout.width)}>
-        {width ? (
-          // Twice the bar's width with the notch in the middle, slid so the notch tracks `x`.
-          <Animated.View
-            pointerEvents="none"
-            style={[styles.fill, { width: width * 2, transform: [{ translateX: Animated.subtract(x, width) }] }]}
-          >
-            <Svg width={width * 2} height={BAR_H}>
-              <Path d={notchPath(width * 2, width)} fill={colors.white} />
-            </Svg>
-          </Animated.View>
-        ) : null}
-
-        {state.routes.map((route, i) => {
-          const focused = state.index === i;
-          const onPress = () => {
-            if (route.name === "Post" && !token) {
-              openLoginPrompt({
-                reason: "post_property",
-                title: "Sign In to List Property",
-                message: "Post your property to reach thousands of genuine buyers and investors. Please sign in or register to continue.",
-              });
-              return;
-            }
-            const ev = navigation.emit({ type: "tabPress", target: route.key, canPreventDefault: true });
-            if (!focused && !ev.defaultPrevented) navigation.navigate(route.name);
-          };
-          return (
-            <TabItem
-              key={route.key}
-              name={route.name}
-              focused={focused}
-              onPress={onPress}
-              onLongPress={() => navigation.emit({ type: "tabLongPress", target: route.key })}
-              badge={badges[route.name]}
-            />
-          );
-        })}
-      </View>
-
-      {width ? (
-        <Animated.View
-          pointerEvents="none"
-          importantForAccessibility="no-hide-descendants"
-          accessibilityElementsHidden
-          style={[styles.bubbleWrap, { transform: [{ translateX: Animated.subtract(x, BUBBLE_R) }, { scale: pop }] }]}
-        >
-          <LinearGradient colors={gradients.cta} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.bubble}>
-            {activeCfg.icon(true, colors.white)}
-          </LinearGradient>
-          {badges[active] ? <Badge value={badges[active]} style={styles.bubbleBadge} /> : null}
-        </Animated.View>
+      {/* Rides on top of the bar while projects are queued (not on the Compare tab itself). Part of
+          the bar's measured height, so every screen keeps its content clear of it too. */}
+      {showTray ? (
+        <CompareTray onCompare={() => navigation.navigate("Compare", { screen: "CompareMain" })} />
       ) : null}
+      {/* On inner screens only the compare card stays, so it's still one tap to compare. */}
+      {inner ? null : (
+        <View style={styles.barArea} pointerEvents="box-none">
+          <View style={styles.bar} onLayout={(e) => setWidth(e.nativeEvent.layout.width)}>
+            {width ? (
+              // Twice the bar's width with the notch in the middle, slid so the notch tracks `x`.
+              <Animated.View
+                pointerEvents="none"
+                style={[styles.fill, { width: width * 2, transform: [{ translateX: Animated.subtract(x, width) }] }]}
+              >
+                <Svg width={width * 2} height={BAR_H}>
+                  <Path d={notchPath(width * 2, width)} fill={colors.white} />
+                </Svg>
+              </Animated.View>
+            ) : null}
+
+            {state.routes.map((route, i) => {
+              const focused = state.index === i;
+              const onPress = () => {
+                if (route.name === "Post" && !token) {
+                  openLoginPrompt({
+                    reason: "post_property",
+                    title: "Sign In to List Property",
+                    message: "Post your property to reach thousands of genuine buyers and investors. Please sign in or register to continue.",
+                  });
+                  return;
+                }
+                const ev = navigation.emit({ type: "tabPress", target: route.key, canPreventDefault: true });
+                if (!focused && !ev.defaultPrevented) navigation.navigate(route.name);
+              };
+              return (
+                <TabItem
+                  key={route.key}
+                  name={route.name}
+                  focused={focused}
+                  onPress={onPress}
+                  onLongPress={() => navigation.emit({ type: "tabLongPress", target: route.key })}
+                  badge={badges[route.name]}
+                />
+              );
+            })}
+          </View>
+
+          {width ? (
+            <Animated.View
+              pointerEvents="none"
+              importantForAccessibility="no-hide-descendants"
+              accessibilityElementsHidden
+              style={[styles.bubbleWrap, { transform: [{ translateX: Animated.subtract(x, BUBBLE_R) }, { scale: pop }] }]}
+            >
+              <LinearGradient colors={gradients.cta} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.bubble}>
+                {activeCfg.icon(true, colors.white)}
+              </LinearGradient>
+              {badges[active] ? <Badge value={badges[active]} style={styles.bubbleBadge} /> : null}
+            </Animated.View>
+          ) : null}
+        </View>
+      )}
     </View>
   );
 }
@@ -243,8 +266,9 @@ const styles = StyleSheet.create({
     right: 0,
     bottom: 0,
     paddingHorizontal: GUTTER,
-    paddingTop: BUBBLE_R - BUBBLE_Y,
   },
+  // Bar + bubble; the bubble is positioned from this box's top-left.
+  barArea: { paddingTop: BUBBLE_R - BUBBLE_Y },
   bar: {
     flexDirection: "row",
     height: BAR_H,
@@ -268,7 +292,7 @@ const styles = StyleSheet.create({
   bubbleWrap: {
     position: "absolute",
     top: 0,
-    left: GUTTER,
+    left: 0,
     width: BUBBLE_R * 2,
     height: BUBBLE_R * 2,
   },

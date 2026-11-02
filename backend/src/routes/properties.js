@@ -25,6 +25,8 @@ router.get("/top-rated", Property.getTopRatedProperties);
 
 router.get("/compare", Property.getCompareProperties);
 
+router.get("/by-ids", Property.getPropertiesByIds);
+
 router.get("/saved/list", authRequired, Property.getSavedProperties);
 
 router.get("/:id", authOptional, Property.getProperty);
@@ -33,6 +35,9 @@ router.get("/:id", authOptional, Property.getProperty);
 router.post("/:id/save", authRequired, Property.saveProperty);
 
 router.delete("/:id/save", authRequired, Property.deleteSavedProperty);
+
+// Records that a signed-in user opened this listing (lead tracking); a no-op for guests.
+router.post("/:id/view", authOptional, Property.recordView);
 
 router.get("/:id/reviews", authOptional, Property.getReviews);
 

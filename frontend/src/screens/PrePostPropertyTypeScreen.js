@@ -52,7 +52,7 @@ export default function PrePostPropertyTypeScreen({ navigation }) {
             }}
           />
           <Button
-            title="Broker"
+            title="Agent"
             small
             variant={!isDeveloper ? "dark" : "ghost"}
             onPress={() => handlePostType(false)}

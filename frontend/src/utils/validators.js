@@ -10,7 +10,7 @@ export function phoneError(s) {
   return '';
 }
 
-// Optional display name for phone sign-in (Owner / Broker). Empty is valid.
+// Optional display name for phone sign-in (Owner / Agent). Empty is valid.
 export const NAME_MAX = 60;
 export function nameError(s) {
   const v = String(s || '').trim().replace(/\s+/g, ' ');

@@ -1,5 +1,6 @@
-import React, { useCallback, useEffect, useMemo, useState } from "react";
-import { FlatList, Image, RefreshControl, StyleSheet, View, useWindowDimensions } from "react-native";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Animated, Easing, FlatList, Image, RefreshControl, StyleSheet, View, useWindowDimensions } from "react-native";
+import { isReducedMotion } from "../hooks/useReducedMotion";
 import { LinearGradient } from "expo-linear-gradient";
 import { useIsFocused } from "@react-navigation/native";
 import { Ionicons } from "@expo/vector-icons";
@@ -89,11 +90,47 @@ function SectionTitle({ title, action, onAction }) {
   );
 }
 
-// Photo inset in a rounded card, name with a RERA tick, price + place, then small stats and a
-// "View" pill - the layout of a profile card, filled with listing facts.
+// "RERA" seal for the photo's top-left corner: an emerald pill with a white tick disc and a
+// soft glow; a thin sheen glints across it every few seconds.
+function ReraTag() {
+  const sheen = useRef(new Animated.Value(0)).current;
+  useEffect(() => {
+    if (isReducedMotion()) return undefined;
+    const loop = Animated.loop(
+      Animated.sequence([
+        Animated.delay(900),
+        Animated.timing(sheen, { toValue: 1, duration: 900, easing: Easing.inOut(Easing.quad), useNativeDriver: true }),
+        Animated.delay(3200),
+        Animated.timing(sheen, { toValue: 0, duration: 0, useNativeDriver: true }),
+      ]),
+    );
+    loop.start();
+    return () => loop.stop();
+  }, [sheen]);
+  return (
+    <View style={styles.rera} accessibilityLabel="RERA approved">
+      <LinearGradient colors={["#22D38A", "#0E9F6E", "#0B7A55"]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={StyleSheet.absoluteFill} />
+      <Animated.View
+        pointerEvents="none"
+        style={[styles.reraSheen, { transform: [{ translateX: sheen.interpolate({ inputRange: [0, 1], outputRange: [-30, 90] }) }, { rotate: "20deg" }] }]}
+      >
+        <LinearGradient colors={["rgba(255,255,255,0)", "rgba(255,255,255,0.55)", "rgba(255,255,255,0)"]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={StyleSheet.absoluteFill} />
+      </Animated.View>
+      <View style={styles.reraTick}>
+        <Ionicons name="checkmark" size={11} color="#0B7A55" />
+      </View>
+      <Text style={styles.reraText}>RERA</Text>
+    </View>
+  );
+}
+
+// Photo inset in a rounded card (RERA seal top-left, heart top-right), name, price + place, small
+// stats, then "Compare Now" and an open-details arrow.
 const FeaturedCard = React.memo(function FeaturedCard({ p, width, onOpen }) {
   const name = cardName(p);
   const place = placeLine(p);
+  const { has, toggle } = useCompare();
+  const inCompare = has(p.id);
   return (
     <PressableScale
       to={0.98}
@@ -104,6 +141,7 @@ const FeaturedCard = React.memo(function FeaturedCard({ p, width, onOpen }) {
     >
       <View style={[styles.fImageWrap, { height: Math.round((width - 16) * 0.8) }]}>
         <Cover uri={p.image} style={StyleSheet.absoluteFill} iconSize={32} />
+        {p.reraNumber ? <ReraTag /> : null}
         <HeartButton id={p.id} size={16} style={styles.fHeart} />
       </View>
       <View style={styles.fBody}>
@@ -111,7 +149,6 @@ const FeaturedCard = React.memo(function FeaturedCard({ p, width, onOpen }) {
           <Text style={styles.fTitle} numberOfLines={1}>
             {name}
           </Text>
-          {p.reraNumber ? <Ionicons name="checkmark-circle" size={16} color={colors.success} accessibilityElementsHidden importantForAccessibility="no" /> : null}
         </View>
         <Text style={styles.fDesc} numberOfLines={2}>
           {p.price ? <Text style={styles.fPrice}>{p.price}</Text> : null}
@@ -121,10 +158,24 @@ const FeaturedCard = React.memo(function FeaturedCard({ p, width, onOpen }) {
         <View style={styles.fFoot}>
           {p.bhk ? <Stat icon="bed-outline" text={`${p.bhk} BHK`} /> : null}
           {p.area ? <Stat icon="resize-outline" text={p.area} /> : null}
-          <View style={{ flex: 1 }} />
-          <View style={styles.fPill}>
-            <Text style={styles.fPillText}>View</Text>
-            <Ionicons name="arrow-forward" size={13} color={brand.ink} />
+        </View>
+        <View style={styles.fActions}>
+          <PressableScale
+            to={0.94}
+            onPress={(e) => {
+              e?.stopPropagation?.();
+              toggle(p.id);
+            }}
+            style={[styles.fCompare, inCompare && styles.fCompareOn]}
+            accessibilityRole="button"
+            accessibilityLabel={inCompare ? `Remove ${name} from compare` : `Compare ${name}`}
+          >
+            {inCompare ? null : <LinearGradient colors={gradients.cta} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={StyleSheet.absoluteFill} />}
+            <Ionicons name={inCompare ? "checkmark-circle" : "swap-horizontal"} size={15} color={inCompare ? brand.violet : colors.white} />
+            <Text style={[styles.fCompareText, inCompare && { color: brand.violet }]}>{inCompare ? "Added to Compare" : "Compare Now"}</Text>
+          </PressableScale>
+          <View style={styles.fPill} accessibilityElementsHidden importantForAccessibility="no">
+            <Ionicons name="arrow-forward" size={16} color={brand.ink} />
           </View>
         </View>
       </View>
@@ -262,8 +313,7 @@ export default function HomeScreen({ navigation }) {
   const openSearch = (context) =>
     navigation.navigate("SearchFilters", { city: city || "", locality: selectedLocality || "", ...(context ? { context } : {}) });
 
-  // `resumed` makes the results screen greet the user with "Picking up where you left off".
-  const rerunSearch = (item, resumed = false) => {
+  const rerunSearch = (item) => {
     if (item.city && item.city !== city) setCity(item.city);
     navigation.navigate("Search", {
       city: item.city || city || "",
@@ -271,13 +321,12 @@ export default function HomeScreen({ navigation }) {
       search: item.query || "",
       propertyType: item.propertyType || "",
       bhk: item.bhk || "",
-      ...(resumed ? { _resumed: true } : {}),
     });
   };
 
   const onQuickAction = (key) => {
     if (key === "resume") {
-      if (searchHistory[0]) rerunSearch(searchHistory[0], true);
+      if (searchHistory[0]) rerunSearch(searchHistory[0]);
       else openSearch();
     } else if (key === "wishlist") {
       if (token) navigation.navigate("Saved");
@@ -381,24 +430,35 @@ export default function HomeScreen({ navigation }) {
       </Reveal>
 
       <View style={styles.quickRow}>
-        {QUICK_ACTIONS.map((a, i) => (
-          <Reveal key={a.key} delay={200 + stagger(i, 55)} distance={12}>
-            <PressableScale
-              to={0.95}
-              onPress={() => onQuickAction(a.key)}
-              style={[styles.quickTile, { width: (W - 50) / 2 }]}
-              accessibilityRole="button"
-              accessibilityLabel={a.label}
-            >
-              <View style={[styles.quickIcon, { backgroundColor: a.bg }]}>
-                <Ionicons name={a.icon} size={18} color={a.fg} />
-              </View>
-              <Text style={styles.quickLabel} numberOfLines={1} maxFontSizeMultiplier={1.2}>
-                {a.label}
-              </Text>
-            </PressableScale>
-          </Reveal>
-        ))}
+        {QUICK_ACTIONS.map((a, i) => {
+          // Resume Search says what it will open, so the results page needs no extra message.
+          const sub = a.key === "resume" ? searchHistory[0]?.label || "No recent search" : "";
+          return (
+            <Reveal key={a.key} delay={200 + stagger(i, 55)} distance={12}>
+              <PressableScale
+                to={0.95}
+                onPress={() => onQuickAction(a.key)}
+                style={[styles.quickTile, { width: (W - 50) / 2 }]}
+                accessibilityRole="button"
+                accessibilityLabel={sub ? `${a.label}: ${sub}` : a.label}
+              >
+                <View style={[styles.quickIcon, { backgroundColor: a.bg }]}>
+                  <Ionicons name={a.icon} size={18} color={a.fg} />
+                </View>
+                <View style={styles.quickText}>
+                  <Text style={styles.quickLabel} numberOfLines={1} maxFontSizeMultiplier={1.2}>
+                    {a.label}
+                  </Text>
+                  {sub ? (
+                    <Text style={styles.quickSub} numberOfLines={1} maxFontSizeMultiplier={1.2}>
+                      {sub}
+                    </Text>
+                  ) : null}
+                </View>
+              </PressableScale>
+            </Reveal>
+          );
+        })}
       </View>
 
       {loading && !data ? (
@@ -661,7 +721,9 @@ const styles = StyleSheet.create({
     ...cardShadow,
   },
   quickIcon: { width: 38, height: 38, borderRadius: 12, alignItems: "center", justifyContent: "center" },
-  quickLabel: { flex: 1, fontSize: 13.5, fontWeight: "700", color: brand.ink },
+  quickText: { flex: 1, minWidth: 0 },
+  quickLabel: { fontSize: 13.5, fontWeight: "700", color: brand.ink },
+  quickSub: { fontSize: 11.5, fontWeight: "600", color: brand.inkSoft, marginTop: 1 },
   section: { marginTop: 26 },
   sectionHead: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: 20, marginBottom: 12 },
   sectionTitle: { fontFamily: fonts.serif, fontSize: 21, fontWeight: "700", color: brand.ink, letterSpacing: -0.3 },
@@ -677,11 +739,23 @@ const styles = StyleSheet.create({
   fTitle: { flexShrink: 1, fontSize: 15.5, fontWeight: "800", color: brand.ink },
   fDesc: { fontSize: 12.5, lineHeight: 18, color: brand.inkSoft, marginTop: 4, minHeight: 36 },
   fPrice: { fontSize: 13, fontWeight: "800", color: brand.ink },
-  fFoot: { flexDirection: "row", alignItems: "center", gap: 10, marginTop: 12 },
+  fFoot: { flexDirection: "row", alignItems: "center", gap: 10, marginTop: 10, minHeight: 18 },
+  fActions: { flexDirection: "row", alignItems: "center", gap: 8, marginTop: 12 },
+  fCompare: { flex: 1, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6, height: 38, borderRadius: radius.pill, overflow: "hidden" },
+  fCompareOn: { backgroundColor: brand.lavender, borderWidth: 1.2, borderColor: brand.violet },
+  fCompareText: { fontSize: 12.5, fontWeight: "800", color: colors.white },
+  rera: {
+    position: "absolute", top: 8, left: 8, flexDirection: "row", alignItems: "center", gap: 5,
+    paddingLeft: 4, paddingRight: 9, height: 26, borderRadius: radius.pill, overflow: "hidden",
+    borderWidth: 1, borderColor: "rgba(255,255,255,0.55)",
+    shadowColor: "#0E9F6E", shadowOpacity: 0.55, shadowRadius: 8, shadowOffset: { width: 0, height: 3 }, elevation: 5,
+  },
+  reraSheen: { position: "absolute", top: -10, bottom: -10, width: 18 },
+  reraTick: { width: 18, height: 18, borderRadius: 9, backgroundColor: colors.white, alignItems: "center", justifyContent: "center" },
+  reraText: { fontSize: 11, fontWeight: "900", color: colors.white, letterSpacing: 1 },
   fStat: { flexDirection: "row", alignItems: "center", gap: 3, flexShrink: 1 },
   fStatText: { fontSize: 11.5, fontWeight: "600", color: brand.inkSoft },
-  fPill: { flexDirection: "row", alignItems: "center", gap: 4, height: 32, paddingHorizontal: 12, borderRadius: radius.pill, backgroundColor: brand.lavender },
-  fPillText: { fontSize: 12.5, fontWeight: "800", color: brand.ink },
+  fPill: { width: 38, height: 38, alignItems: "center", justifyContent: "center", borderRadius: 19, backgroundColor: brand.lavender },
   loan: { marginHorizontal: 20, marginTop: 24, borderRadius: radius.xl, overflow: "hidden", flexDirection: "row", padding: 16, minHeight: 150, borderWidth: 1, borderColor: "#E6DAFF" },
   loanImage: { position: "absolute", right: 0, top: 0, bottom: 0, width: "58%", opacity: 0.9 },
   loanText: { flex: 1.25, justifyContent: "center", paddingRight: 8 },

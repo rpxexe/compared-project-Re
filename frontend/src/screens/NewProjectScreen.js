@@ -5,7 +5,8 @@ import { useBottomSpace } from '../hooks/useBottomSpace';
 import { StatusBar } from 'expo-status-bar';
 import ScreenHeader from '../components/ScreenHeader';
 import FilterChip from '../components/FilterChip';
-import PropertyCard from '../components/PropertyCard';
+import { badgeFor } from '../components/PropertyCard';
+import ListingCard from '../components/search/ListingCard';
 import Reveal from '../components/Reveal';
 import Button from '../components/Button';
 import { EmptyState, ErrorState, LoadingState } from '../components/StateViews';
@@ -60,8 +61,8 @@ export default function NewProjectScreen() {
           : (
             <FlatList
               key={active}
-              data={items} keyExtractor={(i) => i.id} contentContainerStyle={{ padding: 20, paddingTop: 4, paddingBottom: bottom + 24, gap: 14 }}
-              renderItem={({ item, index }) => <PropertyCard property={item} index={index} />}
+              data={items} keyExtractor={(i) => i.id} contentContainerStyle={{ padding: 16, paddingTop: 4, paddingBottom: bottom + 24, gap: 12 }}
+              renderItem={({ item, index }) => <ListingCard property={item} index={index} tag={badgeFor(item) || 'New Project'} />}
               onEndReachedThreshold={0.4} onEndReached={() => { if (!st.more && !st.loading && pg.page < pg.pages) load(pg.page + 1, true); }}
               ListEmptyComponent={<EmptyState icon="business-outline" title="No projects found" message="There are no projects in this category yet." />}
               ListFooterComponent={st.more ? <ActivityIndicator color={colors.gold} style={{ margin: 16 }} /> : st.error ? <Button title="Retry" variant="ghost" small onPress={() => load(pg.page + 1, true)} /> : null}

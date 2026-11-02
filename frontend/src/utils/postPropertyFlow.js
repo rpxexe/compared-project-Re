@@ -257,6 +257,52 @@ export function buildPayload(f) {
   return payload;
 }
 
+const MONTHS = ["jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec"];
+const pad2 = (n) => String(n).padStart(2, "0");
+const pick = (list, v) => list.find((x) => x.toLowerCase() === String(v || "").trim().toLowerCase()) || "";
+
+// A stored listing (GET /users/me/properties/:id) back into the form's state, for editing.
+// Inverse of buildPayload: "5th Floor" -> "5", "semi-furnished" -> "Semi-furnished",
+// "Available from 12 Jan 2026" -> a custom date, photos -> cover + the rest.
+export function formFromListing(p) {
+  const floorMatch = String(p.floor || "").match(/^(ground|\d+)/i);
+  const possession = String(p.possessionStatus || "");
+  const fromDate = possession.match(/(\d{1,2})\s+([a-z]{3})[a-z]*\s+(\d{4})/i);
+  const month = fromDate ? MONTHS.indexOf(fromDate[2].toLowerCase()) : -1;
+  const listingType = p.listingType === "rent" ? "rent" : "sale";
+  const availability = pick(listingType === "rent" ? RENT_AVAILABILITY : SALE_POSSESSION, possession)
+    || (fromDate && month >= 0 ? CUSTOM_DATE : "");
+  const [cover, ...rest] = (p.images || []).filter(Boolean);
+  return {
+    ...EMPTY_FORM,
+    listingType,
+    category: p.category === "commercial" ? "commercial" : "residential",
+    propertyType: p.propertyType || "",
+    city: p.city || "",
+    locality: p.locality || "",
+    bhk: p.bhk ? String(p.bhk) : "",
+    area: p.area ? String(p.area) : "",
+    areaUnit: "sqft",
+    bathrooms: p.bathrooms !== "" && p.bathrooms != null ? String(p.bathrooms) : "",
+    floor: floorMatch ? (/ground/i.test(floorMatch[1]) ? GROUND : floorMatch[1]) : "",
+    totalFloors: p.totalFloors !== "" && p.totalFloors != null ? String(p.totalFloors) : "",
+    facing: pick(FACINGS, p.facing),
+    parking: pick(PARKING, p.parking),
+    furnishing: pick(FURNISHING, p.furnishing),
+    price: p.price ? String(p.price) : "",
+    availability,
+    availableDate: availability === CUSTOM_DATE ? `${pad2(fromDate[1])}/${pad2(month + 1)}/${fromDate[3]}` : "",
+    age: pick(PROPERTY_AGES, p.ageOfProperty),
+    amenities: p.amenities || [],
+    facilities: p.facilities || [],
+    grade: p.buildingGrade || "",
+    cover: cover ? { uri: cover, url: cover } : null,
+    photos: rest.map((url, i) => ({ id: `existing-${i}`, uri: url, url, room: "Other" })),
+    description: p.description || "",
+    agreed: true, // accepted when it was first posted
+  };
+}
+
 // Drops values that don't apply after the user changes the category or property type
 // (e.g. Residential -> Commercial, Villa -> Plot).
 export function sanitizeForType(f) {

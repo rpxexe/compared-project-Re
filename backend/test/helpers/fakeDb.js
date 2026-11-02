@@ -109,6 +109,7 @@ function makeModel(name, defaults = () => ({})) {
       } else if (r) applyUpdate(r, u, false);
       return r ? structuredCloneKeepIds(r) : null;
     }),
+    async updateMany(f, u) { const rs = rows.filter((x) => matches(x, f)); rs.forEach((r) => applyUpdate(r, u)); return { matchedCount: rs.length }; },
     async bulkWrite(ops) { for (const o of ops) await Model.updateOne(o.updateOne.filter, o.updateOne.update); return {}; },
     collection: { createIndex: async () => 'ok', bulkWrite: (ops) => Model.bulkWrite(ops) },
     async deleteOne(f) { const i = rows.findIndex((r) => matches(r, f)); if (i >= 0) rows.splice(i, 1); return { deletedCount: i >= 0 ? 1 : 0 }; },
@@ -129,6 +130,7 @@ function installFakeModels() {
     Review: makeModel('Review', () => ({ createdAt: new Date() })),
     PropertyRating: makeModel('PropertyRating'),
     SignUpUser: makeModel('SignUpUser', () => ({ role: 'user', isActive: true })),
+    PropertyView: makeModel('PropertyView', () => ({ views: 0, createdAt: new Date() })),
   };
   models.Review.unique = ['property', 'user'];
   const p = require.resolve('../../src/models');

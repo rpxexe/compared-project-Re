@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { View } from 'react-native';
-import { NavigationContainer, DefaultTheme, createNavigationContainerRef } from '@react-navigation/native';
+import { NavigationContainer, DefaultTheme } from '@react-navigation/native';
+import { navigationRef } from './src/navigation/navigationRef';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
 import { AuthProvider, useAuth } from './src/context/AuthContext';
@@ -16,7 +17,6 @@ import { useFonts } from 'expo-font';
 import { FONT_FILES } from './src/components/AppText';
 import { colors } from './src/theme';
 
-const navigationRef = createNavigationContainerRef();
 
 const theme = { ...DefaultTheme, colors: { ...DefaultTheme.colors, background: colors.ivory, card: colors.white, text: colors.ink, primary: colors.primary, border: colors.line } };
 

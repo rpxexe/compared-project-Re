@@ -129,7 +129,6 @@ function normalizeProperty(doc) {
     brochure: urlOf(p.brochure),
     image: cover,
     galleryImages: gallery,
-    sourceUrl: urlOf(p.sourceUrl),
     dataSource: firstString(p.dataSource),
     approvalStatus: firstString(p.approvalStatus),
     featured: p.featured === true,
