@@ -5,6 +5,8 @@ import Screen from '../components/Screen';
 import ScreenHeader from '../components/ScreenHeader';
 import PressableScale from '../components/PressableScale';
 import FilterChip from '../components/FilterChip';
+import CountUp from '../components/CountUp';
+import Reveal, { stagger } from '../components/Reveal';
 import Button from '../components/Button';
 import SearchBar from '../components/SearchBar';
 import { Cover } from '../components/PropertyCard';
@@ -35,11 +37,13 @@ export function AdminDashboard({ navigation }) {
         {loading && !data ? <LoadingState rows={3} /> : error ? <ErrorState title="Unable to load dashboard" error={error} onRetry={reload} /> : (
           <>
             <View style={styles.grid}>
-              {tiles.map(([l, v, ic, to, params]) => (
-                <PressableScale key={l} onPress={() => navigation.navigate(to, params)} style={styles.tile}>
-                  <Ionicons name={ic} size={22} color={colors.goldDeep} />
-                  <Text style={styles.tileV}>{v}</Text><Text style={styles.tileL}>{l}</Text>
-                </PressableScale>
+              {tiles.map(([l, v, ic, to, params], i) => (
+                <Reveal key={l} delay={stagger(i, 60)} style={styles.tileWrap}>
+                  <PressableScale onPress={() => navigation.navigate(to, params)} style={styles.tile}>
+                    <Ionicons name={ic} size={22} color={colors.goldDeep} />
+                    <CountUp value={v} style={styles.tileV} /><Text style={styles.tileL}>{l}</Text>
+                  </PressableScale>
+                </Reveal>
               ))}
             </View>
             <Text style={styles.note}>{data.reviews} rating{data.reviews === 1 ? '' : 's'} submitted by users.</Text>
@@ -143,7 +147,8 @@ export function AdminUsers() {
 
 const styles = StyleSheet.create({
   grid: { flexDirection: 'row', flexWrap: 'wrap', gap: 12 },
-  tile: { width: '47.5%', backgroundColor: colors.white, borderRadius: radius.lg, padding: 16, borderWidth: 1, borderColor: colors.line, ...shadow.card },
+  tileWrap: { width: '47.5%' },
+  tile: { backgroundColor: colors.white, borderRadius: radius.lg, padding: 16, borderWidth: 1, borderColor: colors.line, ...shadow.card },
   tileV: { fontFamily: fonts.serif, fontSize: 32, color: colors.ink, marginTop: 10 },
   tileL: { fontSize: 12.5, color: colors.muted, fontWeight: '600' },
   note: { textAlign: 'center', color: colors.muted, marginTop: 18, fontSize: 12.5 },

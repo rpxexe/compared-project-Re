@@ -1,15 +1,17 @@
-import React, { memo, useState } from "react";
+import React, { memo, useEffect, useRef, useState } from "react";
 import { Animated, Image, StyleSheet, View } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
-import { BlurView } from "expo-blur";
 import { Ionicons } from "@expo/vector-icons";
 import { useNavigation } from "@react-navigation/native";
+import Svg, { Path } from "react-native-svg";
 import PressableScale from "./PressableScale";
 import HeartButton from "./HeartButton";
+import { useAuth } from "../context/AuthContext";
 import { useCompare } from "../context/CompareContext";
 import { useEntrance } from "../hooks/useEntrance";
-import { colors, fonts, radius, shadow } from "../theme";
-import { propertyFacts, ratingLabel } from "../utils/format";
+import { isReducedMotion } from "../hooks/useReducedMotion";
+import { brand, colors, fonts, glowSubtle, gradients, radius, shadow } from "../theme";
+import { listingName, propertyFacts, ratingLabel } from "../utils/format";
 import Text from "./AppText";
 
 export function badgeFor(p) {
@@ -176,86 +178,157 @@ function PropertyCard({ property: p, variant = "row", index = 0, style }) {
     );
   }
 
+  return <RowCard p={p} enter={enter} style={style} open={open} where={where} badge={badge} facts={facts} />;
+}
+
+// White card with the details on the left and the photo on the right behind a curved edge;
+// "Enquire Now" and "Add to Compare" pills along the bottom.
+function RowCard({ p, enter, style, open, where, badge, facts }) {
+  const nav = useNavigation();
+  const { token, openLoginPrompt } = useAuth();
+  const { has, toggle } = useCompare();
+  const inCompare = has(p.id);
+  const name = listingName(p);
+  const price = p.priceMin ? `${p.priceMin} – ${p.price}` : p.price;
+  const rating = ratingLabel(p.rating);
+
+  // Guests get the sign-in prompt right here; signed-in users land on the details screen with
+  // the enquiry form already open.
+  const enquire = () => {
+    if (!token) {
+      openLoginPrompt({
+        reason: "enquiry",
+        title: "Sign In to Enquire",
+        message: `Please sign in to connect directly with the builder for ${name || "this property"}.`,
+      });
+      return;
+    }
+    nav.navigate("PropertyDetails", { id: p.id, preview: p, enquire: true });
+  };
+
   return (
     <Animated.View style={[enter, style]}>
       <PressableScale
         onPress={open}
         to={0.98}
-        style={styles.row}
+        style={styles.card}
         accessibilityRole="button"
-        accessibilityLabel={p.title}
+        accessibilityLabel={[name, rating && `rated ${rating}`, price, where].filter(Boolean).join(", ")}
       >
-        {/* Frosted Liquid Glass layers */}
-        <View
-          style={[
-            StyleSheet.absoluteFill,
-            { borderRadius: radius.lg, overflow: "hidden" },
-          ]}
-          pointerEvents="none"
-        >
-          <BlurView intensity={45} tint="light" style={StyleSheet.absoluteFill} />
+        <View style={styles.photo} pointerEvents="box-none">
+          <Cover uri={p.image} style={StyleSheet.absoluteFill} iconSize={30} />
           <LinearGradient
-            colors={["rgba(255, 255, 255, 0.78)", "rgba(244, 235, 255, 0.58)"]}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 0.8, y: 1 }}
+            colors={["rgba(15, 8, 36, 0)", "rgba(15, 8, 36, 0.35)"]}
+            locations={[0.55, 1]}
             style={StyleSheet.absoluteFill}
+            pointerEvents="none"
           />
-          <LinearGradient
-            colors={[
-              "rgba(255, 255, 255, 0.95)",
-              "rgba(224, 195, 255, 0.35)",
-              "rgba(255, 255, 255, 0.05)",
-            ]}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 0.5 }}
-            style={StyleSheet.absoluteFill}
-          />
+          {badge ? (
+            <View style={styles.photoBadge}>
+              <Text style={styles.photoBadgeText}>{badge}</Text>
+            </View>
+          ) : null}
+          <View style={styles.heartWrap}>
+            <HeartButton id={p.id} size={19} floating={false} light />
+          </View>
         </View>
 
-        <View>
-          <Cover uri={p.image} style={styles.rowImg} />
-          {badge ? (
-            <View style={[styles.badge, styles.rowBadge, styles.glassBadge]}>
-              <Text style={styles.badgeText}>{badge}</Text>
-            </View>
-          ) : null}
-        </View>
-        <View style={styles.rowBody}>
-          <View style={styles.rowTop}>
-            <Text style={styles.rowTitle} numberOfLines={2}>
-              {p.title}
+        {/* The white side flows into the photo along a soft S-curve that widens at the bottom,
+            leaving room for the action pills. Stretched to the card's height. */}
+        <Svg style={styles.wave} viewBox="0 0 100 100" preserveAspectRatio="none" pointerEvents="none">
+          <Path d="M0 0 H34 C52 6 66 20 62 38 C58 54 44 60 48 76 C52 90 70 98 96 100 H0 Z" fill={colors.white} />
+        </Svg>
+
+        <View style={styles.body}>
+          <View style={styles.textCol}>
+            <Text style={styles.title} numberOfLines={1}>
+              {name}
             </Text>
-            <HeartButton id={p.id} size={19} floating={false} />
+            {rating || price ? (
+              <View style={styles.metaRow}>
+                {rating ? (
+                  <>
+                    <View style={styles.star}>
+                      <Ionicons name="star" size={9} color={colors.white} />
+                    </View>
+                    <Text style={styles.metaText}>{rating}</Text>
+                  </>
+                ) : null}
+                {rating && price ? <Text style={styles.metaText}>•</Text> : null}
+                {price ? (
+                  <Text style={[styles.metaText, styles.price]} numberOfLines={1}>
+                    {price}
+                  </Text>
+                ) : null}
+              </View>
+            ) : null}
+            {facts.length ? (
+              <Text style={styles.line} numberOfLines={1}>
+                {facts.join(", ")}
+              </Text>
+            ) : null}
+            {where ? (
+              <Text style={styles.line} numberOfLines={1}>
+                {where}
+              </Text>
+            ) : null}
           </View>
-          {where ? (
-            <Text style={styles.rowLoc} numberOfLines={1}>
-              {where}
-            </Text>
-          ) : null}
-          {facts.length ? (
-            <Text style={styles.rowFacts} numberOfLines={1}>
-              {facts.join("  ·  ")}
-            </Text>
-          ) : null}
-          {p.developerName ? (
-            <Text style={styles.rowDev} numberOfLines={1}>
-              by {p.developerName}
-            </Text>
-          ) : null}
-          <View style={styles.rowFoot}>
-            <View style={{ flex: 1 }}>
-              {p.price ? (
-                <Text style={styles.rowPrice}>
-                  {p.priceMin ? `${p.priceMin} – ${p.price}` : p.price}
-                </Text>
-              ) : null}
-              <RatingChip rating={p.rating} />
-            </View>
-            <CompareToggle id={p.id} />
+
+          <View style={styles.actions}>
+            <CardAction label="Enquire Now" icon="chatbubble-ellipses" tint={gradients.info} onPress={enquire} />
+            <CardAction
+              label={inCompare ? "Added" : "Add to Compare"}
+              icon={inCompare ? "checkmark" : "swap-horizontal"}
+              tint={gradients.cta}
+              onPress={() => toggle(p.id)}
+              pop={inCompare}
+              accessibilityLabel={inCompare ? "Remove from compare" : "Add to compare"}
+            />
           </View>
         </View>
       </PressableScale>
     </Animated.View>
+  );
+}
+
+// Gradient pill with an uppercase label and a white icon disc. `pop` bounces the disc when it
+// changes (e.g. added to / removed from compare).
+function CardAction({ label, icon, tint, onPress, pop, accessibilityLabel }) {
+  const s = useRef(new Animated.Value(1)).current;
+  const first = useRef(true);
+  useEffect(() => {
+    if (first.current) {
+      first.current = false;
+      return;
+    }
+    if (isReducedMotion()) return;
+    Animated.sequence([
+      Animated.timing(s, { toValue: 1.35, duration: 120, useNativeDriver: true }),
+      Animated.spring(s, { toValue: 1, speed: 18, bounciness: 16, useNativeDriver: true }),
+    ]).start();
+  }, [pop, s]);
+
+  return (
+    <PressableScale
+      to={0.93}
+      onPress={(e) => {
+        e?.stopPropagation?.();
+        onPress();
+      }}
+      hitSlop={{ top: 6, bottom: 6 }}
+      style={styles.actionWrap}
+      accessibilityRole="button"
+      accessibilityLabel={accessibilityLabel || label}
+    >
+      <LinearGradient colors={tint} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.action}>
+        <Text style={styles.actionText} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.8}>
+          {label.toUpperCase()}
+        </Text>
+        <Animated.View style={[styles.actionIcon, { transform: [{ scale: s }] }]}>
+          <Ionicons name={icon} size={11} color={tint[tint.length - 1]} />
+        </Animated.View>
+      </LinearGradient>
+    </PressableScale>
   );
 }
 
@@ -321,48 +394,64 @@ const styles = StyleSheet.create({
     fontWeight: "800",
     letterSpacing: 0.5,
   },
-  row: {
-    flexDirection: "row",
-    backgroundColor: "rgba(255, 255, 255, 0.65)",
-    borderRadius: radius.lg,
-    padding: 10,
-    gap: 12,
-    borderWidth: 1.4,
-    borderColor: "rgba(255, 255, 255, 0.95)",
-    position: "relative",
-    ...shadow.glassFloat,
-  },
-  rowImg: {
-    width: 112,
-    height: 124,
-    borderRadius: radius.md - 2,
+  card: {
+    minHeight: 172,
+    borderRadius: 34,
+    backgroundColor: colors.white,
+    // No border: on Android the photo bleeds into a border row as a dark hairline under the curve.
     overflow: "hidden",
+    ...shadow.card,
   },
-  rowBadge: { position: "absolute", left: 6, top: 6, zIndex: 2 },
-  rowBody: { flex: 1, paddingVertical: 2, zIndex: 1 },
-  rowTop: { flexDirection: "row", alignItems: "flex-start", gap: 6 },
-  rowTitle: {
-    flex: 1,
-    fontSize: 15.5,
-    fontWeight: "700",
-    color: colors.ink,
-    lineHeight: 20,
+  photo: { position: "absolute", top: 0, right: 0, bottom: 0, width: "42%", backgroundColor: brand.lavender },
+  photoBadge: {
+    position: "absolute",
+    top: 12,
+    right: 12,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: radius.pill,
+    backgroundColor: "rgba(255, 255, 255, 0.9)",
   },
-  rowLoc: { fontSize: 12.5, color: colors.muted, marginTop: 3 },
-  rowFacts: {
-    fontSize: 12,
-    color: colors.text,
-    marginTop: 4,
-    fontWeight: "600",
+  photoBadgeText: { fontSize: 9.5, fontWeight: "800", color: brand.violet, letterSpacing: 0.3 },
+  heartWrap: {
+    position: "absolute",
+    right: 12,
+    bottom: 12,
+    width: 38,
+    height: 38,
+    borderRadius: 12,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "rgba(255, 255, 255, 0.24)",
+    borderWidth: 1,
+    borderColor: "rgba(255, 255, 255, 0.4)",
   },
-  rowDev: { fontSize: 11.5, color: colors.muted, marginTop: 2 },
-  rowFoot: {
+  // Spans the photo's left edge (photo starts at 58%; the curve reaches ~71% at the bottom).
+  // Overhangs top and bottom by 2px (clipped by the card) so no hairline of photo shows at the edges.
+  wave: { position: "absolute", top: -2, bottom: -2, left: "52%", width: "20%" },
+  body: { flex: 1, paddingLeft: 22, paddingTop: 18, paddingBottom: 16, justifyContent: "space-between" },
+  textCol: { width: "56%" },
+  title: { fontSize: 17, lineHeight: 22, fontWeight: "800", color: brand.ink },
+  metaRow: { flexDirection: "row", alignItems: "center", gap: 5, marginTop: 5 },
+  star: { width: 16, height: 16, borderRadius: 8, backgroundColor: brand.violet, alignItems: "center", justifyContent: "center" },
+  metaText: { fontSize: 13, fontWeight: "800", color: brand.ink },
+  price: { flexShrink: 1, color: brand.violet },
+  line: { fontSize: 12.5, lineHeight: 17, color: brand.inkSoft, marginTop: 3 },
+  actions: { flexDirection: "row", gap: 7, marginTop: 14, width: "72%" },
+  actionWrap: { flexShrink: 1, ...glowSubtle },
+  // Pill with a tighter top-right corner, like a tag.
+  action: {
     flexDirection: "row",
-    alignItems: "flex-end",
-    marginTop: "auto",
-    paddingTop: 6,
+    alignItems: "center",
+    gap: 6,
+    height: 34,
+    paddingLeft: 11,
+    paddingRight: 4,
+    borderRadius: 14,
+    borderTopRightRadius: 5,
   },
-  rowPrice: { fontSize: 16, fontWeight: "800", color: colors.goldDeep },
+  actionText: { flexShrink: 1, fontSize: 10.5, fontWeight: "800", color: colors.white, letterSpacing: 0.2 },
+  actionIcon: { width: 24, height: 24, borderRadius: 12, backgroundColor: colors.white, alignItems: "center", justifyContent: "center" },
   rate: {
     flexDirection: "row",
     alignItems: "center",

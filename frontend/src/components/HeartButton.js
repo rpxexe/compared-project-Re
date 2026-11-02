@@ -6,7 +6,8 @@ import PressableScale from './PressableScale';
 import { colors, shadow } from '../theme';
 import { useSaved } from '../context/SavedContext';
 
-export default function HeartButton({ id, size = 20, floating = true, style }) {
+// `light`: white outline heart for sitting on a photo (with `floating={false}` and your own backdrop).
+export default function HeartButton({ id, size = 20, floating = true, light = false, style }) {
   const { isSaved, toggle } = useSaved();
   const saved = isSaved(id);
   const s = useRef(new Animated.Value(1)).current;
@@ -66,7 +67,7 @@ export default function HeartButton({ id, size = 20, floating = true, style }) {
         <Ionicons
           name={saved ? 'heart' : 'heart-outline'}
           size={size}
-          color={saved ? colors.rose : floating ? colors.ink : colors.muted}
+          color={saved ? colors.rose : light ? colors.white : floating ? colors.ink : colors.muted}
         />
       </Animated.View>
     </PressableScale>

@@ -7,6 +7,7 @@ import ScreenHeader from '../components/ScreenHeader';
 import Input from '../components/Input';
 import Button from '../components/Button';
 import FilterChip from '../components/FilterChip';
+import Reveal from '../components/Reveal';
 import { PURPOSES } from './RoleScreen';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
@@ -59,29 +60,35 @@ export default function SettingsScreen() {
     <Screen keyboard>
       <ScreenHeader title="Settings" back />
       <View style={{ paddingHorizontal: 20 }}>
-        <Input label="MOBILE NUMBER" value={formatPhone(user?.phone)} editable={false} hint="Your login number cannot be changed." />
-        <Input label="NAME" value={name} onChangeText={setName} placeholder="Your name" maxLength={80} autoCapitalize="words" style={{ marginTop: 16 }} />
-        <Input label="CITY" value={city} onChangeText={setCity} placeholder="Your city" maxLength={80} autoCapitalize="words" style={{ marginTop: 16 }} />
-        <Pressable onPress={detectCity} disabled={locatingCity} style={styles.detectBtn}>
-          {locatingCity ? (
-            <ActivityIndicator size={12} color={colors.goldDeep} />
-          ) : (
-            <Ionicons name="navigate-outline" size={13} color={colors.goldDeep} />
-          )}
-          <Text style={styles.detectText}>
-            {locatingCity ? 'Detecting...' : 'Use current location'}
-          </Text>
-        </Pressable>
-        <Text style={styles.lbl}>I AM A</Text>
-        <View style={styles.wrap}>{PURPOSES.map((p) => <FilterChip key={p.key} label={p.label} active={purpose === p.key} onPress={() => setPurpose(p.key)} />)}</View>
-        <Button title="Save changes" onPress={save} loading={saving} disabled={!dirty} style={{ marginTop: 24 }} />
+        <Reveal delay={60}>
+          <Input label="MOBILE NUMBER" value={formatPhone(user?.phone)} editable={false} hint="Your login number cannot be changed." />
+          <Input label="NAME" value={name} onChangeText={setName} placeholder="Your name" maxLength={80} autoCapitalize="words" style={{ marginTop: 16 }} />
+          <Input label="CITY" value={city} onChangeText={setCity} placeholder="Your city" maxLength={80} autoCapitalize="words" style={{ marginTop: 16 }} />
+          <Pressable onPress={detectCity} disabled={locatingCity} style={styles.detectBtn}>
+            {locatingCity ? (
+              <ActivityIndicator size={12} color={colors.goldDeep} />
+            ) : (
+              <Ionicons name="navigate-outline" size={13} color={colors.goldDeep} />
+            )}
+            <Text style={styles.detectText}>
+              {locatingCity ? 'Detecting...' : 'Use current location'}
+            </Text>
+          </Pressable>
+        </Reveal>
+        <Reveal delay={130}>
+          <Text style={styles.lbl}>I AM A</Text>
+          <View style={styles.wrap}>{PURPOSES.map((p) => <FilterChip key={p.key} label={p.label} active={purpose === p.key} onPress={() => setPurpose(p.key)} />)}</View>
+        </Reveal>
+        <Reveal delay={190}>
+          <Button title="Save changes" onPress={save} loading={saving} disabled={!dirty} style={{ marginTop: 24 }} />
+        </Reveal>
 
-        <View style={styles.about}>
+        <Reveal delay={250} style={styles.about}>
           <Text style={styles.aboutT}>About</Text>
           <Text style={styles.aboutL}>Version {appJson.expo.version}</Text>
           <Text style={styles.aboutL} numberOfLines={1}>Server: {API_URL || 'not configured'}</Text>
           <Button title="Check server connection" variant="ghost" small style={{ marginTop: 12 }} onPress={async () => { try { await api.health(); toast.show('Server is reachable', 'success'); } catch (e) { toast.show(e.message, 'error'); } }} />
-        </View>
+        </Reveal>
       </View>
     </Screen>
   );

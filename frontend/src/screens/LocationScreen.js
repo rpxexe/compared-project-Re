@@ -5,6 +5,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useBottomSpace } from "../hooks/useBottomSpace";
 import { colors, fonts, radius, shadow, glass } from "../theme";
 import Screen from "../components/Screen";
+import Reveal, { stagger } from "../components/Reveal";
 import { useCity } from "../hooks/useCity";
 import { useLocationAccess } from "../context/LocationAccessContext";
 import { api } from "../services/api";
@@ -192,7 +193,7 @@ export default function LocationScreen({ navigation }) {
     <Screen scroll={false} padTop={false} padBottom={false} style={styles.root}>
       {/* Top Header */}
       <View style={[styles.header, { paddingTop: insets.top + 8 }]}>
-        <View style={styles.headerRow}>
+        <Reveal distance={8} style={styles.headerRow}>
           <TouchableOpacity
             activeOpacity={0.7}
             onPress={() => navigation.goBack()}
@@ -211,10 +212,10 @@ export default function LocationScreen({ navigation }) {
                 : "Search road, locality, or city across India"}
             </Text>
           </View>
-        </View>
+        </Reveal>
 
         {/* Search Bar */}
-        <View style={styles.searchBox}>
+        <Reveal delay={60} distance={10} style={styles.searchBox}>
           <Ionicons
             name="search-outline"
             size={19}
@@ -245,7 +246,7 @@ export default function LocationScreen({ navigation }) {
               <Ionicons name="close-circle" size={18} color={colors.muted} />
             </TouchableOpacity>
           ) : null}
-        </View>
+        </Reveal>
       </View>
 
       <ScrollView
@@ -271,8 +272,8 @@ export default function LocationScreen({ navigation }) {
             {/* Live Indian Places from Geocoder */}
             {searchResults.map((item, index) => {
               return (
+                <Reveal key={item.id || `search-${index}`} delay={stagger(index, 45)} distance={10}>
                 <TouchableOpacity
-                  key={item.id || `search-${index}`}
                   activeOpacity={0.7}
                   onPress={() => handleSelectSuggestion(item)}
                   style={styles.resultItem}
@@ -294,6 +295,7 @@ export default function LocationScreen({ navigation }) {
 
                   <Ionicons name="chevron-forward" size={16} color={colors.muted} style={{ opacity: 0.6 }} />
                 </TouchableOpacity>
+                </Reveal>
               );
             })}
 
@@ -361,6 +363,7 @@ export default function LocationScreen({ navigation }) {
           /* ===================== DEFAULT VIEW ===================== */
           <View>
             {/* 1. FETCH CURRENT LOCATION (GPS) */}
+            <Reveal delay={110}>
             <TouchableOpacity
               activeOpacity={0.75}
               onPress={handleFetchCurrentLocation}
@@ -397,8 +400,10 @@ export default function LocationScreen({ navigation }) {
                 color={colors.goldDeep}
               />
             </TouchableOpacity>
+            </Reveal>
 
             {/* 2. ALL LOCATIONS OPTION */}
+            <Reveal delay={160}>
             <TouchableOpacity
               activeOpacity={0.7}
               onPress={handleSelectAllLocations}
@@ -429,9 +434,10 @@ export default function LocationScreen({ navigation }) {
                 </View>
               )}
             </TouchableOpacity>
+            </Reveal>
 
             {/* 3. POPULAR METROS */}
-            <View style={styles.metrosSection}>
+            <Reveal delay={210} style={styles.metrosSection}>
               <Text style={styles.sectionHeading}>POPULAR CITIES</Text>
               <ScrollView
                 horizontal
@@ -468,10 +474,10 @@ export default function LocationScreen({ navigation }) {
                   );
                 })}
               </ScrollView>
-            </View>
+            </Reveal>
 
             {/* 4. REAL DATABASE LOCALITIES */}
-            <View style={styles.dbListSection}>
+            <Reveal delay={260} style={styles.dbListSection}>
               <View style={styles.sectionHeaderRow}>
                 <Text style={styles.sectionHeading}>
                   POPULAR REAL ESTATE LOCALITIES
@@ -500,8 +506,8 @@ export default function LocationScreen({ navigation }) {
                       (city === item.city && !item.locality);
 
                     return (
+                      <Reveal key={`db-${item.city}-${item.locality}-${index}`} delay={stagger(index % 20, 40)} distance={10}>
                       <TouchableOpacity
-                        key={`db-${item.city}-${item.locality}-${index}`}
                         activeOpacity={0.7}
                         onPress={() => handleSelectDbLocation(item)}
                         style={[
@@ -551,6 +557,7 @@ export default function LocationScreen({ navigation }) {
                           </View>
                         )}
                       </TouchableOpacity>
+                      </Reveal>
                     );
                   })}
 
@@ -588,7 +595,7 @@ export default function LocationScreen({ navigation }) {
                   )}
                 </>
               )}
-            </View>
+            </Reveal>
           </View>
         )}
       </ScrollView>

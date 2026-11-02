@@ -40,6 +40,8 @@ export const gradients = {
   progress: ['#B26BFF', '#7C2CF5'],
   canvas: ['#FFFFFF', '#F7F2FF', '#EFE6FF'],
   iconGold: ['#FFE7A6', '#F5B82E'],
+  // Secondary action (card "Enquire Now"); white text stays above 4.5:1.
+  info: ['#3F8CFF', '#1F5FE0'],
 };
 
 // Three glass strengths: decorative surfaces can be airy, anything holding inputs stays near-opaque.

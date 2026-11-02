@@ -5,6 +5,7 @@ import { useFocusEffect } from "@react-navigation/native";
 import { LinearGradient } from "expo-linear-gradient";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import PressableScale from "../components/PressableScale";
+import Reveal, { stagger } from "../components/Reveal";
 import { useBottomSpace } from "../hooks/useBottomSpace";
 import { api } from "../services/api";
 import { colors, fonts, radius, shadow } from "../theme";
@@ -132,7 +133,7 @@ export default function NotificationScreen({ navigation }) {
     <View style={[styles.safeArea, { paddingTop: insets.top }]}>
       <StatusBar barStyle="dark-content" backgroundColor={colors.ivory} />
 
-      <View style={styles.header}>
+      <Reveal distance={8} style={styles.header}>
         <PressableScale
           onPress={() => navigation.goBack()}
           to={0.88}
@@ -167,7 +168,7 @@ export default function NotificationScreen({ navigation }) {
             Read all
           </Text>
         </PressableScale>
-      </View>
+      </Reveal>
 
       <ScrollView
         showsVerticalScrollIndicator={false}
@@ -194,12 +195,12 @@ export default function NotificationScreen({ navigation }) {
           </View>
         ) : null}
         {!loading &&
-          notifications.map((item) => {
+          notifications.map((item, index) => {
             const icon = ICONS[item.type] || ICONS.info;
 
           return (
+            <Reveal key={item.id} delay={80 + stagger(index, 55)}>
             <PressableScale
-              key={item.id}
               to={0.97}
               onPress={() => openNotification(item.id)}
               style={[styles.card, item.unread && styles.cardUnread]}
@@ -243,11 +244,12 @@ export default function NotificationScreen({ navigation }) {
                 <Text style={styles.time}>{item.time}</Text>
               </View>
             </PressableScale>
+            </Reveal>
           );
         })}
 
         {!loading && !error && notifications.length === 0 ? (
-          <View style={styles.empty}>
+          <Reveal delay={80} style={styles.empty}>
             <Ionicons
               name="notifications-off-outline"
               size={42}
@@ -257,7 +259,7 @@ export default function NotificationScreen({ navigation }) {
             <Text style={styles.emptyText}>
               New property and account updates will appear here.
             </Text>
-          </View>
+          </Reveal>
         ) : null}
       </ScrollView>
     </View>

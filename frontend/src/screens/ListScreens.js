@@ -3,6 +3,7 @@ import { RefreshControl, StyleSheet, View } from 'react-native';
 import Screen from '../components/Screen';
 import ScreenHeader from '../components/ScreenHeader';
 import PropertyCard from '../components/PropertyCard';
+import Reveal, { stagger } from '../components/Reveal';
 import { EmptyState, ErrorState, LoadingState } from '../components/StateViews';
 import { useApi } from '../hooks/useApi';
 import { api } from '../services/api';
@@ -39,10 +40,10 @@ export function MyPropertiesScreen({ navigation }) {
           : data.items.length ? data.items.map((p, i) => {
             const s = STATUS[p.approvalStatus] || STATUS.approved;
             return (
-              <View key={p.id}>
+              <Reveal key={p.id} delay={stagger(i, 70, 6)}>
                 <View style={[styles.status, { backgroundColor: s[2] }]}><Text style={[styles.statusText, { color: s[1] }]}>{s[0]}</Text>{p.rejectionReason ? <Text style={styles.reason}> · {p.rejectionReason}</Text> : null}</View>
                 <PropertyCard property={p} index={i} />
-              </View>
+              </Reveal>
             );
           })
             : <EmptyState icon="home-outline" title="You haven't posted any property" message="Listings you post will appear here with their review status." action="Post a property" onAction={() => navigation.navigate('Tabs', { screen: 'Post' })} />}
@@ -58,12 +59,12 @@ export function MyEnquiriesScreen({ navigation }) {
       <ScreenHeader title="My enquiries" back />
       <View style={{ paddingHorizontal: 20, gap: 12 }}>
         {loading && !data ? <LoadingState rows={3} /> : error && !data ? <ErrorState title="Unable to load enquiries" error={error} onRetry={reload} />
-          : data.items.length ? data.items.map((e) => (
-            <View key={e.id} style={styles.enq}>
+          : data.items.length ? data.items.map((e, i) => (
+            <Reveal key={e.id} delay={stagger(i, 70, 6)} style={styles.enq}>
               <Text style={styles.enqTitle} numberOfLines={2}>{e.propertyTitle || 'Property'}</Text>
               {e.message ? <Text style={styles.enqMsg} numberOfLines={3}>{e.message}</Text> : null}
               <View style={styles.enqFoot}><Text style={styles.enqWhen}>{timeAgo(e.createdAt)}</Text><View style={styles.pill}><Text style={styles.pillText}>{e.status}</Text></View></View>
-            </View>
+            </Reveal>
           ))
             : <EmptyState icon="chatbubble-ellipses-outline" title="No enquiries yet" message="Tap “Enquire Now” on a property to contact the project team." action="Explore properties" onAction={() => navigation.navigate('Search')} />}
       </View>

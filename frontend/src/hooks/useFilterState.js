@@ -39,7 +39,8 @@ function reducer(s, a) {
 // link) win; with none, the last filters used in that context are restored.
 export function useFilterState(initialParams) {
   const hasParams = useMemo(
-    () => Object.values(initialParams || {}).some((v) => v !== "" && v != null && v !== false),
+    // `_`-prefixed params are screen flags (`_applied`, `_resumed`), not filters.
+    () => Object.entries(initialParams || {}).some(([k, v]) => !k.startsWith("_") && v !== "" && v != null && v !== false),
     [], // eslint-disable-line react-hooks/exhaustive-deps -- first params only, like the old screen
   );
   const [{ ready, state }, dispatch] = useReducer(reducer, null, () => ({
