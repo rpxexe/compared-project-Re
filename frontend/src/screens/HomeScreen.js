@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
-import { Animated, FlatList, Image, RefreshControl, StyleSheet, View, useWindowDimensions } from "react-native";
+import { FlatList, Image, RefreshControl, StyleSheet, View, useWindowDimensions } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import { useIsFocused } from "@react-navigation/native";
 import { Ionicons } from "@expo/vector-icons";
@@ -11,6 +11,7 @@ import MiniBarChart from "../components/MiniBarChart";
 import MiniLineChart from "../components/MiniLineChart";
 import LoanCalculatorSheet from "../components/LoanCalculatorSheet";
 import PressableScale from "../components/PressableScale";
+import Reveal, { stagger } from "../components/Reveal";
 import RollingPlaceholder from "../components/RollingPlaceholder";
 import HeroRotatingWord from "../components/HeroRotatingWord";
 import { Cover } from "../components/PropertyCard";
@@ -19,9 +20,8 @@ import { useAuth } from "../context/AuthContext";
 import { useLocationAccess } from "../context/LocationAccessContext";
 import { useApi } from "../hooks/useApi";
 import { useCity } from "../hooks/useCity";
-import { useEntrance } from "../hooks/useEntrance";
 import { api } from "../services/api";
-import { formatInr } from "../utils/format";
+import { formatInr, listingName as cardName } from "../utils/format";
 import {
   clearCompareHistory,
   clearSearchHistory,
@@ -87,16 +87,6 @@ function SectionTitle({ title, action, onAction }) {
       ) : null}
     </View>
   );
-}
-
-// Listing titles read "3 BHK Apartments in DGS Sheetal Sky Tower, Oshiwara, ..."; the card heads
-// with the project name when there is one (not when the "in ..." part is just the locality).
-function cardName(p) {
-  const m = String(p.title || "").match(/\bin\s+([^,]+)/i);
-  const name = m && m[1].trim();
-  return name && name.toLowerCase() !== String(p.locality || "").toLowerCase() && name.toLowerCase() !== String(p.city || "").toLowerCase()
-    ? name
-    : p.title;
 }
 
 // Photo inset in a rounded card, name with a RERA tick, price + place, then small stats and a
@@ -191,7 +181,6 @@ export default function HomeScreen({ navigation }) {
   const [tabsWidth, setTabsWidth] = useState(0);
   const focused = useIsFocused(); // pauses the rolling search hint while Home is hidden
 
-  const heroAnim = useEntrance(0, 14);
   const cardW = Math.min(Math.round((W - 40) / 1.55), 250);
 
   // Location skipped or blocked at onboarding (or GPS switched off): ask once per session.
@@ -273,7 +262,8 @@ export default function HomeScreen({ navigation }) {
   const openSearch = (context) =>
     navigation.navigate("SearchFilters", { city: city || "", locality: selectedLocality || "", ...(context ? { context } : {}) });
 
-  const rerunSearch = (item) => {
+  // `resumed` makes the results screen greet the user with "Picking up where you left off".
+  const rerunSearch = (item, resumed = false) => {
     if (item.city && item.city !== city) setCity(item.city);
     navigation.navigate("Search", {
       city: item.city || city || "",
@@ -281,12 +271,13 @@ export default function HomeScreen({ navigation }) {
       search: item.query || "",
       propertyType: item.propertyType || "",
       bhk: item.bhk || "",
+      ...(resumed ? { _resumed: true } : {}),
     });
   };
 
   const onQuickAction = (key) => {
     if (key === "resume") {
-      if (searchHistory[0]) rerunSearch(searchHistory[0]);
+      if (searchHistory[0]) rerunSearch(searchHistory[0], true);
       else openSearch();
     } else if (key === "wishlist") {
       if (token) navigation.navigate("Saved");
@@ -318,7 +309,7 @@ export default function HomeScreen({ navigation }) {
         <LinearGradient colors={["rgba(251,249,255,0)", colors.ivory]} locations={[0.55, 1]} style={StyleSheet.absoluteFill} />
       </View>
 
-      <View style={styles.header}>
+      <Reveal distance={8} style={styles.header}>
         <Logo tone="dark" size={30} wordSize={17} />
         <View style={styles.headerRight}>
           <PressableScale onPress={() => navigation.navigate("Location")} accessibilityRole="button" accessibilityLabel={`Location: ${cityLabel}. Change location`}>
@@ -345,9 +336,9 @@ export default function HomeScreen({ navigation }) {
             </GlassView>
           </PressableScale>
         </View>
-      </View>
+      </Reveal>
 
-      <View style={styles.hero}>
+      <Reveal delay={70} style={styles.hero}>
         <View accessible accessibilityRole="header" accessibilityLabel={`Homes that fit your ${HERO_WORDS.join(", ").toLowerCase()}`}>
           <Text style={styles.h1}>Homes That Fit</Text>
           <View style={styles.h1Row}>
@@ -356,10 +347,10 @@ export default function HomeScreen({ navigation }) {
           </View>
         </View>
         <Text style={styles.heroSub}>Smart comparisons, zero guesswork —{"\n"}your perfect home is a tap away.</Text>
-      </View>
+      </Reveal>
 
       {/* Folder-style tabs sitting on the search bar's top-left edge. */}
-      <View style={styles.searchBlock}>
+      <Reveal delay={140} style={styles.searchBlock}>
         <View style={styles.searchTabs} accessibilityRole="tablist" onLayout={(e) => setTabsWidth(e.nativeEvent.layout.width)}>
           {SEARCH_TABS.map((t, i) => (
             <React.Fragment key={t.context}>
@@ -387,13 +378,12 @@ export default function HomeScreen({ navigation }) {
             <RollingPlaceholder active={focused} style={styles.searchInput} />
           </GlassView>
         </PressableScale>
-      </View>
+      </Reveal>
 
-      <Animated.View style={heroAnim}>
-        <View style={styles.quickRow}>
-          {QUICK_ACTIONS.map((a) => (
+      <View style={styles.quickRow}>
+        {QUICK_ACTIONS.map((a, i) => (
+          <Reveal key={a.key} delay={200 + stagger(i, 55)} distance={12}>
             <PressableScale
-              key={a.key}
               to={0.95}
               onPress={() => onQuickAction(a.key)}
               style={[styles.quickTile, { width: (W - 50) / 2 }]}
@@ -407,9 +397,9 @@ export default function HomeScreen({ navigation }) {
                 {a.label}
               </Text>
             </PressableScale>
-          ))}
-        </View>
-      </Animated.View>
+          </Reveal>
+        ))}
+      </View>
 
       {loading && !data ? (
         <View style={{ paddingHorizontal: 20, paddingTop: 24 }}>
@@ -420,7 +410,7 @@ export default function HomeScreen({ navigation }) {
       ) : (
         <>
           {featuredItems.length ? (
-            <View style={styles.section}>
+            <Reveal style={styles.section}>
               <SectionTitle title={featuredTitle} action="View All" onAction={() => runSearch(data?.featured?.items?.length ? { featured: true } : {})} />
               <FlatList
                 horizontal
@@ -433,41 +423,43 @@ export default function HomeScreen({ navigation }) {
                 contentContainerStyle={styles.rail}
                 renderItem={({ item }) => <FeaturedCard p={item} width={cardW} onOpen={openProperty} />}
               />
-            </View>
+            </Reveal>
           ) : null}
 
           {/* Home loan banner: opens the eligibility calculator (estimates, no lender offers). */}
-          <PressableScale to={0.99} onPress={() => setLoanSheet("eligibility")} style={styles.loan} accessibilityRole="button" accessibilityLabel="Get your home loan easily. Check eligibility">
-            <LinearGradient colors={["#F4EDFF", "#EADFFF"]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={StyleSheet.absoluteFill} />
-            <Image source={HERO_IMAGE} style={styles.loanImage} resizeMode="cover" />
-            <LinearGradient
-              colors={["#F2EAFF", "rgba(242,234,255,0.7)", "rgba(242,234,255,0)"]}
-              locations={[0, 0.4, 0.75]}
-              start={{ x: 0, y: 0.5 }}
-              end={{ x: 1, y: 0.5 }}
-              style={StyleSheet.absoluteFill}
-            />
-            <View style={styles.loanText}>
-              <Text style={styles.loanTitle}>
-                Get Your{"\n"}
-                <Text style={{ color: brand.violet }}>Home Loan Easily</Text>
-              </Text>
-              <Text style={styles.loanSub}>Estimate your EMI and how much you could borrow — in seconds.</Text>
-            </View>
-            <View style={styles.loanSide}>
-              <GlassView level="strong" borderRadius={12} style={styles.loanChip}>
-                <Text style={styles.loanChipSmall}>Free estimate</Text>
-                <Text style={styles.loanChipBig}>No sign-up</Text>
-              </GlassView>
-              <View style={styles.loanBtn}>
-                <Text style={styles.loanBtnText}>Check Eligibility</Text>
-                <Ionicons name="arrow-forward" size={13} color={brand.ink} />
+          <Reveal delay={90}>
+            <PressableScale to={0.99} onPress={() => setLoanSheet("eligibility")} style={styles.loan} accessibilityRole="button" accessibilityLabel="Get your home loan easily. Check eligibility">
+              <LinearGradient colors={["#F4EDFF", "#EADFFF"]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={StyleSheet.absoluteFill} />
+              <Image source={HERO_IMAGE} style={styles.loanImage} resizeMode="cover" />
+              <LinearGradient
+                colors={["#F2EAFF", "rgba(242,234,255,0.7)", "rgba(242,234,255,0)"]}
+                locations={[0, 0.4, 0.75]}
+                start={{ x: 0, y: 0.5 }}
+                end={{ x: 1, y: 0.5 }}
+                style={StyleSheet.absoluteFill}
+              />
+              <View style={styles.loanText}>
+                <Text style={styles.loanTitle}>
+                  Get Your{"\n"}
+                  <Text style={{ color: brand.violet }}>Home Loan Easily</Text>
+                </Text>
+                <Text style={styles.loanSub}>Estimate your EMI and how much you could borrow — in seconds.</Text>
               </View>
-            </View>
-          </PressableScale>
+              <View style={styles.loanSide}>
+                <GlassView level="strong" borderRadius={12} style={styles.loanChip}>
+                  <Text style={styles.loanChipSmall}>Free estimate</Text>
+                  <Text style={styles.loanChipBig}>No sign-up</Text>
+                </GlassView>
+                <View style={styles.loanBtn}>
+                  <Text style={styles.loanBtnText}>Check Eligibility</Text>
+                  <Ionicons name="arrow-forward" size={13} color={brand.ink} />
+                </View>
+              </View>
+            </PressableScale>
+          </Reveal>
 
           {upcomingItems.length ? (
-            <View style={styles.section}>
+            <Reveal delay={160} style={styles.section}>
               <SectionTitle title="Upcoming Properties" action="View All" onAction={() => navigation.navigate("NewProject")} />
               <FlatList
                 horizontal
@@ -477,25 +469,27 @@ export default function HomeScreen({ navigation }) {
                 contentContainerStyle={styles.rail}
                 renderItem={({ item }) => <UpcomingCard p={item} onOpen={openProperty} />}
               />
-            </View>
+            </Reveal>
           ) : null}
 
-          <PressableScale to={0.99} onPress={() => setLoanSheet("emi")} style={styles.emiCard} accessibilityRole="button" accessibilityLabel="EMI calculator. Calculate your monthly EMI">
-            <LinearGradient colors={gradients.cta} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.emiIcon}>
-              <Ionicons name="calculator" size={22} color="#FFFFFF" />
-            </LinearGradient>
-            <View style={{ flex: 1 }}>
-              <Text style={styles.emiTitle}>EMI Calculator</Text>
-              <Text style={styles.emiSub}>Calculate your monthly EMI and plan your budget.</Text>
-            </View>
-            <View style={styles.emiBtn}>
-              <Text style={styles.emiBtnText}>Calculate EMI</Text>
-              <Ionicons name="arrow-forward" size={13} color={brand.violet} />
-            </View>
-          </PressableScale>
+          <Reveal delay={220}>
+            <PressableScale to={0.99} onPress={() => setLoanSheet("emi")} style={styles.emiCard} accessibilityRole="button" accessibilityLabel="EMI calculator. Calculate your monthly EMI">
+              <LinearGradient colors={gradients.cta} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.emiIcon}>
+                <Ionicons name="calculator" size={22} color="#FFFFFF" />
+              </LinearGradient>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.emiTitle}>EMI Calculator</Text>
+                <Text style={styles.emiSub}>Calculate your monthly EMI and plan your budget.</Text>
+              </View>
+              <View style={styles.emiBtn}>
+                <Text style={styles.emiBtnText}>Calculate EMI</Text>
+                <Ionicons name="arrow-forward" size={13} color={brand.violet} />
+              </View>
+            </PressableScale>
+          </Reveal>
 
           {priceData.length || stageData.some((s) => s.value > 0) ? (
-            <View style={styles.section}>
+            <Reveal delay={280} style={styles.section}>
               <View style={styles.sectionHead}>
                 <Text style={styles.sectionTitle} accessibilityRole="header">
                   Market Analytics
@@ -524,7 +518,7 @@ export default function HomeScreen({ navigation }) {
               <Text style={styles.chartNote}>
                 Based on {insights.listings.toLocaleString("en-IN")} active listings{city ? ` in ${city}` : ""}. Tap a point or bar for its value.
               </Text>
-            </View>
+            </Reveal>
           ) : null}
         </>
       )}

@@ -14,7 +14,6 @@ import WhyChoose from "../components/compare/WhyChoose";
 import { EmptyState, ErrorState, LoadingState } from "../components/StateViews";
 import { useCompare } from "../context/CompareContext";
 import { useApi } from "../hooks/useApi";
-import { useEntrance } from "../hooks/useEntrance";
 import { isReducedMotion } from "../hooks/useReducedMotion";
 import { api } from "../services/api";
 import { addCompareHistory } from "../services/historyService";
@@ -41,7 +40,6 @@ export default function CompareScreen({ navigation }) {
   const [tab, setTab] = useState("key");
   const [allAmenities, setAllAmenities] = useState(false);
   const fade = useRef(new Animated.Value(1)).current;
-  const headerIn = useEntrance(0, 12);
 
   // Removing is instant on screen; the refetch for the new id list happens behind it.
   const items = useMemo(() => (data?.items || []).filter((i) => cmp.ids.includes(i.id)), [data, cmp.ids]);
@@ -113,21 +111,19 @@ export default function CompareScreen({ navigation }) {
 
   return (
     <Screen>
-      <Animated.View style={headerIn}>
-        <ScreenHeader
-          back
-          title="Compare Project"
-          subtitle={`Compare up to ${COMPARE_MAX} properties and find the best one`}
-          right={
-            cmp.count ? (
-              <PressableScale onPress={clearAll} to={0.92} style={styles.clear} accessibilityRole="button" accessibilityLabel="Clear all compared projects">
-                <Ionicons name="trash-outline" size={15} color={colors.error} />
-                <Text style={styles.clearText}>Clear All</Text>
-              </PressableScale>
-            ) : null
-          }
-        />
-      </Animated.View>
+      <ScreenHeader
+        back
+        title="Compare Project"
+        subtitle={`Compare up to ${COMPARE_MAX} properties and find the best one`}
+        right={
+          cmp.count ? (
+            <PressableScale onPress={clearAll} to={0.92} style={styles.clear} accessibilityRole="button" accessibilityLabel="Clear all compared projects">
+              <Ionicons name="trash-outline" size={15} color={colors.error} />
+              <Text style={styles.clearText}>Clear All</Text>
+            </PressableScale>
+          ) : null
+        }
+      />
 
       {cmp.count === 0 ? (
         <EmptyState

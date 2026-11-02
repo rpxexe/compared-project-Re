@@ -5,6 +5,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import Screen from '../components/Screen';
 import ScreenHeader from '../components/ScreenHeader';
 import PressableScale from '../components/PressableScale';
+import Reveal from '../components/Reveal';
 import { useAuth } from '../context/AuthContext';
 import { useSaved } from '../context/SavedContext';
 import { PURPOSES } from './RoleScreen';
@@ -46,7 +47,7 @@ export default function ProfileScreen({ navigation }) {
     <Screen>
       <ScreenHeader title="Profile" back />
       <View style={{ paddingHorizontal: 20 }}>
-        <View style={styles.card}>
+        <Reveal delay={60} style={styles.card}>
           {/* Frosted Glass Layers */}
           <LinearGradient
             colors={['rgba(255, 255, 255, 0.94)', 'rgba(246, 242, 255, 0.85)']}
@@ -103,10 +104,10 @@ export default function ProfileScreen({ navigation }) {
               <Ionicons name="create-outline" size={18} color={colors.ink} />
             </PressableScale>
           ) : null}
-        </View>
+        </Reveal>
 
         {isGuest ? (
-          <View style={{ marginTop: 16 }}>
+          <Reveal delay={120} style={{ marginTop: 16 }}>
             <PressableScale
               onPress={() => navigation.navigate('Login')}
               style={styles.signInCard}
@@ -122,32 +123,34 @@ export default function ProfileScreen({ navigation }) {
                 <Ionicons name="chevron-forward" size={18} color={colors.goldDeep} />
               </View>
             </PressableScale>
-          </View>
+          </Reveal>
         ) : null}
 
-        <Text style={styles.sec}>My activity</Text>
-        <View style={styles.group}>
-          <Row
-            icon="heart-outline"
-            label="Saved properties"
-            value={saved.count ? String(saved.count) : ''}
-            onPress={() => navigation.navigate('Saved')}
-          />
-          <Row
-            icon="home-outline"
-            label="My posted properties"
-            onPress={() => navigation.navigate('MyProperties')}
-          />
-          <Row
-            icon="chatbubble-ellipses-outline"
-            label="My enquiries"
-            onPress={() => navigation.navigate('MyEnquiries')}
-            last
-          />
-        </View>
+        <Reveal delay={160}>
+          <Text style={styles.sec}>My activity</Text>
+          <View style={styles.group}>
+            <Row
+              icon="heart-outline"
+              label="Saved properties"
+              value={saved.count ? String(saved.count) : ''}
+              onPress={() => navigation.navigate('Saved')}
+            />
+            <Row
+              icon="home-outline"
+              label="My posted properties"
+              onPress={() => navigation.navigate('MyProperties')}
+            />
+            <Row
+              icon="chatbubble-ellipses-outline"
+              label="My enquiries"
+              onPress={() => navigation.navigate('MyEnquiries')}
+              last
+            />
+          </View>
+        </Reveal>
 
         {isStaff ? (
-          <>
+          <Reveal delay={220}>
             <Text style={styles.sec}>Administration</Text>
             <View style={styles.group}>
               <Row
@@ -157,33 +160,35 @@ export default function ProfileScreen({ navigation }) {
                 last
               />
             </View>
-          </>
+          </Reveal>
         ) : null}
 
-        <Text style={styles.sec}>Account</Text>
-        <View style={styles.group}>
-          <Row
-            icon="settings-outline"
-            label="Settings"
-            onPress={() => navigation.navigate('Settings')}
-          />
-          {!isGuest ? (
+        <Reveal delay={isStaff ? 280 : 220}>
+          <Text style={styles.sec}>Account</Text>
+          <View style={styles.group}>
             <Row
-              icon="log-out-outline"
-              label="Log out"
-              danger
-              onPress={confirmLogout}
-              last
+              icon="settings-outline"
+              label="Settings"
+              onPress={() => navigation.navigate('Settings')}
             />
-          ) : (
-            <Row
-              icon="log-in-outline"
-              label="Sign in"
-              onPress={() => navigation.navigate('Login')}
-              last
-            />
-          )}
-        </View>
+            {!isGuest ? (
+              <Row
+                icon="log-out-outline"
+                label="Log out"
+                danger
+                onPress={confirmLogout}
+                last
+              />
+            ) : (
+              <Row
+                icon="log-in-outline"
+                label="Sign in"
+                onPress={() => navigation.navigate('Login')}
+                last
+              />
+            )}
+          </View>
+        </Reveal>
       </View>
     </Screen>
   );

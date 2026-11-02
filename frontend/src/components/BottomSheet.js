@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Animated, Dimensions, KeyboardAvoidingView, Modal, Pressable, StyleSheet, View } from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import PressableScale from './PressableScale';
@@ -8,7 +8,6 @@ import { colors, fonts, radius, shadow } from '../theme';
 import Text from "./AppText";
 
 export default function BottomSheet({ visible, onClose, title, children, maxHeight = 0.88 }) {
-  const insets = useSafeAreaInsets();
   const [mounted, setMounted] = useState(visible);
   const y = useRef(new Animated.Value(Dimensions.get('window').height)).current;
   const fade = useRef(new Animated.Value(0)).current;
@@ -28,8 +27,24 @@ export default function BottomSheet({ visible, onClose, title, children, maxHeig
     }
   }, [visible]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // The modal draws edge to edge (under the status and navigation bars), so it needs its own
+  // SafeAreaProvider: insets from the app's provider describe the main window, which on many
+  // Android phones stops above the navigation bar and reports a bottom inset of 0.
   return (
     <Modal visible={mounted} transparent animationType="none" onRequestClose={onClose} statusBarTranslucent navigationBarTranslucent>
+      <SafeAreaProvider>
+        <Sheet y={y} fade={fade} onClose={onClose} title={title} maxHeight={maxHeight}>
+          {children}
+        </Sheet>
+      </SafeAreaProvider>
+    </Modal>
+  );
+}
+
+function Sheet({ y, fade, onClose, title, maxHeight, children }) {
+  const insets = useSafeAreaInsets();
+  return (
+    <>
       <Animated.View style={[StyleSheet.absoluteFill, { backgroundColor: "rgba(11, 4, 32, 0.62)", opacity: fade }]}>
         <Pressable style={StyleSheet.absoluteFill} onPress={onClose} accessibilityLabel="Close" />
       </Animated.View>
@@ -63,7 +78,7 @@ export default function BottomSheet({ visible, onClose, title, children, maxHeig
           </View>
         </Animated.View>
       </KeyboardAvoidingView>
-    </Modal>
+    </>
   );
 }
 

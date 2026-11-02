@@ -7,6 +7,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useBottomSpace } from "../hooks/useBottomSpace";
 import Button from "../components/Button";
 import PressableScale from "../components/PressableScale";
+import Reveal from "../components/Reveal";
 import RollingPlaceholder from "../components/RollingPlaceholder";
 import SearchTabs from "../components/search/SearchTabs";
 import FilterSidebar from "../components/search/FilterSidebar";
@@ -129,10 +130,10 @@ export default function SearchFiltersScreen({ navigation, route }) {
             </View>
           ) : null}
         </View>
-        <View style={styles.headBody}>
+        <Reveal delay={60} distance={10} style={styles.headBody}>
           <SearchTabs tabs={tabs} value={draft.context} onChange={switchTab} />
           <SearchField value={draft.query.search} onChange={(search) => setDraft((d) => setQuery(d, config, { search }))} />
-        </View>
+        </Reveal>
       </LinearGradient>
 
       {!ready ? (
@@ -169,7 +170,7 @@ export default function SearchFiltersScreen({ navigation, route }) {
       )}
 
       {/* Runs on behind the floating tab bar, so there's no dead strip or hard edge between the two. */}
-      <View style={[styles.footer, { paddingBottom: tabBar ? tabBar + 10 : Math.max(inset, 10) + 6 }]}>
+      <Reveal delay={120} distance={28} style={[styles.footer, { paddingBottom: tabBar ? tabBar + 10 : Math.max(inset, 10) + 6 }]}>
         <Text style={styles.match} accessibilityLiveRegion="polite">
           {live.error ? " " : live.loading || live.count == null ? "Counting matches…" : `${live.count.toLocaleString("en-IN")} ${live.count === 1 ? "property matches" : "properties match"}`}
         </Text>
@@ -188,7 +189,7 @@ export default function SearchFiltersScreen({ navigation, route }) {
             <Button small title="Apply Filters" onPress={submit} disabled={!ready} accessibilityHint="Shows the properties that match" />
           </View>
         </View>
-      </View>
+      </Reveal>
     </KeyboardAvoidingView>
   );
 }

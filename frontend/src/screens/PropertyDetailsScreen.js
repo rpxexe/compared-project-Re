@@ -1,4 +1,4 @@
-import React, { useRef, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { Animated, Dimensions, FlatList, Image, Linking, Pressable, ScrollView, Share, StyleSheet, View } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
@@ -102,6 +102,15 @@ export default function PropertyDetailsScreen({ navigation, route }) {
   const [sending, setSending] = useState(false);
   const [sent, setSent] = useState(false);
   const tick = useRef(new Animated.Value(0)).current;
+
+  // "Enquire Now" on a property card opens this screen with the enquiry form up (once the
+  // screen has slid in). Cards only pass `enquire` for signed-in users.
+  const autoEnquire = route.params?.enquire;
+  useEffect(() => {
+    if (!autoEnquire || !token) return undefined;
+    const t = setTimeout(() => setEnq(true), 450);
+    return () => clearTimeout(t);
+  }, [autoEnquire]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const open = (url) =>
     Linking.openURL(url).catch(() =>

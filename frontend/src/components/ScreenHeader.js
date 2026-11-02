@@ -1,9 +1,10 @@
 import React from 'react';
-import { Pressable, StyleSheet, View } from 'react-native';
+import { Animated, StyleSheet, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
 import PressableScale from './PressableScale';
 import GlassView from './GlassView';
+import { useEntrance } from '../hooks/useEntrance';
 import { colors, type } from '../theme';
 import Text from "./AppText";
 
@@ -11,8 +12,9 @@ export default function ScreenHeader({ title, subtitle, back, right, style }) {
   const nav = useNavigation();
   // canGoBack() is also true on a tab's first screen (tab history), so check this screen's own stack.
   const canPop = (nav.getState()?.index ?? 0) > 0;
+  const enter = useEntrance(0, 10);
   return (
-    <View style={[styles.row, style]}>
+    <Animated.View style={[styles.row, enter, style]}>
       {back && canPop ? (
         <PressableScale
           onPress={() => nav.goBack()}
@@ -31,7 +33,7 @@ export default function ScreenHeader({ title, subtitle, back, right, style }) {
         {subtitle ? <Text style={[type.small, { marginTop: 2 }]}>{subtitle}</Text> : null}
       </View>
       {right}
-    </View>
+    </Animated.View>
   );
 }
 const styles = StyleSheet.create({

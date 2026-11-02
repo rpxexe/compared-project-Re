@@ -43,3 +43,13 @@ export function ratingLabel(r) {
   if (!r || !r.count) return '';
   return `${r.average.toFixed(1)} (${r.count})`;
 }
+
+// Listing titles read "3 BHK Apartments in DGS Sheetal Sky Tower, Oshiwara, ..."; cards head
+// with the project name when there is one (not when the "in ..." part is just the locality).
+export function listingName(p) {
+  const m = String(p.title || '').match(/\bin\s+([^,]+)/i);
+  const name = m && m[1].trim();
+  return name && name.toLowerCase() !== String(p.locality || '').toLowerCase() && name.toLowerCase() !== String(p.city || '').toLowerCase()
+    ? name
+    : p.title;
+}

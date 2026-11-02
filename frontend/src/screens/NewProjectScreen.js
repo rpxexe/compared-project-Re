@@ -6,6 +6,7 @@ import { StatusBar } from 'expo-status-bar';
 import ScreenHeader from '../components/ScreenHeader';
 import FilterChip from '../components/FilterChip';
 import PropertyCard from '../components/PropertyCard';
+import Reveal from '../components/Reveal';
 import Button from '../components/Button';
 import { EmptyState, ErrorState, LoadingState } from '../components/StateViews';
 import { useApi } from '../hooks/useApi';
@@ -48,14 +49,17 @@ export default function NewProjectScreen() {
       <StatusBar style="dark" />
       <View style={{ paddingTop: insets.top + 8 }}>
         <ScreenHeader title="New Project" subtitle={st.loading && !items.length ? ' ' : `${pg.total} project${pg.total === 1 ? '' : 's'}`} />
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: 20, gap: 10, paddingBottom: 14 }}>
-          {visible.map((c) => <FilterChip key={c.key} label={c.label} count={counts[c.key]} active={active === c.key} onPress={() => setActive(c.key)} />)}
-        </ScrollView>
+        <Reveal delay={80} distance={10}>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: 20, gap: 10, paddingBottom: 14 }}>
+            {visible.map((c) => <FilterChip key={c.key} label={c.label} count={counts[c.key]} active={active === c.key} onPress={() => setActive(c.key)} />)}
+          </ScrollView>
+        </Reveal>
       </View>
       {st.loading && !items.length ? <View style={{ padding: 20 }}><LoadingState rows={4} /></View>
         : st.error && !items.length ? <ErrorState title="Unable to load projects" error={st.error} onRetry={() => load(1, false)} />
           : (
             <FlatList
+              key={active}
               data={items} keyExtractor={(i) => i.id} contentContainerStyle={{ padding: 20, paddingTop: 4, paddingBottom: bottom + 24, gap: 14 }}
               renderItem={({ item, index }) => <PropertyCard property={item} index={index} />}
               onEndReachedThreshold={0.4} onEndReached={() => { if (!st.more && !st.loading && pg.page < pg.pages) load(pg.page + 1, true); }}
