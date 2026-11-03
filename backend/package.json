@@ -12,16 +12,20 @@
     "check:gemini": "node scripts/check-gemini.js",
     "test": "node --test \"test/*.test.js\"",
     "check:db": "node scripts/check-db.js",
-    "sync:filters": "node scripts/sync-filter-fields.js"
+    "sync:filters": "node scripts/sync-filter-fields.js",
+    "backfill:leads": "node scripts/backfill-leads.js"
   },
   "dependencies": {
     "cors": "^2.8.5",
     "dotenv": "^17.2.2",
     "express": "^5.1.0",
+    "firebase-admin": "^13.10.0",
+    "fuse.js": "^7.5.0",
     "helmet": "^8.3.0",
     "jsonwebtoken": "^9.0.2",
     "mongoose": "^8.18.1",
     "mongoose-unique-validator": "^6.1.1",
-    "multer": "^2.5.0"
+    "multer": "^2.5.0",
+    "zod": "^4.6.7"
   }
 }

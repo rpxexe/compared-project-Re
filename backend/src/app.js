@@ -20,7 +20,7 @@ function createApp() {
       hsts: { maxAge: 31536000, includeSubDomains: true, preload: false },
     }),
   );
-  // Native mobile apps send no Origin header, so CORS only matters for web/admin front-ends.
+  // Native mobile apps send no Origin header, so CORS only matters for web front-ends and the CRM.
   app.use(cors(env.corsOrigins.length ? { origin: env.corsOrigins } : {}));
   app.use(express.json({ limit: "200kb" }));
 
@@ -57,7 +57,9 @@ function createApp() {
   );
   app.use("/api/enquiries", require("./routes/enquiries"));
   app.use("/api/notifications", require("./routes/notifications"));
-  app.use("/api/admin", require("./routes/admin"));
+  app.use("/api/crm", require("./routes/crm"));
+  // Mobile API contract (MOBILE_API.md); v1 routes above stay as they are for the current app.
+  app.use("/api/v2", require("./routes/v2"));
 
   app.use(notFound);
   app.use(errorHandler);

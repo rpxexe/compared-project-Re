@@ -13,53 +13,6 @@ const serialize = (item) => ({
   data: item.data || {},
 });
 
-exports.create = async (req, res) => {
-  const body = req.body || {};
-  const userId = typeof body.userId === "string" ? body.userId.trim() : "";
-
-  if (!mongoose.isValidObjectId(userId)) {
-    throw new AppError(400, "A valid userId is required");
-  }
-
-  const title = typeof body.title === "string" ? body.title.trim() : "";
-  const message = typeof body.message === "string" ? body.message.trim() : "";
-  const type = body.type === undefined ? "info" : body.type;
-
-  if (!title || title.length > 120) {
-    throw new AppError(
-      400,
-      "title is required and must be 120 characters or fewer",
-    );
-  }
-  if (!message || message.length > 1000) {
-    throw new AppError(
-      400,
-      "message is required and must be 1000 characters or fewer",
-    );
-  }
-  if (!["property", "price", "saved", "info"].includes(type)) {
-    throw new AppError(400, "type must be property, price, saved, or info");
-  }
-  if (
-    body.data !== undefined &&
-    (body.data === null ||
-      typeof body.data !== "object" ||
-      Array.isArray(body.data))
-  ) {
-    throw new AppError(400, "data must be a JSON object");
-  }
-
-  const item = await Notification.create({
-    user: userId,
-    type,
-    title,
-    message,
-    data: body.data || {},
-  });
-
-  res.status(201).json({ item: serialize(item) });
-};
-
 exports.list = async (req, res) => {
   const items = await Notification.find({ user: req.user.id })
     .sort({ createdAt: -1, _id: -1 })

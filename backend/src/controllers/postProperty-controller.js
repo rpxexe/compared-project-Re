@@ -1,7 +1,20 @@
-const env = require("../config/env");
 const { Property } = require("../models");
 const { bad } = require("../utils/errors");
 const { withFilterFields } = require("../utils/filterFields");
+const { listingFields } = require("../utils/ownListing");
+const { getSettings } = require("../utils/crmSettings");
+const { notify } = require("../utils/notify");
+const { activeStaffIds } = require("../utils/accounts");
+
+// Tells staff a listing is waiting for review.
+async function notifyPending(id, title) {
+  await notify(await activeStaffIds(), {
+    type: "approval",
+    title: "Listing waiting for approval",
+    message: title,
+    data: { propertyId: String(id) },
+  });
+}
 
 const postProperty = async (req, res) => {
   const { d, opt, errors } = req.postPropertyParsed || {};
@@ -9,20 +22,13 @@ const postProperty = async (req, res) => {
     throw bad("Please fix the highlighted fields", { errors });
 
   const staff = ["admin", "superadmin"].includes(req.user.role);
-  const approvalStatus = staff || env.autoApprovePosts ? "approved" : "pending";
-  const { images, parking, ...rest } = opt;
+  const approvalStatus = staff || (await getSettings()).autoApprovePosts ? "approved" : "pending";
   const doc = {
-    title: d.title,
+    ...listingFields(d, opt),
     city: d.city,
     locality: d.locality,
     propertyType: d.propertyType,
     ...(d.bhk ? { bhk: d.bhk } : {}),
-    price: d.price,
-    area: { value: d.area, unit: "sq.ft" },
-    description: d.description,
-    ...rest,
-    ...(parking ? { parkings: parking } : {}),
-    ...(images?.length ? { coverImage: images[0], galleryImages: images } : {}),
     contactPhone: opt.contactPhone || req.user.phone,
     dataSource: "manual",
     approvalStatus,
@@ -31,6 +37,7 @@ const postProperty = async (req, res) => {
     createdAt: new Date(),
   };
   const created = await Property.create(withFilterFields(doc));
+  if (approvalStatus === "pending") await notifyPending(created._id, d.title);
   res.status(201).json({
     property: { id: String(created._id), title: d.title, approvalStatus },
     message:
@@ -41,4 +48,4 @@ const postProperty = async (req, res) => {
 };
 
 exports.postProperty = postProperty;
-//module.exports.parse = parse;
+exports.notifyPending = notifyPending;

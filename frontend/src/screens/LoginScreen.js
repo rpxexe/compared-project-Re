@@ -15,6 +15,7 @@ import { isReducedMotion } from "../hooks/useReducedMotion";
 import { useAuth } from "../context/AuthContext";
 import exitAuthFlow from "../navigation/exitAuthFlow";
 import { api } from "../services/api";
+import * as firebasePhone from "../services/firebasePhone";
 import {
   cleanDigits,
   isValidIndianMobile,
@@ -196,6 +197,12 @@ export default function LoginScreen({ navigation }) {
     const role = selectedRole.toLowerCase();
     const displayName = cleanName(name);
     try {
+      // Firebase sends and checks the code when the build has it; otherwise the backend does.
+      if (firebasePhone.available()) {
+        await firebasePhone.sendCode(digits);
+        navigation.navigate("Otp", { phone: digits, role, name: displayName, firebase: true, devOtp: null, resendIn: 30 });
+        return;
+      }
       const r = await api.sendOtp(digits);
       navigation.navigate("Otp", {
         phone: digits,
@@ -210,7 +217,7 @@ export default function LoginScreen({ navigation }) {
       if (e.status === 429 && e.retryAfterSeconds) {
         navigation.navigate("Otp", { phone: digits, role, name: displayName, devOtp: null, resendIn: e.retryAfterSeconds, expiresIn: 300 });
       } else {
-        setApiError(e.message || "Failed to send verification code");
+        setApiError(e.code?.startsWith?.("auth/") ? firebasePhone.friendlyError(e) : e.message || "Failed to send verification code");
       }
     } finally {
       inFlight.current = false;

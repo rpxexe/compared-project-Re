@@ -13,6 +13,8 @@ const signUpUserSchema = new mongoose.Schema(
     isActive: { type: Boolean, default: true },
     lastLoginAt: { type: Date },
     savedProperties: [{ type: mongoose.Schema.Types.Mixed }], // listing _ids as stored (ObjectId or hex string)
+    compareProperties: [{ type: String }], // mobile compare list (max 4), set by PUT /api/v2/customerActivity/compare
+    firebaseUid: { type: String, index: { unique: true, sparse: true } }, // linked Firebase account (/api/v2)
   },
   { timestamps: true },
 );

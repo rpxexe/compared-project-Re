@@ -44,4 +44,19 @@ function lockedChanges(doc, patch) {
 
 const isOwnManual = (doc, userId) => !!doc && doc.dataSource === "manual" && String(doc.ownerUserId) === String(userId);
 
-module.exports = { LOCKED, editableFromDoc, lockedChanges, isOwnManual };
+// Stored fields for validated listing input (`parse` output), shared by posting and editing.
+// Location, type and BHK are left to the caller because owners can't change them.
+function listingFields(d, opt) {
+  const { images, parking, ...rest } = opt;
+  return {
+    title: d.title,
+    price: d.price,
+    area: { value: d.area, unit: "sq.ft" },
+    description: d.description,
+    ...rest,
+    ...(parking ? { parkings: parking } : {}),
+    ...(images?.length ? { coverImage: images[0], galleryImages: images } : {}),
+  };
+}
+
+module.exports = { LOCKED, editableFromDoc, lockedChanges, isOwnManual, listingFields };

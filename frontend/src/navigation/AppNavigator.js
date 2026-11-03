@@ -28,13 +28,6 @@ import {
   RecentSearchesScreen,
   ViewedPropertiesScreen,
 } from "../screens/ListScreens";
-import {
-  AdminDashboard,
-  AdminProperties,
-  AdminEnquiries,
-  AdminUsers,
-  AdminLeads,
-} from "../screens/AdminScreens";
 import PrePostPropertyTypeScreen from "../screens/PrePostPropertyTypeScreen";
 import SignUpScreen from "../screens/SignUp";
 
@@ -43,7 +36,7 @@ const Tab = createBottomTabNavigator();
 
 // Screens reachable from every tab. Each tab runs its own stack that includes them, so they open
 // inside the tab and the bottom bar stays visible (the auth screens below stay outside the tabs).
-function sharedScreens(isStaff, except) {
+function sharedScreens(except) {
   const screens = [
     ["Search", SearchScreen],
     ["SearchFilters", SearchFiltersScreen, { animation: "slide_from_bottom" }],
@@ -59,9 +52,6 @@ function sharedScreens(isStaff, except) {
     ["MyEnquiries", MyEnquiriesScreen],
     ["RecentSearches", RecentSearchesScreen],
     ["ViewedProperties", ViewedPropertiesScreen],
-    ...(isStaff
-      ? [["AdminDashboard", AdminDashboard], ["AdminProperties", AdminProperties], ["AdminEnquiries", AdminEnquiries], ["AdminUsers", AdminUsers], ["AdminLeads", AdminLeads]]
-      : []),
   ];
   return screens
     .filter(([name]) => name !== except)
@@ -71,11 +61,10 @@ function sharedScreens(isStaff, except) {
 // One stack per tab, starting at that tab's own screen.
 function tabStack(rootName, RootComponent) {
   return function TabStack() {
-    const { isStaff } = useAuth();
     return (
       <Stack.Navigator screenOptions={base}>
         <Stack.Screen name={rootName} component={RootComponent} />
-        {sharedScreens(isStaff, rootName)}
+        {sharedScreens(rootName)}
       </Stack.Navigator>
     );
   };

@@ -9,7 +9,7 @@ Discover, compare and post properties. Android-first React Native (Expo) app wit
 * **New Project** – New Launch / Upcoming / Under Construction / Ready to Move. A category appears **only if MongoDB has data for it**.
 * **Ratings & reviews** – 1–5 star rating + optional comment on every property, rating distribution, averages shown on cards, a *Top rated* rail and *Top rated* sort. One rating per user per property (editable); owners cannot rate their own listing; admins can remove abusive reviews.
 * **Property details** – swipe gallery, facts, developer, RERA, amenities/facilities/security, floor plans, virtual tour, brochure, map link, save, compare, share, sticky **Enquire Now**.
-* **Profile** – saved properties, my posted properties (with review status), my enquiries, settings, logout. Admin dashboard appears here only for `admin`/`superadmin`.
+* **Profile** – saved properties, my posted properties (with review status), my enquiries, settings, logout. Staff work in the separate CRM (see `CRM_API.md`); the app has no admin screens.
 * Login: **mobile + OTP**, animated splash, welcome, purpose selection (Buyer / Investor / Owner / Resale / Broker), animated welcome.
 
 All property content comes from MongoDB through the API. **No demo/fake listings exist anywhere in the shipped app.** (Test fixtures live only in `backend/test/` and the test-suite's in-memory database.)
@@ -87,15 +87,15 @@ cd frontend && npm run bundle:check   # compiles the whole app with Metro
 ```
 Manual device checklist: `TEST-CASES.md`.
 
-## 13. Admin / roles
+## 13. Staff, roles and the CRM
 Roles: `user`, `broker`, `admin`, `superadmin`.
-* Add your number to `ADMIN_PHONES` / `SUPERADMIN_PHONES` in `backend/.env`, restart, log in with OTP → the role is applied. Superadmins can later change roles via `PATCH /api/admin/users/:id`.
+* Add your number to `ADMIN_PHONES` / `SUPERADMIN_PHONES` in `backend/.env`, restart, log in with OTP → the role is applied. After that, superadmins manage staff and roles from the CRM (`/api/crm/staff`, `PATCH /api/crm/users/:id`).
 * Choosing “Broker” as purpose gives the `broker` role (no admin rights).
-* **Security:** every `/api/admin/*` route runs `authRequired` + `requireRole('admin','superadmin')` on the server and re-reads the role from MongoDB on every request, so a hidden button is never the protection. Normal users get **403**, anonymous users **401** (covered by tests).
-* In the app: *Profile → Admin dashboard* (visible only to admins): stats, users, properties (approve / reject / feature), enquiries (status workflow). Superadmin-only API: change role, disable user, delete app-posted properties (imported data is protected).
+* **Security:** every `/api/crm/*` route runs `authRequired` + `requireRole('admin','superadmin')` on the server and re-reads the role from MongoDB on every request, so a hidden button is never the protection. Normal users get **403**, anonymous users **401** (covered by tests).
+* Admin work happens in the CRM, which talks to `/api/crm/*` (full contract in `CRM_API.md`): leads pipeline, listing moderation, customers, staff, audit log and settings. Enquiries, views and saves in the app create CRM leads automatically. After deploying, run `npm run backfill:leads` once in `backend/` to create leads from older enquiries and views.
 
 ### API summary
-`GET /api/health` · `POST /api/auth/send-otp` · `POST /api/auth/verify-otp` · `GET|PATCH /api/users/me` · `GET /api/users/me/{properties,enquiries}` · `GET /api/properties` (search, filters, sort, paging) · `GET /api/properties/{categories,facets,top-rated,compare,saved/list,:id}` · `POST|DELETE /api/properties/:id/save` · `GET|POST /api/properties/:id/reviews` · `DELETE /api/properties/:id/reviews/mine` · `POST /api/post-property` · `POST /api/enquiries` · `GET /api/admin/{stats,users,properties,enquiries}` · `PATCH /api/admin/{users,properties,enquiries}/:id` · `DELETE /api/admin/{properties,reviews}/:id`.
+`GET /api/health` · `POST /api/auth/send-otp` · `POST /api/auth/verify-otp` · `GET|PATCH /api/users/me` · `GET /api/users/me/{properties,enquiries}` · `GET /api/properties` (search, filters, sort, paging) · `GET /api/properties/{categories,facets,top-rated,compare,saved/list,:id}` · `POST|DELETE /api/properties/:id/save` · `GET|POST /api/properties/:id/reviews` · `DELETE /api/properties/:id/reviews/mine` · `POST /api/post-property` · `POST /api/enquiries` · CRM (staff only): `/api/crm/*`, see `CRM_API.md`. · Mobile API contract (Firebase customer auth): `/api/v2/*`, see `MOBILE_API.md`.
 
 ## 14. Production deployment (Render / Railway)
 * Root directory `backend`, build `npm install`, start `npm start`.

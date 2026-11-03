@@ -2,6 +2,7 @@ import axios from "axios";
 import { NativeModules, Platform } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { normalizeError } from "../utils/errors";
+import * as firebasePhone from "./firebasePhone";
 
 function resolveApiUrl() {
   const envUrl = (process.env.EXPO_PUBLIC_API_URL || "").trim().replace(/\/+$/, "");
@@ -52,7 +53,8 @@ client.interceptors.request.use((config) => {
     return Promise.reject(
       Object.assign(new Error("API URL missing"), { code: "NO_API_URL" }),
     );
-  if (memoryToken) config.headers.Authorization = `Bearer ${memoryToken}`;
+  // /v2 calls carry their own Firebase token (see v2() below).
+  if (memoryToken && !config.headers.Authorization) config.headers.Authorization = `Bearer ${memoryToken}`;
   return config;
 });
 
@@ -61,7 +63,8 @@ client.interceptors.response.use(
   (error) => {
     const url = error?.config?.url || "";
     // Signed-out users and expired sessions both get the sign-in dialog (see AuthContext).
-    if (error?.response?.status === 401 && !url.startsWith("/auth/") && onUnauthorized)
+    // /v2 uses Firebase tokens and retries on its own, so its 401s don't end the session.
+    if (error?.response?.status === 401 && !url.startsWith("/auth/") && !url.startsWith("/v2/") && onUnauthorized)
       onUnauthorized({ hadSession: !!memoryToken });
     return Promise.reject(error);
   },
@@ -75,6 +78,26 @@ async function call(promise) {
     throw Object.assign(new Error(n.message), n);
   }
 }
+// Mobile API contract calls (/api/v2) with the Firebase ID token. On "Invalid token" the token is
+// refreshed once; on "Customer not found" the Firebase user is linked to its account first.
+async function v2(send) {
+  const attempt = async (force) => {
+    const token = await firebasePhone.idToken(force);
+    if (!token) throw Object.assign(new Error("Please sign in again."), { status: 401, signInRequired: true });
+    return send({ Authorization: `Bearer ${token}` });
+  };
+  try {
+    return await call(attempt(false));
+  } catch (e) {
+    if (e.status !== 401 || e.signInRequired) throw e;
+    if (e.message === "Customer not found") {
+      const token = await firebasePhone.idToken();
+      await call(client.post("/v2/customers/register", {}, { headers: { Authorization: `Bearer ${token}` } }));
+    }
+    return call(attempt(true));
+  }
+}
+
 const clean = (params = {}) =>
   Object.fromEntries(
     Object.entries(params).filter(
@@ -283,20 +306,15 @@ export const api = {
   enquire: (propertyId, message, name) =>
     call(client.post("/enquiries", { propertyId, message, name })),
 
-  admin: {
-    stats: () => call(client.get("/admin/stats")),
-    users: (params) =>
-      call(client.get("/admin/users", { params: clean(params) })),
-    properties: (params) =>
-      call(client.get("/admin/properties", { params: clean(params) })),
-    reviewProperty: (id, body) =>
-      call(client.patch(`/admin/properties/${id}`, body)),
-    enquiries: (params) =>
-      call(client.get("/admin/enquiries", { params: clean(params) })),
-    updateEnquiry: (id, status) =>
-      call(client.patch(`/admin/enquiries/${id}`, { status })),
-    leads: (params) =>
-      call(client.get("/admin/leads", { params: clean(params) })),
+  // Mobile API contract (backend MOBILE_API.md). Hearts are the same list as setSaved().
+  v2: {
+    // Firebase sign-in -> customer account + the v1 session ({ token, user, isNewUser }).
+    register: (idToken, name) =>
+      call(client.post("/v2/customers/register", { name }, { headers: { Authorization: `Bearer ${idToken}` } })),
+    myActivity: (params) => v2((headers) => client.get("/v2/customerActivity/my-activity", { params, headers })),
+    toggleHeart: (id) => v2((headers) => client.post(`/v2/customerActivity/toggle-heart/${id}`, null, { headers })),
+    // Full replace: always send the whole list.
+    setCompare: (ids) => v2((headers) => client.put("/v2/customerActivity/compare", { propertyIds: ids }, { headers })),
   },
   signin: (data) => call(client.post("/auth/signin", { data })),
   signup: (data) => call(client.post("/auth/signup", { data })),

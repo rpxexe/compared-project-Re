@@ -1,4 +1,5 @@
 // Pure helpers for the guided Post Property flow (no React / no network), so they can be unit tested.
+import { z } from "zod";
 
 // Labels shown to the user -> values the existing backend understands.
 // "Sell" is stored as listingType "sale" because that is what POST /post-property accepts.
@@ -183,37 +184,59 @@ export function buildTitle(f) {
   return `${what} for ${f.listingType === "rent" ? "Rent" : "Sale"} in ${f.locality.trim()}`.slice(0, 120);
 }
 
-export function validateStep(stepKey, f) {
-  const e = {};
+const required = (message) => z.string({ error: message }).trim().min(1, { error: message });
+const positive = (message) => z.preprocess(num, z.number({ error: message }).gt(0, { error: message }));
+const anything = z.any();
+
+// The zod schema for one step. It is built from the whole form, so rules that depend on other
+// answers (BHK only for some types, the rent wording, floors within the building) stay field rules.
+function stepSchema(stepKey, f) {
   if (stepKey === "purpose") {
-    if (!f.listingType) e.listingType = "Choose Rent or Sell";
-    if (!f.category) e.category = "Select a property category";
-    if (!f.propertyType || !typesFor(f.category).includes(f.propertyType)) e.propertyType = "Select a property type";
-    if (!(f.city || "").trim()) e.city = "City is required";
-    if (!(f.locality || "").trim()) e.locality = "Locality is required";
-    if (needsBhk(f.category, f.propertyType) && !f.bhk) e.bhk = "Select the number of bedrooms";
-    if (!(num(f.area) > 0)) e.area = "Enter a valid area";
-    if (f.totalFloors !== "" && showsBuildingFields(f.propertyType)) {
-      const n = num(f.totalFloors);
-      if (!(Number.isInteger(n) && n >= 1 && n <= 200)) e.totalFloors = "Enter 1–200";
-    }
-    if (f.floor && f.floor !== GROUND && f.totalFloors && num(f.floor) > num(f.totalFloors)) e.floor = "Can't be above the total floors";
-    if (!(num(f.price) > 0)) e.price = f.listingType === "rent" ? "Enter a valid monthly rent in ₹" : "Enter a valid price in ₹";
-    if (f.listingType === "rent" && f.availability === CUSTOM_DATE) {
-      const date = parseDate(f.availableDate);
-      const today = new Date();
-      today.setHours(0, 0, 0, 0);
-      if (!date) e.availableDate = "Enter a date as DD/MM/YYYY";
-      else if (date < today) e.availableDate = "Choose today or a later date";
-    }
-  } else if (stepKey === "details") {
-    if ((f.description || "").trim().length < 10) e.description = "Add a short description (10+ characters)";
-    if (!f.cover?.url) e.cover = "Add a cover image";
-    if ((f.photos || []).length > MAX_PHOTOS) e.photos = `You can add up to ${MAX_PHOTOS} more photos`;
-  } else if (stepKey === "review") {
-    if (!f.agreed) e.agreed = "Please accept the terms to submit";
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const rent = f.listingType === "rent";
+    return z.looseObject({
+      listingType: z.enum(["sale", "rent"], { error: "Choose Rent or Sell" }),
+      category: z.enum(["residential", "commercial"], { error: "Select a property category" }),
+      propertyType: z.string({ error: "Select a property type" })
+        .refine((t) => typesFor(f.category).includes(t), { error: "Select a property type" }),
+      city: required("City is required"),
+      locality: required("Locality is required"),
+      bhk: needsBhk(f.category, f.propertyType) ? required("Select the number of bedrooms") : anything,
+      area: positive("Enter a valid area"),
+      totalFloors: f.totalFloors !== "" && showsBuildingFields(f.propertyType)
+        ? z.preprocess(num, z.number({ error: "Enter 1–200" }).int({ error: "Enter 1–200" }).min(1, { error: "Enter 1–200" }).max(200, { error: "Enter 1–200" }))
+        : anything,
+      floor: anything.refine(
+        () => !(f.floor && f.floor !== GROUND && f.totalFloors && num(f.floor) > num(f.totalFloors)),
+        { error: "Can't be above the total floors" },
+      ),
+      price: positive(rent ? "Enter a valid monthly rent in ₹" : "Enter a valid price in ₹"),
+      availableDate: rent && f.availability === CUSTOM_DATE
+        ? z.string({ error: "Enter a date as DD/MM/YYYY" })
+          .refine((v) => !!parseDate(v), { error: "Enter a date as DD/MM/YYYY", abort: true })
+          .refine((v) => parseDate(v) >= today, { error: "Choose today or a later date" })
+        : anything,
+    });
   }
-  return e;
+  if (stepKey === "details") {
+    return z.looseObject({
+      description: z.string({ error: "Add a short description (10+ characters)" })
+        .trim().min(10, { error: "Add a short description (10+ characters)" }),
+      cover: anything.refine((c) => !!c?.url, { error: "Add a cover image" }),
+      photos: z.preprocess((v) => v || [], z.array(anything).max(MAX_PHOTOS, { error: `You can add up to ${MAX_PHOTOS} more photos` })),
+    });
+  }
+  if (stepKey === "review") return z.looseObject({ agreed: z.literal(true, { error: "Please accept the terms to submit" }) });
+  return z.looseObject({});
+}
+
+// { field: first error message } for one step; {} when the step is complete.
+export function validateStep(stepKey, f) {
+  const result = stepSchema(stepKey, f).safeParse(f);
+  if (result.success) return {};
+  const { fieldErrors } = z.flattenError(result.error);
+  return Object.fromEntries(Object.entries(fieldErrors).map(([field, messages]) => [field, messages[0]]));
 }
 
 // Returns { stepIndex, errors } for the first invalid step, or null when everything is valid.

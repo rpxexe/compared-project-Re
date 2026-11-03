@@ -67,14 +67,15 @@ test('by-ids: returns public cards in the order asked, validates input', async (
   assert.deepEqual((await t.call('GET', '/properties/by-ids')).body.items, []);
 });
 
-test('admin leads: admin only, searchable, counted in stats', async () => {
-  assert.equal((await t.call('GET', '/admin/leads')).status, 401);
-  assert.equal((await t.call('GET', '/admin/leads', { token: user.token })).status, 403);
-  const r = await t.call('GET', '/admin/leads?search=Lead', { token: admin.token });
+test('CRM views: staff only, searchable, counted in stats', async () => {
+  assert.equal((await t.call('GET', '/crm/views')).status, 401);
+  assert.equal((await t.call('GET', '/crm/views', { token: user.token })).status, 403);
+  const r = await t.call('GET', '/crm/views?search=Lead', { token: admin.token });
   assert.equal(r.status, 200);
   assert.equal(r.body.total, 2); // this user's two viewed listings (one cleared from their own list)
   assert.ok(r.body.items.every((l) => l.phone === '9866666666'));
   assert.equal(r.body.items.find((l) => l.property === propertyId).views, 3);
-  const s = await t.call('GET', '/admin/stats', { token: admin.token });
-  assert.equal(s.body.leads, 3);
+  const s = await t.call('GET', '/crm/stats', { token: admin.token });
+  assert.equal(s.body.views, 3);
+  assert.equal(s.body.leads.total, 3, 'every signed-in view also became a CRM lead');
 });

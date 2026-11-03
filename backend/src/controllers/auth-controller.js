@@ -2,12 +2,19 @@ const express = require("express");
 const env = require("../config/env");
 const { Otp, User } = require("../models");
 const { signToken } = require("../middleware/auth");
-const { AppError, bad } = require("../utils/errors");
-const { cleanPhone, isValidPhone, str } = require("../utils/validate");
+const { AppError } = require("../utils/errors");
+const { str } = require("../utils/validate");
 const { generateOtp, hashOtp, otpMatches } = require("../utils/otp");
 const { sendSms } = require("../utils/sms");
 const { rateLimit } = require("../utils/rateLimit");
 const { publicUser } = require("../utils/user");
+const { z, validate, phone: phoneField } = require("../utils/zod");
+
+const PHONE_ERROR = "Enter a valid 10-digit Indian mobile number";
+const sendSchema = z.object({ phone: phoneField(PHONE_ERROR) });
+const verifySchema = sendSchema.extend({
+  otp: z.preprocess((v) => str(v, 6), z.string().regex(/^\d{6}$/, { error: "Enter the 6-digit OTP" })),
+});
 
 // const router = express.Router();
 const sendLimiter = rateLimit({
@@ -22,9 +29,7 @@ const verifyLimiter = rateLimit({
 });
 
 const sendOTP = async (req, res) => {
-  const phone = cleanPhone(req.body?.phone);
-  if (!isValidPhone(phone))
-    throw bad("Enter a valid 10-digit Indian mobile number");
+  const { phone } = validate(sendSchema, req.body);
 
   const existing = await Otp.findOne({ phone }).lean();
   if (existing) {
@@ -77,11 +82,7 @@ const sendOTP = async (req, res) => {
 };
 
 const verifyOTP = async (req, res) => {
-  const phone = cleanPhone(req.body?.phone);
-  const otp = str(req.body?.otp, 6);
-  if (!isValidPhone(phone))
-    throw bad("Enter a valid 10-digit Indian mobile number");
-  if (!/^\d{6}$/.test(otp)) throw bad("Enter the 6-digit OTP");
+  const { phone, otp } = validate(verifySchema, req.body);
 
   const record = await Otp.findOne({ phone }).lean();
   if (!record)

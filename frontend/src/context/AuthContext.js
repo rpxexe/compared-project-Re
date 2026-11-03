@@ -1,6 +1,7 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { api, session, setUnauthorizedHandler } from '../services/api';
+import * as firebasePhone from '../services/firebasePhone';
 
 const AuthContext = createContext(null);
 export const useAuth = () => useContext(AuthContext);
@@ -20,6 +21,7 @@ export function AuthProvider({ children }) {
 
   const signOut = useCallback(async () => {
     await session.clear();
+    await firebasePhone.signOut();
     await AsyncStorage.removeItem('cp_is_guest');
     setTokenState(null);
     setUser(null);
@@ -115,7 +117,6 @@ export function AuthProvider({ children }) {
     signOut,
     updateUser,
     finishWelcome: () => setPendingWelcome(false),
-    isStaff: user?.role === 'admin' || user?.role === 'superadmin',
   }), [ready, token, user, isGuest, pendingWelcome, loginPrompt, openLoginPrompt, closeLoginPrompt, continueAsGuest, signIn, signOut, updateUser]);
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
