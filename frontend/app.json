@@ -32,6 +32,7 @@
         }
       ],
       "package": "com.compareproject.mobile",
+      "googleServicesFile": "./google-services.json",
       "versionCode": 2,
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
@@ -62,7 +63,9 @@
         {
           "locationWhenInUsePermission": "CompareProjects uses your location to show properties near you and fill in your city and locality."
         }
-      ]
+      ],
+      "@react-native-firebase/app",
+      "@react-native-firebase/auth"
     ]
   }
 }

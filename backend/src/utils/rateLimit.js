@@ -3,7 +3,8 @@ const { AppError } = require('./errors');
 // Tiny in-memory fixed-window limiter (per process). Good enough for a single Render/Railway
 // instance; use a shared store (Redis) if you scale horizontally.
 // `key(req)` picks what is limited (default: client IP). Return a falsy key to skip limiting.
-function rateLimit({ windowMs, max, message = 'Too many requests. Please try again later.', key = (req) => req.ip || 'unknown' }) {
+// `body` sends that exact JSON with the 429 instead of the usual { message } error.
+function rateLimit({ windowMs, max, message = 'Too many requests. Please try again later.', key = (req) => req.ip || 'unknown', body }) {
   const hits = new Map();
   return function limiter(req, res, next) {
     const k = key(req);
@@ -14,6 +15,7 @@ function rateLimit({ windowMs, max, message = 'Too many requests. Please try aga
     else if (++entry.count > max) {
       // Header only: the app reads a `retryAfterSeconds` body field as "an OTP was just sent".
       res.set('Retry-After', String(Math.ceil((entry.reset - now) / 1000)));
+      if (body) return res.status(429).json(body);
       return next(new AppError(429, message));
     }
     if (hits.size > 5000) for (const [hk, v] of hits) if (v.reset <= now) hits.delete(hk);

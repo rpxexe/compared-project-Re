@@ -6,6 +6,7 @@ const env = require("./config/env");
 const { connectDb } = require("./config/db");
 const { createApp } = require("./app");
 const { startFilterSync } = require("./utils/filterSync");
+const { startFollowUpReminders } = require("./utils/followUpReminders");
 
 async function start() {
   const problems = env.validate();
@@ -16,6 +17,9 @@ async function start() {
   await connectDb();
   console.log("MongoDB connected");
   startFilterSync(env.filterSyncMinutes);
+  startFollowUpReminders(15);
+  if (!require("./utils/firebase").isConfigured())
+    console.warn("WARNING: FIREBASE_PROJECT_ID is not set, so /api/v2 customer routes reject every token (401 Invalid token).");
   if (env.otpMode === "development") {
     console.warn(
       "WARNING: OTP_MODE=development returns login codes in API responses. Anyone who can reach " +

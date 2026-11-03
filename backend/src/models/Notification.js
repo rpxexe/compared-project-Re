@@ -2,7 +2,7 @@ const mongoose = require("mongoose");
 
 const notificationSchema = new mongoose.Schema({
   user: { type: mongoose.Schema.Types.ObjectId, ref: "AppUser", required: true, index: true },
-  type: { type: String, enum: ["property", "price", "saved", "info"], default: "info" },
+  type: { type: String, enum: ["property", "price", "saved", "info", "lead", "approval"], default: "info" },
   title: { type: String, required: true, trim: true, maxlength: 120 },
   message: { type: String, required: true, trim: true, maxlength: 1000 },
   readAt: { type: Date, default: null },

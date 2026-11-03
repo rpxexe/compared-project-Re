@@ -1,5 +1,5 @@
 const mongoose = require("mongoose");
-const { Property, User, Review, PropertyRating, SignUpUser, PropertyView } = require("../models");
+const { Property, User, Review, PropertyRating, PropertyView } = require("../models");
 const { AppError, bad } = require("../utils/errors");
 const {
   isPropertyId,
@@ -19,6 +19,15 @@ const {
 } = require("../utils/propertyQuery");
 const { summarise, publicRating } = require("../utils/rating");
 const { cached, cachedByKey } = require("../utils/cache");
+const { findAccount } = require("../utils/accounts");
+const { onView, onSave } = require("../utils/leads");
+const { z, validate, text } = require("../utils/zod");
+
+const RATING_ERROR = "Rating must be a whole number from 1 to 5";
+const reviewSchema = z.object({
+  rating: z.coerce.number({ error: RATING_ERROR }).int({ error: RATING_ERROR }).min(1, { error: RATING_ERROR }).max(5, { error: RATING_ERROR }),
+  comment: text(500).default(""),
+});
 
 // Filter lists and section counts change only when listings are added/approved; a short
 // cache turns several full-collection scans per app launch into one every couple of minutes.
@@ -370,12 +379,10 @@ const recordView = async (req, res) => {
   const doc = await findListing(req.params.id);
   if (!doc) throw new AppError(404, "Property not found");
   if (!req.user) return res.status(204).end();
-  const account =
-    (await User.findById(req.user.id).lean()) ||
-    (SignUpUser ? await SignUpUser.findById(req.user.id).lean() : null);
+  const account = (await findAccount(req.user.id))?.doc;
   const p = normalizeProperty(doc);
   const now = new Date();
-  await PropertyView.findOneAndUpdate(
+  const view = await PropertyView.findOneAndUpdate(
     { user: new mongoose.Types.ObjectId(req.user.id), property: doc._id },
     {
       $set: {
@@ -392,8 +399,9 @@ const recordView = async (req, res) => {
       $inc: { views: 1 },
       $setOnInsert: { firstViewedAt: now, source: "mobile-app" },
     },
-    { upsert: true },
-  );
+    { upsert: true, new: true },
+  ).lean();
+  await onView({ user: req.user, account, property: doc, views: view?.views || 1 });
   res.status(204).end();
 };
 
@@ -412,6 +420,8 @@ async function setSaved(req, res, desired) {
       ? { $addToSet: { savedProperties: id } }
       : { $pull: { savedProperties: id } },
   );
+  if (next && !currently)
+    await onSave({ user: req.user, account: (await findAccount(req.user.id))?.doc, property: exists });
   res.json({ saved: next });
 }
 // Body {saved:true|false} makes the call idempotent; with no body it toggles.
@@ -484,10 +494,7 @@ const getReviews = async (req, res) => {
 
 const postReview = async (req, res) => {
   requirePropertyId(req.params.id);
-  const rating = Number(req.body?.rating);
-  if (!Number.isInteger(rating) || rating < 1 || rating > 5)
-    throw bad("Rating must be a whole number from 1 to 5");
-  const comment = str(req.body?.comment, 500);
+  const { rating, comment } = validate(reviewSchema, req.body);
   const property = await findListing(req.params.id);
   if (!property || ["pending", "rejected"].includes(property.approvalStatus))
     throw new AppError(404, "Property not found");

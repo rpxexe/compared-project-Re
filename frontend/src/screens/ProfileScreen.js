@@ -172,7 +172,7 @@ function Row({ icon, label, onPress, danger, last }) {
 }
 
 export default function ProfileScreen({ navigation }) {
-  const { user, token, signOut, isStaff } = useAuth();
+  const { user, token, signOut } = useAuth();
   const saved = useSaved();
   const cmp = useCompare();
   const isGuest = !token;
@@ -397,16 +397,7 @@ export default function ProfileScreen({ navigation }) {
           </View>
         </SpringIn>
 
-        {isStaff ? (
-          <SpringIn delay={680}>
-            <Text style={styles.sec}>Administration</Text>
-            <View style={styles.group}>
-              <Row icon="shield-checkmark-outline" label="Admin dashboard" onPress={() => navigation.navigate('AdminDashboard')} last />
-            </View>
-          </SpringIn>
-        ) : null}
-
-        <SpringIn delay={isStaff ? 740 : 680}>
+        <SpringIn delay={680}>
           <Text style={styles.sec}>Account</Text>
           <View style={styles.group}>
             {!isGuest ? (

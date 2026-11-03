@@ -5,10 +5,13 @@ const { AppError, bad } = require("../utils/errors");
 const { str } = require("../utils/validate");
 const { normalizeProperty } = require("../utils/property");
 const { publicUser } = require("../utils/user");
-const env = require("../config/env");
 const { requirePropertyId, propertyIdMatch } = require("../utils/validate");
 const { withFilterFields } = require("../utils/filterFields");
-const { LOCKED, editableFromDoc, lockedChanges, isOwnManual } = require("../utils/ownListing");
+const { LOCKED, editableFromDoc, lockedChanges, isOwnManual, listingFields } = require("../utils/ownListing");
+const { removeListing } = require("../utils/listingCleanup");
+const { getSettings } = require("../utils/crmSettings");
+const { notifyPending } = require("./postProperty-controller");
+const { z, validate, text, oneOf } = require("../utils/zod");
 
 // One of the signed-in user's own app-posted listings, or 404 (also for someone else's).
 async function findOwnListing(req) {
@@ -49,21 +52,11 @@ const updateOwnProperty = async (req, res) => {
   if (Object.keys(errors).length) throw bad("Please fix the highlighted fields", { errors });
 
   const staff = ["admin", "superadmin"].includes(req.user.role);
-  const approvalStatus = staff || env.autoApprovePosts ? "approved" : "pending";
-  const { images, parking, ...rest } = opt;
-  const set = {
-    title: d.title,
-    price: d.price,
-    area: { value: d.area, unit: "sq.ft" },
-    description: d.description,
-    ...rest,
-    ...(parking ? { parkings: parking } : {}),
-    ...(images?.length ? { coverImage: images[0], galleryImages: images } : {}),
-    approvalStatus,
-    updatedAt: new Date(),
-  };
+  const approvalStatus = staff || (await getSettings()).autoApprovePosts ? "approved" : "pending";
+  const set = { ...listingFields(d, opt), approvalStatus, updatedAt: new Date() };
   const { filterFields } = withFilterFields({ ...doc, ...set });
   await Property.updateOne({ _id: doc._id }, { $set: { ...set, filterFields }, $unset: { rejectionReason: "" } });
+  if (approvalStatus === "pending") await notifyPending(doc._id, d.title);
   res.json({
     property: { id: String(doc._id), title: d.title, approvalStatus },
     message: approvalStatus === "approved" ? "Changes saved." : "Changes saved. Your listing will be live again once reviewed.",
@@ -73,7 +66,7 @@ const updateOwnProperty = async (req, res) => {
 // DELETE /users/me/properties/:id
 const deleteOwnProperty = async (req, res) => {
   const doc = await findOwnListing(req);
-  await Property.deleteOne({ _id: doc._id });
+  await removeListing(doc);
   res.json({ deleted: true });
 };
 
@@ -90,20 +83,19 @@ const getUser = async (req, res) => {
   });
 };
 
+// Only these fields can be changed by the user; anything else (role, phone...) is dropped.
+const profileSchema = () => z.object({
+  name: text(80).optional(),
+  city: text(80).optional(),
+  purpose: z.preprocess((v) => (v === undefined ? undefined : str(v, 20).toLowerCase()),
+    oneOf(User.PURPOSES, "Purpose").optional()),
+});
+
 const updateUser = async (req, res) => {
-  const body = req.body || {};
-  const set = {};
-  if (body.name !== undefined) set.name = str(body.name, 80);
-  if (body.city !== undefined) set.city = str(body.city, 80);
-  if (body.purpose !== undefined) {
-    const purpose = str(body.purpose, 20).toLowerCase();
-    if (!User.PURPOSES.includes(purpose))
-      throw bad(`Purpose must be one of: ${User.PURPOSES.join(", ")}`);
-    set.purpose = purpose;
-    // Choosing "broker" unlocks the broker role, but never downgrades or escalates staff roles.
-    if (purpose === "broker" && req.user.role === "user") set.role = "broker";
-  }
+  const set = Object.fromEntries(Object.entries(validate(profileSchema(), req.body)).filter(([, v]) => v !== undefined));
   if (!Object.keys(set).length) throw bad("Nothing to update");
+  // Choosing "broker" unlocks the broker role, but never downgrades or escalates staff roles.
+  if (set.purpose === "broker" && req.user.role === "user") set.role = "broker";
   let user = await User.findOneAndUpdate(
     { _id: req.user.id },
     { $set: set },

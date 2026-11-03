@@ -109,9 +109,23 @@ function makeModel(name, defaults = () => ({})) {
       } else if (r) applyUpdate(r, u, false);
       return r ? structuredCloneKeepIds(r) : null;
     }),
-    async updateMany(f, u) { const rs = rows.filter((x) => matches(x, f)); rs.forEach((r) => applyUpdate(r, u)); return { matchedCount: rs.length }; },
+    async updateMany(f, u) { const rs = rows.filter((x) => matches(x, f)); rs.forEach((r) => applyUpdate(r, u)); return { matchedCount: rs.length, modifiedCount: rs.length }; },
     async bulkWrite(ops) { for (const o of ops) await Model.updateOne(o.updateOne.filter, o.updateOne.update); return {}; },
     collection: { createIndex: async () => 'ok', bulkWrite: (ops) => Model.bulkWrite(ops) },
+    // Only the pipeline shape the API uses: [$match, $group by one field with $sum: 1].
+    async aggregate(stages) {
+      let out = rows;
+      for (const st of stages) {
+        if (st.$match) out = out.filter((r) => matches(r, st.$match));
+        else if (st.$group) {
+          const key = st.$group._id.slice(1);
+          const groups = new Map();
+          out.forEach((r) => { const k = getPath(r, key); const g = groups.get(String(k)) || { _id: k, n: 0 }; g.n += 1; groups.set(String(k), g); });
+          out = [...groups.values()];
+        } else throw new Error(`fakeDb: unsupported stage ${Object.keys(st)[0]}`);
+      }
+      return out.map(structuredCloneKeepIds);
+    },
     async deleteOne(f) { const i = rows.findIndex((r) => matches(r, f)); if (i >= 0) rows.splice(i, 1); return { deletedCount: i >= 0 ? 1 : 0 }; },
     async deleteMany(f) { for (let i = rows.length - 1; i >= 0; i -= 1) if (matches(rows[i], f)) rows.splice(i, 1); return {}; },
   };
@@ -131,7 +145,21 @@ function installFakeModels() {
     PropertyRating: makeModel('PropertyRating'),
     SignUpUser: makeModel('SignUpUser', () => ({ role: 'user', isActive: true })),
     PropertyView: makeModel('PropertyView', () => ({ views: 0, createdAt: new Date() })),
+    Notification: makeModel('Notification', () => ({ type: 'info', readAt: null, data: {}, createdAt: new Date() })),
+    Lead: makeModel('Lead', () => ({
+      status: 'new', priority: 'warm', score: 0, viewCount: 0, sources: [], enquiryIds: [], tags: [],
+      assignedTo: null, nextFollowUpAt: null, followUpNotifiedFor: null, createdAt: new Date(),
+    })),
+    LeadActivity: makeModel('LeadActivity', () => ({ createdAt: new Date() })),
+    AuditLog: makeModel('AuditLog', () => ({ createdAt: new Date() })),
+    CrmSetting: makeModel('CrmSetting'),
+    CustomerLead: makeModel('CustomerLead', () => ({ leadStatus: 'new', createdAt: new Date() })),
   };
+  const real = { Lead: require('../../src/models/Lead'), LeadActivity: require('../../src/models/LeadActivity') };
+  Object.assign(models.Lead, { STATUSES: real.Lead.STATUSES, SOURCES: real.Lead.SOURCES, PRIORITIES: real.Lead.PRIORITIES });
+  Object.assign(models.LeadActivity, { TYPES: real.LeadActivity.TYPES, MANUAL_TYPES: real.LeadActivity.MANUAL_TYPES, OUTCOMES: real.LeadActivity.OUTCOMES });
+  models.SignUpUser.ROLES = ['user', 'broker', 'developer', 'admin', 'superadmin'];
+  models.CustomerLead.SOURCES = require('../../src/models/CustomerLead').SOURCES;
   models.Review.unique = ['property', 'user'];
   const p = require.resolve('../../src/models');
   require.cache[p] = { id: p, filename: p, loaded: true, exports: models, children: [], paths: [] };

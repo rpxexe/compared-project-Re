@@ -29,6 +29,12 @@ function load() {
     adminPhones: list(process.env.ADMIN_PHONES),
     superadminPhones: list(process.env.SUPERADMIN_PHONES),
     autoApprovePosts: String(process.env.AUTO_APPROVE_POSTS || 'false').toLowerCase() === 'true',
+    // Firebase Authentication for the /api/v2 customer endpoints. Verifying ID tokens only needs the
+    // project id; the service account (JSON, one line) is optional.
+    firebase: {
+      projectId: String(process.env.FIREBASE_PROJECT_ID || '').trim(),
+      serviceAccount: String(process.env.FIREBASE_SERVICE_ACCOUNT || '').trim(),
+    },
     // How often the API refreshes listings' normalised filter fields (0 turns the job off).
     filterSyncMinutes: Number(process.env.FILTER_SYNC_MINUTES ?? 10),
     // Gemini writes listing descriptions on request; without a key the feature reports itself unavailable.

@@ -5,6 +5,7 @@ import Screen from "../components/Screen";
 import ScreenHeader from "../components/ScreenHeader";
 import Button from "../components/Button";
 import { api, session } from "../services/api";
+import * as firebasePhone from "../services/firebasePhone";
 import { useAuth } from "../context/AuthContext";
 import exitAuthFlow from "../navigation/exitAuthFlow";
 import { otpDigits } from "../utils/validators";
@@ -110,7 +111,7 @@ function Caret() {
 }
 
 export default function OtpScreen({ navigation, route }) {
-  const { phone, role, name, devOtp: initialDev, resendIn = 30 } = route.params;
+  const { phone, role, name, firebase = false, devOtp: initialDev, resendIn = 30 } = route.params;
   const { signIn } = useAuth();
   const [code, setCode] = useState("");
   const [state, setState] = useState("idle"); // idle | loading | error | success
@@ -144,14 +145,24 @@ export default function OtpScreen({ navigation, route }) {
     ).start();
   }, [shake]);
 
+  const done = useRef(false);
+
+  // Firebase mode: the signed-in Firebase user -> customer account + app session. Skips the code
+  // check when Firebase already signed this number in (Android auto-verification or a retry).
+  const firebaseSession = useCallback(async (value) => {
+    if (firebasePhone.currentPhone() !== `+91${phone}`) await firebasePhone.confirmCode(value);
+    return api.v2.register(await firebasePhone.idToken(), name);
+  }, [phone, name]);
+
   const verify = useCallback(
     async (value) => {
-      if (verifying.current) return;
+      if (verifying.current || done.current) return;
       verifying.current = true;
       setState("loading");
       setError("");
       try {
-        const r = await api.verifyOtp(phone, value);
+        const r = firebase ? await firebaseSession(value) : await api.verifyOtp(phone, value);
+        done.current = true;
         await session.save(r.token, r.user); // makes the token available to the profile update below
         let user = r.user;
         // Apply what the login screen collected: the name (if typed) and, for new accounts, the
@@ -182,9 +193,9 @@ export default function OtpScreen({ navigation, route }) {
         }, 700);
       } catch (e) {
         setState("error");
-        setError(e.message);
+        setError(String(e.code || "").startsWith("auth/") ? firebasePhone.friendlyError(e) : e.message);
         doShake();
-        if (e.code === "OTP_EXPIRED" || e.code === "OTP_LOCKED") setSecs(0);
+        if (e.code === "OTP_EXPIRED" || e.code === "OTP_LOCKED" || firebasePhone.needsNewCode(e)) setSecs(0);
         setTimeout(() => {
           setCode("");
           setState("idle");
@@ -194,8 +205,16 @@ export default function OtpScreen({ navigation, route }) {
         verifying.current = false;
       }
     },
-    [phone, role, name, navigation, check, doShake, signIn],
+    [phone, role, name, firebase, firebaseSession, navigation, check, doShake, signIn],
   );
+
+  // Android may read the SMS and sign in by itself; finish as if the code had been typed.
+  useEffect(() => {
+    if (!firebase) return undefined;
+    return firebasePhone.onSignedIn((user) => {
+      if (user.phoneNumber === `+91${phone}`) verify("");
+    });
+  }, [firebase, phone, verify]);
 
   const onChange = (text) => {
     if (state === "loading" || state === "success") return;
@@ -209,6 +228,13 @@ export default function OtpScreen({ navigation, route }) {
     setResending(true);
     setError("");
     try {
+      if (firebase) {
+        await firebasePhone.sendCode(phone);
+        setSecs(30);
+        setCode("");
+        input.current?.focus();
+        return;
+      }
       const r = await api.sendOtp(phone);
       setSecs(r.resendInSeconds ?? 30);
       setDevOtp(r.devOtp || null);
@@ -216,7 +242,7 @@ export default function OtpScreen({ navigation, route }) {
       input.current?.focus();
     } catch (e) {
       if (e.status === 429 && e.retryAfterSeconds) setSecs(e.retryAfterSeconds);
-      setError(e.message);
+      setError(String(e.code || "").startsWith("auth/") ? firebasePhone.friendlyError(e) : e.message);
     } finally {
       setResending(false);
     }

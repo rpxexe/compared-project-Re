@@ -14,11 +14,13 @@ export function normalizeError(err) {
   }
   // Not signed in (or the session ran out) anywhere but the sign-in screens themselves: the app
   // opens the sign-in dialog for these, so there is no message to toast.
-  if (status === 401 && !String(err?.config?.url || '').startsWith('/auth/')) {
+  const url = String(err?.config?.url || '');
+  if (status === 401 && !url.startsWith('/auth/') && !url.startsWith('/v2/')) {
     return { status, network: false, signInRequired: true, fieldErrors: null, message: '' };
   }
   return {
     status, network: false, code: data?.code, retryAfterSeconds: data?.retryAfterSeconds, fieldErrors: data?.errors || null,
-    message: (typeof data?.message === 'string' && data.message) || (status >= 500 ? 'Something went wrong on our side. Please try again.' : 'Request failed.'),
+    // /v2 rate limits answer { error } instead of { message }.
+    message: (typeof data?.message === 'string' && data.message) || (typeof data?.error === 'string' && data.error) || (status >= 500 ? 'Something went wrong on our side. Please try again.' : 'Request failed.'),
   };
 }

@@ -1,17 +1,27 @@
 const mongoose = require("mongoose");
-const { Property, Enquiry, User } = require("../models");
-const { propertyIdMatch, requirePropertyId, str } = require("../utils/validate");
+const { Property, Enquiry } = require("../models");
+const { propertyIdMatch, str } = require("../utils/validate");
 const { AppError } = require("../utils/errors");
 const { normalizeProperty } = require("../utils/property");
+const { findAccount } = require("../utils/accounts");
+const { onEnquiry } = require("../utils/leads");
+const { z, validate, text, propertyId: propertyIdField } = require("../utils/zod");
+
+const enquirySchema = z.object({
+  propertyId: z.preprocess((v) => str(v, 40), propertyIdField()),
+  message: text(1000).optional(),
+  name: text(80).optional(),
+});
 
 const postEnquiry = async (req, res) => {
-  const propertyId = requirePropertyId(str(req.body?.propertyId, 40));
-  const message = str(req.body?.message, 1000);
+  const body = validate(enquirySchema, req.body);
+  const { propertyId } = body;
+  const message = body.message || "";
   const property = await Property.findOne({ _id: propertyIdMatch(propertyId) }).lean();
   if (!property || ["pending", "rejected"].includes(property.approvalStatus))
     throw new AppError(404, "Property not found");
-  const user = await User.findById(req.user.id).lean();
-  const name = str(req.body?.name, 80) || user?.name || "";
+  const account = (await findAccount(req.user.id))?.doc;
+  const name = body.name || req.user.name || "";
   const enquiry = await Enquiry.create({
     user: new mongoose.Types.ObjectId(req.user.id),
     phone: req.user.phone,
@@ -21,6 +31,7 @@ const postEnquiry = async (req, res) => {
     message,
     source: "mobile-app",
   });
+  await onEnquiry({ user: { ...req.user, name }, account, property, enquiry });
   res.status(201).json({
     enquiry: { id: String(enquiry._id), status: "new" },
     message: "Enquiry sent. We will get back to you shortly.",
