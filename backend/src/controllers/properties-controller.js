@@ -250,7 +250,8 @@ const getLocations = async (req, res) => {
           },
         },
         { $sort: { count: -1 } },
-        { $limit: 300 },
+        // Enough pairs that a city-scoped list (?city=) still has localities for smaller cities.
+        { $limit: 3000 },
       ]);
       allLocations = list
         .filter((l) => (l.city && l.city.trim()) || (l.locality && l.locality.trim()))
@@ -267,10 +268,12 @@ const getLocations = async (req, res) => {
     const limit = Math.min(50, Math.max(1, parseInt(req.query.limit, 10) || 15));
     const page = Math.max(1, parseInt(req.query.page, 10) || 1);
     const search = (req.query.search || req.query.q || "").trim().toLowerCase();
+    const city = str(req.query.city, 60).toLowerCase();
 
     let filtered = allLocations;
+    if (city) filtered = filtered.filter((l) => l.city.toLowerCase() === city);
     if (search) {
-      filtered = allLocations.filter(
+      filtered = filtered.filter(
         (l) =>
           l.locality.toLowerCase().includes(search) ||
           l.city.toLowerCase().includes(search) ||

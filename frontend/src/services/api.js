@@ -292,8 +292,6 @@ export const api = {
   deleteMyReview: (id) => call(client.delete(`/properties/${id}/reviews/mine`)),
 
   postProperty: (payload) => call(client.post("/post-property", payload)),
-  // Gemini-written listing description from the form's details (the server holds the key).
-  describeProperty: (facts) => call(client.post("/post-property/describe", facts, { timeout: 45000 })),
   // `asset` is an expo-image-picker asset; resolves to { url } of the stored image.
   uploadImage: async (asset) => {
     const type = asset.mimeType || "image/jpeg";

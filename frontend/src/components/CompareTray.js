@@ -1,10 +1,9 @@
 import React, { useEffect, useRef, useState } from "react";
-import { Animated, Pressable, StyleSheet, View } from "react-native";
+import { Animated, Easing, Pressable, StyleSheet, View } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
 import PressableScale from "./PressableScale";
 import { Cover } from "./PropertyCard";
-import { smoothLayout } from "./compare/CompareTable";
 import { useCompare } from "../context/CompareContext";
 import { isReducedMotion } from "../hooks/useReducedMotion";
 import { api } from "../services/api";
@@ -14,9 +13,10 @@ import { brand, colors, gradients, radius } from "../theme";
 import Text from "./AppText";
 
 // Card that sits on top of the bottom navigation while projects are queued for comparison:
-// how many are picked, "Compare Now", and a chip per project so any one can be taken out.
+// how many are picked, "Compare Now", a cancel button that empties the list (and so hides the
+// card), and a chip per project so any one can be taken out.
 export default function CompareTray({ onCompare }) {
-  const { ids, count, remove } = useCompare();
+  const { ids, count, remove, clear } = useCompare();
   const [byId, setById] = useState({}); // id -> listing, kept across changes so chips don't flicker
   const pop = useRef(new Animated.Value(1)).current;
   const first = useRef(true);
@@ -51,13 +51,22 @@ export default function CompareTray({ onCompare }) {
 
   const title = count === 1 ? "1 item added to compare" : `${count} items selected for compare`;
   const sub = count === 1 ? "Add one more project to compare" : count < COMPARE_MAX ? `You can add up to ${COMPARE_MAX}` : "Ready to compare";
-  const drop = (id) => {
-    smoothLayout();
-    remove(id);
+  // No LayoutAnimation here: it is app-wide, so it would also animate every card's compare
+  // button as it flips back from "Added" - and on Android that can leave those buttons invisible.
+  // Cancel fades just this card out, then empties the list (which unmounts it).
+  const fade = useRef(new Animated.Value(1)).current;
+  const closing = useRef(false);
+  const cancel = () => {
+    if (closing.current) return;
+    if (isReducedMotion()) return clear();
+    closing.current = true;
+    Animated.timing(fade, { toValue: 0, duration: 200, easing: Easing.in(Easing.quad), useNativeDriver: true }).start(() => clear());
   };
 
   return (
-    <View style={styles.card}>
+    <Animated.View
+      style={[styles.card, { opacity: fade, transform: [{ translateY: fade.interpolate({ inputRange: [0, 1], outputRange: [12, 0] }) }] }]}
+    >
       <View style={styles.head} accessibilityLiveRegion="polite">
         <Animated.View style={{ transform: [{ scale: pop }] }}>
           <LinearGradient colors={gradients.cta} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.count}>
@@ -73,6 +82,16 @@ export default function CompareTray({ onCompare }) {
           <Text style={styles.btnText}>Compare Now</Text>
           <Ionicons name="arrow-forward" size={14} color={colors.white} />
         </PressableScale>
+        <Pressable
+          onPress={cancel}
+          hitSlop={8}
+          style={({ pressed }) => [styles.cancel, pressed && { opacity: 0.6 }]}
+          accessibilityRole="button"
+          accessibilityLabel="Cancel compare"
+          accessibilityHint="Removes all projects from compare"
+        >
+          <Ionicons name="close" size={16} color={brand.deep} />
+        </Pressable>
       </View>
 
       <View style={styles.chips}>
@@ -84,7 +103,7 @@ export default function CompareTray({ onCompare }) {
               <Cover uri={p?.image} style={styles.thumb} iconSize={12} />
               <Text style={styles.chipText} numberOfLines={1}>{name}</Text>
               <Pressable
-                onPress={() => drop(id)}
+                onPress={() => remove(id)}
                 hitSlop={8}
                 style={({ pressed }) => [styles.remove, pressed && { opacity: 0.6 }]}
                 accessibilityRole="button"
@@ -96,7 +115,7 @@ export default function CompareTray({ onCompare }) {
           );
         })}
       </View>
-    </View>
+    </Animated.View>
   );
 }
 
@@ -128,6 +147,7 @@ const styles = StyleSheet.create({
     overflow: "hidden",
   },
   btnText: { fontSize: 12.5, fontWeight: "800", color: colors.white },
+  cancel: { width: 30, height: 30, borderRadius: 15, alignItems: "center", justifyContent: "center", backgroundColor: brand.lavender },
   // Up to three chips share the row equally.
   chips: { flexDirection: "row", gap: 6 },
   chip: {

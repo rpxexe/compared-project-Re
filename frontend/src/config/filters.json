@@ -24,7 +24,10 @@
         { "value": "apartment", "label": "Flat", "icon": "business-outline", "aliases": ["Flats/Apartments", "Flat / Apartment", "Apartment"] },
         { "value": "house_villa", "label": "House / Villa", "icon": "home-outline", "values": ["independent_house", "villa"], "aliases": ["Villa", "Independent House"] },
         { "value": "builder_floor", "label": "Builder floor", "icon": "layers-outline", "aliases": ["Builder Floor"] },
-        { "value": "penthouse", "label": "Penthouse", "icon": "diamond-outline", "aliases": ["Penthouse"] }
+        { "value": "penthouse", "label": "Penthouse", "icon": "diamond-outline", "aliases": ["Penthouse"] },
+        { "value": "commercial", "label": "Commercial", "icon": "briefcase-outline", "values": ["office", "coworking", "shop", "warehouse", "commercial_land"], "aliases": ["Commercial"] },
+        { "value": "plot", "label": "Plot", "icon": "grid-outline", "aliases": ["Plot", "Plots", "Residential Plot"] },
+        { "value": "land", "label": "Land", "icon": "map-outline", "aliases": ["Land", "Agricultural Land"] }
       ]
     },
     "bhk": {
@@ -104,13 +107,17 @@
         "options": [
           { "value": "sqft", "label": "Sq.ft" },
           { "value": "sqm", "label": "Sq.m" },
-          { "value": "sqyd", "label": "Sq.yd" }
+          { "value": "sqyd", "label": "Sq.yd" },
+          { "value": "acre", "label": "Acre" },
+          { "value": "hectare", "label": "Hectare" }
         ]
       },
       "stepsByUnit": {
         "sqft": [300, 500, 750, 1000, 1250, 1500, 2000, 2500, 3000, 4000, 5000, 10000],
         "sqm": [30, 50, 75, 100, 125, 150, 200, 250, 300, 400, 500, 1000],
-        "sqyd": [50, 100, 150, 200, 250, 300, 400, 500, 750, 1000, 2000, 5000]
+        "sqyd": [50, 100, 150, 200, 250, 300, 400, 500, 750, 1000, 2000, 5000],
+        "acre": [0.25, 0.5, 1, 2, 3, 5, 10, 20, 50, 100],
+        "hectare": [0.1, 0.25, 0.5, 1, 2, 5, 10, 20, 50]
       }
     },
     "age": {
@@ -278,7 +285,8 @@
             { "value": "apartment", "label": "Flat", "icon": "business-outline", "aliases": ["Flats/Apartments", "Flat / Apartment", "Apartment"] },
             { "value": "house_villa", "label": "House / Villa", "icon": "home-outline", "values": ["independent_house", "villa"], "aliases": ["Villa", "Independent House"] },
             { "value": "builder_floor", "label": "Builder floor", "icon": "layers-outline", "aliases": ["Builder Floor"] },
-            { "value": "pg", "label": "PG / Co-living", "icon": "bed-outline", "aliases": ["PG", "PG/Co-living", "Co-living"] }
+            { "value": "pg", "label": "PG / Co-living", "icon": "bed-outline", "aliases": ["PG", "PG/Co-living", "Co-living"] },
+            { "value": "commercial", "label": "Commercial", "icon": "briefcase-outline", "values": ["office", "coworking", "shop", "warehouse", "commercial_land"], "aliases": ["Commercial"] }
           ]
         },
         { "id": "bhk", "quick": true },
@@ -305,7 +313,16 @@
       "icon": "business-outline",
       "filters": [
         { "id": "budget", "quick": true },
-        { "id": "propertyType", "quick": true },
+        {
+          "id": "propertyType",
+          "quick": true,
+          "options": [
+            { "value": "apartment", "label": "Flat", "icon": "business-outline", "aliases": ["Flats/Apartments", "Flat / Apartment", "Apartment"] },
+            { "value": "house_villa", "label": "House / Villa", "icon": "home-outline", "values": ["independent_house", "villa"], "aliases": ["Villa", "Independent House"] },
+            { "value": "builder_floor", "label": "Builder floor", "icon": "layers-outline", "aliases": ["Builder Floor"] },
+            { "value": "penthouse", "label": "Penthouse", "icon": "diamond-outline", "aliases": ["Penthouse"] }
+          ]
+        },
         { "id": "bhk", "quick": true },
         {
           "id": "possession",
@@ -376,7 +393,9 @@
         { "id": "area", "quick": true, "section": "main", "unit": { "queryKey": "areaUnit", "default": "sqyd", "options": [
           { "value": "sqyd", "label": "Sq.yd" },
           { "value": "sqft", "label": "Sq.ft" },
-          { "value": "sqm", "label": "Sq.m" }
+          { "value": "sqm", "label": "Sq.m" },
+          { "value": "acre", "label": "Acre" },
+          { "value": "hectare", "label": "Hectare" }
         ] } },
         { "id": "postedBy", "quick": true },
         "rera", "withPhotos", "postedSince", "sort"

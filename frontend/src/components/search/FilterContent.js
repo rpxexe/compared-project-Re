@@ -25,7 +25,7 @@ export default function FilterContent({ category, filters, draft, count, transit
 
   let body;
   if (category.panel === "location") {
-    body = <LocationFilter city={query.city} locality={query.locality} onChange={onQuery} />;
+    body = <LocationFilter city={query.city} locality={query.locality} search={query.search} onChange={onQuery} />;
   } else if (category.panel === "developer") {
     body = <DeveloperFilter value={query.developer} onChange={(developer) => onQuery({ developer })} />;
   } else if (category.panel === "project") {

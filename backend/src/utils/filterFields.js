@@ -4,15 +4,16 @@
 // Bump VERSION whenever compute() changes so the sync job rewrites every listing.
 const { numericValue, firstString } = require('./property');
 
-const VERSION = 2;
+const VERSION = 4;
 const FIELD = 'filterFields';
 
-const AREA_TO_SQFT = { sqft: 1, sqm: 10.7639, sqyd: 9, acre: 43560 };
+const AREA_TO_SQFT = { sqft: 1, sqm: 10.7639, sqyd: 9, acre: 43560, hectare: 107639 };
 function areaUnit(raw) {
   const u = String(raw || 'sqft').toLowerCase().replace(/[\s.]/g, '');
   if (/^(sqm|sqmt|sqmeter|sqmetre|m2)/.test(u)) return 'sqm';
   if (/^(sqyd|sqyard|sqyds|gaj)/.test(u)) return 'sqyd';
   if (/^acre/.test(u)) return 'acre';
+  if (/^(hectare|ha$)/.test(u)) return 'hectare';
   return 'sqft';
 }
 const toSqft = (value, unit) => (value > 0 ? Math.round(value * AREA_TO_SQFT[areaUnit(unit)]) : null);
@@ -21,7 +22,8 @@ const toSqft = (value, unit) => (value > 0 ? Math.round(value * AREA_TO_SQFT[are
 const TYPES = [
   ['pg', /\bpg\b|paying\s*guest|co-?living|hostel/i, 'residential'],
   ['commercial_land', /commercial\s*(land|plot)|industrial\s*(land|plot)/i, 'commercial'],
-  ['plot', /plot|\bland\b/i, 'land'],
+  ['plot', /plot/i, 'land'],
+  ['land', /\bland\b/i, 'land'],
   ['penthouse', /penthouse/i, 'residential'],
   ['builder_floor', /builder\s*floor/i, 'residential'],
   ['warehouse', /warehouse|godown|industrial/i, 'commercial'],
@@ -37,7 +39,7 @@ function typeOf(p) {
   const hit = TYPES.find(([, re]) => re.test(raw));
   const commercialGroup = /comm?er/i.test(firstString(p.propertyGroup, p.category));
   // Land filed under the Commercial group is commercial land, not a residential plot.
-  if (hit && hit[0] === 'plot' && commercialGroup) return { type: 'commercial_land', segment: 'commercial' };
+  if (hit && hit[2] === 'land' && commercialGroup) return { type: 'commercial_land', segment: 'commercial' };
   if (hit) return { type: hit[0], segment: hit[2] };
   return { type: raw ? 'other' : null, segment: commercialGroup || /comm?er/i.test(raw) ? 'commercial' : 'residential' };
 }
@@ -218,6 +220,7 @@ function sameFields(a, b) {
 
 module.exports = {
   VERSION, FIELD, AMENITY_KEYS: AMENITIES.map(([k]) => k), TYPE_KEYS: TYPES.map(([k]) => k).concat('other'),
+  TYPE_SEGMENTS: Object.fromEntries(TYPES.map(([k, , s]) => [k, s])),
   FACINGS, AVAILABILITY_KEYS: AVAILABILITY.map(([k]) => k),
   compute, withFilterFields, sameFields, possessionKey, furnishingKey, availableByKey, areaUnit, toSqft, AREA_TO_SQFT,
 };
