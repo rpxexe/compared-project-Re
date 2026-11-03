@@ -166,13 +166,22 @@ const FeaturedCard = React.memo(function FeaturedCard({ p, width, onOpen }) {
               e?.stopPropagation?.();
               toggle(p.id);
             }}
-            style={[styles.fCompare, inCompare && styles.fCompareOn]}
+            style={styles.fCompare}
             accessibilityRole="button"
             accessibilityLabel={inCompare ? `Remove ${name} from compare` : `Compare ${name}`}
           >
-            {inCompare ? null : <LinearGradient colors={gradients.cta} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={StyleSheet.absoluteFill} />}
-            <Ionicons name={inCompare ? "checkmark-circle" : "swap-horizontal"} size={15} color={inCompare ? brand.violet : colors.white} />
-            <Text style={[styles.fCompareText, inCompare && { color: brand.violet }]}>{inCompare ? "Added to Compare" : "Compare Now"}</Text>
+            {/* Only the fill changes between states (Added = a flat lavender "gradient"); the
+                border stays. Dropping the border when an item left compare broke the button's
+                clipping on Android and the whole button went blank. */}
+            <LinearGradient
+              colors={inCompare ? [brand.lavender, brand.lavender] : gradients.cta}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
+              style={styles.fCompareFill}
+            >
+              <Ionicons name={inCompare ? "checkmark-circle" : "swap-horizontal"} size={15} color={inCompare ? brand.violet : colors.white} />
+              <Text style={[styles.fCompareText, inCompare && { color: brand.violet }]}>{inCompare ? "Added to Compare" : "Compare Now"}</Text>
+            </LinearGradient>
           </PressableScale>
           <View style={styles.fPill} accessibilityElementsHidden importantForAccessibility="no">
             <Ionicons name="arrow-forward" size={16} color={brand.ink} />
@@ -741,8 +750,9 @@ const styles = StyleSheet.create({
   fPrice: { fontSize: 13, fontWeight: "800", color: brand.ink },
   fFoot: { flexDirection: "row", alignItems: "center", gap: 10, marginTop: 10, minHeight: 18 },
   fActions: { flexDirection: "row", alignItems: "center", gap: 8, marginTop: 12 },
-  fCompare: { flex: 1, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6, height: 38, borderRadius: radius.pill, overflow: "hidden" },
-  fCompareOn: { backgroundColor: brand.lavender, borderWidth: 1.2, borderColor: brand.violet },
+  // The border is permanent (violet blends into the gradient); never toggle it - see FeaturedCard.
+  fCompare: { flex: 1, height: 38, borderRadius: radius.pill, overflow: "hidden", borderWidth: 1.2, borderColor: brand.violet },
+  fCompareFill: { flex: 1, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6 },
   fCompareText: { fontSize: 12.5, fontWeight: "800", color: colors.white },
   rera: {
     position: "absolute", top: 8, left: 8, flexDirection: "row", alignItems: "center", gap: 5,

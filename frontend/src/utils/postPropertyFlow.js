@@ -50,6 +50,8 @@ export const AREA_UNITS = [
   { label: "Sq.Ft", value: "sqft", toSqft: 1 },
   { label: "Sq.Yd", value: "sqyd", toSqft: 9 },
   { label: "Sq.M", value: "sqm", toSqft: 10.7639 },
+  { label: "Acre", value: "acre", toSqft: 43560 },
+  { label: "Hectare", value: "hectare", toSqft: 107639 },
 ];
 // Amenities step, in sections. `field` is where choices are stored: "amenities" and
 // "facilities" are lists (both shown on the listing page), "grade" is a single choice.

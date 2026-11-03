@@ -156,6 +156,10 @@ function RangeSelect({ filter, value, onChange, title }) {
   const bare = (n) => (filter.format === "inr" ? inrWords(n) : filter.format === "floor" ? formatStep(filter, n) : Number(n).toLocaleString("en-IN"));
   const fmt = (n) => `${prefix}${bare(n)}`;
   const emit = (patch) => onChange({ min, max, unit, ...patch });
+  // Budgets end with an open "20+ Cr" (no upper limit, like the slider's far right) instead of a
+  // "No max" at the top.
+  const openMax = filter.format === "inr";
+  const noMax = { key: "none", label: openMax ? `${fmt(steps[steps.length - 1])}+` : "No max", on: max == null, pick: () => emit({ max: null }) };
 
   const list =
     open === "unit"
@@ -163,7 +167,10 @@ function RangeSelect({ filter, value, onChange, title }) {
       : open === "min"
         ? [{ key: "none", label: "No min", on: min == null, pick: () => emit({ min: null }) }, ...steps.filter((s) => max == null || s < max).map((s) => ({ key: s, label: fmt(s), on: s === min, pick: () => emit({ min: s }) }))]
         : open === "max"
-          ? [{ key: "none", label: "No max", on: max == null, pick: () => emit({ max: null }) }, ...steps.filter((s) => min == null || s > min).map((s) => ({ key: s, label: fmt(s), on: s === max, pick: () => emit({ max: s }) }))]
+          ? (() => {
+              const capped = steps.filter((s) => min == null || s > min).map((s) => ({ key: s, label: fmt(s), on: s === max, pick: () => emit({ max: s }) }));
+              return openMax ? [...capped, noMax] : [noMax, ...capped];
+            })()
           : [];
 
   return (

@@ -9,29 +9,54 @@ import Text, { AppTextInput as TextInput } from "../AppText";
 
 // City / locality picker. Suggestions are real locality + city pairs from /properties/locations
 // (most listings first); picking one sets both. "Use my current location" does the same from GPS.
-export default function LocationFilter({ city, locality, onChange }) {
+// With nothing typed here, the list follows the rest of the search: localities of the picked city,
+// narrowed by the screen's search text (`search`). A scope that matches nothing is dropped - the
+// search text is often a project name - so there is always something to pick.
+export default function LocationFilter({ city, locality, search = "", onChange }) {
   const { ensureLocation } = useLocationAccess();
   const [text, setText] = useState("");
   const [items, setItems] = useState(null);
+  const [scope, setScope] = useState({}); // the { city, search } the shown list was narrowed by
   const [loading, setLoading] = useState(false);
   const [locating, setLocating] = useState(false);
   const [note, setNote] = useState("");
 
+  const typed = text.trim();
+  const searched = search.trim();
   useEffect(() => {
     let alive = true;
     setLoading(true);
-    const t = setTimeout(() => {
-      api
-        .locations({ search: text.trim(), limit: 20 })
-        .then((r) => alive && setItems(r?.locations || []))
-        .catch(() => alive && setItems([]))
-        .finally(() => alive && setLoading(false));
-    }, text ? 250 : 0);
+    // Narrowest first; each later attempt drops a scope.
+    const attempts = [];
+    if (typed) attempts.push({ search: typed });
+    else {
+      if (searched) attempts.push({ city, search: searched });
+      if (city) attempts.push({ city });
+      attempts.push({});
+    }
+    const t = setTimeout(async () => {
+      let found = [];
+      let used = {};
+      try {
+        for (const s of attempts) {
+          const r = await api.locations({ ...s, limit: 20 });
+          found = r?.locations || [];
+          used = s;
+          if (found.length || !alive) break;
+        }
+      } catch {
+        found = [];
+      }
+      if (!alive) return;
+      setItems(found);
+      setScope(typed ? {} : used);
+      setLoading(false);
+    }, typed || searched ? 250 : 0);
     return () => {
       alive = false;
       clearTimeout(t);
     };
-  }, [text]);
+  }, [typed, city, searched]);
 
   const locate = async () => {
     if (!(await ensureLocation("Allow location to search for properties near you."))) return;
@@ -85,7 +110,7 @@ export default function LocationFilter({ city, locality, onChange }) {
       </Pressable>
       {note ? <Text style={styles.note}>{note}</Text> : null}
 
-      <Text style={styles.section}>{text.trim() ? "Matching locations" : "Popular locations"}</Text>
+      <Text style={styles.section}>{sectionTitle(typed, scope)}</Text>
       {items == null || (loading && !items.length) ? (
         <ActivityIndicator color={brand.violet} style={{ marginVertical: 16 }} />
       ) : items.length ? (
@@ -104,15 +129,21 @@ export default function LocationFilter({ city, locality, onChange }) {
                 <Text style={[styles.rowTitle, on && { color: brand.deep }]} numberOfLines={1}>{l.locality || l.city}</Text>
                 {l.locality && l.city ? <Text style={styles.rowSub} numberOfLines={1}>{l.city}</Text> : null}
               </View>
-              {on ? <Ionicons name="checkmark-circle" size={20} color={brand.violet} /> : l.count ? <Text style={styles.count}>{l.count}</Text> : null}
+              {on ? <Ionicons name="checkmark-circle" size={20} color={brand.violet} /> : null}
             </Pressable>
           );
         })
       ) : (
-        <Text style={styles.note}>No locations match "{text.trim()}".</Text>
+        <Text style={styles.note}>{typed ? `No locations match "${typed}".` : "No locations found."}</Text>
       )}
     </View>
   );
+}
+
+function sectionTitle(typed, { city, search }) {
+  if (typed) return "Matching locations";
+  if (search) return city ? `Matching "${search}" in ${city}` : `Matching "${search}"`;
+  return city ? `Popular in ${city}` : "Popular locations";
 }
 
 const styles = StyleSheet.create({
@@ -129,5 +160,4 @@ const styles = StyleSheet.create({
   rowOn: { backgroundColor: brand.lavender },
   rowTitle: { fontSize: 14.5, fontWeight: "700", color: colors.ink },
   rowSub: { fontSize: 12.5, color: colors.muted, marginTop: 1 },
-  count: { fontSize: 12, fontWeight: "700", color: colors.muted },
 });

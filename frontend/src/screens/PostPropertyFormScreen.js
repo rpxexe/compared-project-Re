@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
-import { ActivityIndicator, Alert, Animated, BackHandler, Easing, Image, Keyboard, KeyboardAvoidingView, Pressable, ScrollView, StyleSheet, View } from "react-native";
+import { ActivityIndicator, Animated, BackHandler, Easing, Image, Keyboard, KeyboardAvoidingView, Pressable, ScrollView, StyleSheet, View } from "react-native";
 import { StatusBar } from "expo-status-bar";
 import { ErrorState, LoadingState } from "../components/StateViews";
 import * as ImagePicker from "expo-image-picker";
@@ -24,8 +24,7 @@ import {
   PROPERTY_AGES, RENT_AVAILABILITY, SALE_POSSESSION, STEPS, availabilityText, buildPayload, firstInvalidStep, formFromListing,
   floorText, maskDate, needsBhk, photoRoomsFor, priceLabel, sanitizeForType, sectionsFor, showsAge, showsBuildingFields, showsFloor, typeLabel, typesFor, validateStep,
 } from "../utils/postPropertyFlow";
-import { LinearGradient } from "expo-linear-gradient";
-import { brand, colors, gradients } from "../theme";
+import { brand, colors } from "../theme";
 import Text from "../components/AppText";
 
 // TESTING: a step key ("purpose", "amenities", "details", "review") opens the form on that step
@@ -33,24 +32,6 @@ import Text from "../components/AppText";
 const ONLY_STEP = null;
 const STEP_LIST = ONLY_STEP ? STEPS.filter((x) => x.key === ONLY_STEP) : STEPS;
 const TEST_FORM = { listingType: "sale", category: "residential", propertyType: "Flats/Apartments", furnishing: "Furnished" };
-
-// Toast titles for the AI writer's errors (codes from the server, plus no-network / timeout).
-const AI_ERROR_TITLES = {
-  AI_BUSY: "AI is busy right now",
-  AI_DAILY_LIMIT: "Daily AI limit reached",
-  AI_NOT_CONFIGURED: "AI writer unavailable",
-  AI_NEEDS_DETAILS: "A few details needed",
-  AI_FAILED: "Couldn't write a description",
-};
-function aiErrorToast(e) {
-  if (e?.network) {
-    return /too long/i.test(e.message)
-      ? { title: "AI took too long", message: "Writing took longer than expected. Please try again." }
-      : { title: "No connection", message: "Couldn't reach the server. Check your internet connection and try again." };
-  }
-  if (e?.status === 429 && !e.code) return { title: "Slow down a little", message: e.message };
-  return { title: AI_ERROR_TITLES[e?.code] || "Couldn't write a description", message: e?.message || "Please try again, or write it yourself." };
-}
 
 // Which step owns a backend field error, so server-side validation can send the user to the right place.
 const FIELD_STEP = {
@@ -137,8 +118,6 @@ function Wizard({ navigation, initial, editId }) {
   const [room, setRoom] = useState("");
   const [sectionKey, setSectionKey] = useState(""); // Amenities tab on show; the first one by default
   const [locating, setLocating] = useState(false);
-  const [writing, setWriting] = useState(false); // AI description request in flight
-  const [beforeAi, setBeforeAi] = useState(null); // description the AI replaced, for Undo
   // City / locality suggestions: popular cities plus every city already listed, and localities
   // from existing listings looked up as the user types.
   const [locFocus, setLocFocus] = useState(null); // "city" | "locality" | null
@@ -330,55 +309,6 @@ function Wizard({ navigation, initial, editId }) {
     }
     setUploading((u) => ({ ...u, photos: false }));
     if (failed) toast.show(`${failed} photo${failed > 1 ? "s" : ""} could not be uploaded`, "error");
-  };
-
-  // Asks the server (Gemini) to write the description from everything filled in so far. An
-  // existing description is sent as a draft to improve, after the user agrees to replace it.
-  const writeWithAi = (confirmed = false) => {
-    if (writing) return;
-    Keyboard.dismiss();
-    const draft = form.description.trim();
-    if (draft.length >= 10 && !confirmed) {
-      Alert.alert("Rewrite your description?", "The AI will use your text as a starting point and replace it. You can undo this.", [
-        { text: "Cancel", style: "cancel" },
-        { text: "Rewrite", onPress: () => writeWithAi(true) },
-      ]);
-      return;
-    }
-    if (!token) return askLogin();
-    const priceNum = Number(form.price);
-    setWriting(true);
-    api.describeProperty({
-      listingType: form.listingType,
-      category: labelOf(CATEGORY_OPTIONS, form.category),
-      propertyType: typeLabel(form.propertyType),
-      bhk: needsBhk(form.category, form.propertyType) ? form.bhk : "",
-      area: form.area ? `${form.area} ${labelOf(AREA_UNITS, form.areaUnit)}` : "",
-      city: form.city.trim(),
-      locality: form.locality.trim(),
-      price: priceNum > 0 ? `${formatInr(priceNum)}${form.listingType === "rent" ? " per month" : ""}` : "",
-      possession: availabilityText(form),
-      age: form.age,
-      floor: showsFloor(form.propertyType) ? floorText(form) : "",
-      totalFloors: building ? form.totalFloors : "",
-      bathrooms: building ? form.bathrooms : "",
-      furnishing: building ? form.furnishing : "",
-      facing: form.facing,
-      parking: form.parking,
-      grade: form.grade,
-      amenities: form.amenities,
-      facilities: form.facilities,
-      draft,
-    }).then((res) => {
-      if (!res?.description) throw new Error("The AI couldn't write a description. Please try again.");
-      setBeforeAi(form.description);
-      set("description", res.description);
-      toast.show("Description written. Read it through and edit anything that's off.");
-    }).catch((e) => {
-      if (e?.signInRequired) return; // the sign-in dialog is already open
-      const { title, message } = aiErrorToast(e);
-      toast.show(message, "error", { title });
-    }).finally(() => setWriting(false));
   };
 
   const submit = async () => {
@@ -740,27 +670,9 @@ function Wizard({ navigation, initial, editId }) {
                 ) : null}
 
                 <FieldLabel icon="document-text-outline" required style={s.gapLg} right={<Text style={s.count}>{form.description.length}/2000</Text>}>Property description</FieldLabel>
-                {/* Gemini writes it from the details entered so far; the owner can edit or undo. */}
-                <View style={s.aiRow}>
-                  <PressableScale to={0.96} onPress={() => writeWithAi()} disabled={writing} style={s.aiBtn}
-                    accessibilityRole="button" accessibilityLabel="Write description with AI" accessibilityState={{ busy: writing }}>
-                    <LinearGradient colors={gradients.cta} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={StyleSheet.absoluteFill} />
-                    {writing ? <ActivityIndicator size="small" color="#fff" /> : <Ionicons name="sparkles" size={15} color="#fff" />}
-                    <Text style={s.aiBtnText}>{writing ? "Writing…" : form.description.trim() ? "Rewrite with AI" : "Write with AI"}</Text>
-                  </PressableScale>
-                  {beforeAi !== null && !writing ? (
-                    <Appear scale>
-                      <Pressable onPress={() => { set("description", beforeAi); setBeforeAi(null); }} hitSlop={8} style={s.aiUndo} accessibilityRole="button">
-                        <Ionicons name="arrow-undo-outline" size={14} color={brand.violet} />
-                        <Text style={s.aiUndoText}>Undo</Text>
-                      </Pressable>
-                    </Appear>
-                  ) : null}
-                </View>
-                <TextField value={form.description} onChangeText={(v) => { set("description", v); if (beforeAi !== null) setBeforeAi(null); }}
-                  placeholder={writing ? "Writing a description from your details…" : "Describe the property, nearby facilities, highlights... or tap Write with AI"}
-                  multiline maxLength={2000} accessibilityLabel="Property description" error={errors.description} editable={!writing} />
-                <Text style={s.aiNote}>AI uses only the details you've entered. Please check it before submitting.</Text>
+                <TextField value={form.description} onChangeText={(v) => set("description", v)}
+                  placeholder="Describe the property, nearby facilities, highlights..."
+                  multiline maxLength={2000} accessibilityLabel="Property description" error={errors.description} />
               </Card>
             ) : null}
 
@@ -871,12 +783,6 @@ const s = StyleSheet.create({
   count: { fontSize: 12, fontWeight: "600", color: brand.inkSoft },
   testBar: { marginBottom: 12, borderStyle: "dashed", borderColor: "#C9B5F5", backgroundColor: "#FCFAFF" },
   testTitle: { fontSize: 12, fontWeight: "800", color: brand.violet, marginBottom: 8, textTransform: "uppercase", letterSpacing: 0.4 },
-  aiRow: { flexDirection: "row", alignItems: "center", gap: 12, marginBottom: 10 },
-  aiBtn: { flexDirection: "row", alignItems: "center", gap: 7, minHeight: 38, paddingHorizontal: 16, borderRadius: 19, overflow: "hidden" },
-  aiBtnText: { fontSize: 13, fontWeight: "800", color: "#fff" },
-  aiUndo: { flexDirection: "row", alignItems: "center", gap: 4, minHeight: 32 },
-  aiUndoText: { fontSize: 13, fontWeight: "800", color: brand.violet },
-  aiNote: { fontSize: 11.5, color: brand.inkSoft, marginTop: 6 },
   tabsWrap: { marginHorizontal: -16, marginBottom: 12 },
   tabs: { paddingHorizontal: 16, gap: 8 },
   tab: { flexDirection: "row", alignItems: "center", gap: 6, minHeight: 40, paddingHorizontal: 14, borderRadius: 20, borderWidth: 1.2, borderColor: LINE, backgroundColor: "#fff" },

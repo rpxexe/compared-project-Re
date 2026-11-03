@@ -47,6 +47,8 @@ test.describe('filterFields normaliser', () => {
     assert.equal(compute({ propertyType: 'Independent House' }).type, 'independent_house');
     const land = compute({ propertyType: 'Land', propertyGroup: 'Commercial' });
     assert.deepEqual([land.type, land.segment], ['commercial_land', 'commercial']);
+    assert.deepEqual(Object.values(compute({ propertyType: 'Agricultural Land' })).slice(2, 4), ['land', 'land'], 'land is its own type');
+    assert.equal(compute({ propertyType: 'Residential Plot' }).type, 'plot');
   });
 
   test('missing or junk values stay null instead of being invented', () => {
@@ -102,6 +104,13 @@ test.describe('filter API', () => {
     assert.equal((await q('context=rent_residential&propertyTypes=pg')).items[0].title, 'Girls PG Koregaon');
   });
 
+  test('commercial and plot types widen the buy slice to their segment', async () => {
+    assert.deepEqual(titles(await q('context=buy_residential&propertyTypes=office,shop')), ['Prime Office Tower']);
+    assert.deepEqual(titles(await q('context=buy_residential&propertyTypes=plot,land')), ['Shoreline Plot']);
+    assert.deepEqual(titles(await q('context=buy_residential&propertyTypes=apartment,plot')), ['Bay View Residency', 'Orchid Heights', 'Shoreline Plot']);
+    assert.equal((await q('context=rent_residential&propertyTypes=office')).total, 0, 'still pinned to the rent deal');
+  });
+
   test('multi-select, ranges and units', async () => {
     assert.equal((await q('bhk=1,3')).total, 2);
     assert.equal((await q('bhk=4+')).total, 1);
@@ -118,6 +127,9 @@ test.describe('filter API', () => {
     assert.equal((await q('minArea=1500&areaUnit=sqft&context=buy_residential')).total, 2);
     assert.equal((await q('minArea=140&maxArea=160&areaUnit=sqm')).items[0].title, 'Bay View Residency');
     assert.equal((await q('minArea=150&areaUnit=sqyd&context=plots')).total, 1);
+    assert.equal((await q('minArea=0.025&maxArea=0.05&areaUnit=acre&context=plots')).total, 1, '1800 sq.ft is about 0.04 acre');
+    assert.equal((await q('maxArea=0.01&areaUnit=hectare&context=plots')).total, 0, '1800 sq.ft is about 0.017 hectare');
+    assert.equal(compute({ area: { value: 2, unit: 'Hectares' } }).areaSqft, 215278);
     assert.equal((await q('age=new')).total, 2);
     assert.equal((await q('floor=6-10')).items[0].title, 'Orchid Heights');
     assert.equal((await q('floor=ground,11-20')).items[0].title, 'Bay View Residency');

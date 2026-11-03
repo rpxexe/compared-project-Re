@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "672936097537",
+    "project_id": "compareproject-dev",
+    "storage_bucket": "compareproject-dev.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:672936097537:android:050b9c6f77dd5b9d4a0d00",
+        "android_client_info": {
+          "package_name": "com.compareproject.mobile"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAIKBI3DJ3nsrsmGi421FiM48WgOEjjzFU"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

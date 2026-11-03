@@ -42,7 +42,9 @@ function sharedScreens(except) {
     ["SearchFilters", SearchFiltersScreen, { animation: "slide_from_bottom" }],
     ["NewProject", NewProjectScreen],
     ["Notification", NotificationScreen],
-    ["Location", LocationScreen, { animation: "slide_from_bottom" }],
+    // Rises a little while fading in, so the gradient header settles in place instead of sliding the
+    // whole sheet up from the bottom.
+    ["Location", LocationScreen, { animation: "fade_from_bottom" }],
     ["PrePostPropertyType", PrePostPropertyTypeScreen],
     ["PostPropertyForm", PostPropertyFormScreen],
     ["PropertyDetails", PropertyDetailsScreen, { animation: "slide_from_bottom" }],

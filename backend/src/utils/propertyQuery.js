@@ -1,5 +1,5 @@
 const { escapeRegex, str } = require('./validate');
-const { FIELD, AMENITY_KEYS, TYPE_KEYS, FACINGS, AVAILABILITY_KEYS, possessionKey, furnishingKey, toSqft } = require('./filterFields');
+const { FIELD, AMENITY_KEYS, TYPE_KEYS, TYPE_SEGMENTS, FACINGS, AVAILABILITY_KEYS, possessionKey, furnishingKey, toSqft } = require('./filterFields');
 
 const STATUS_FIELDS = ['possessionStatus', 'possession', 'status'];
 const TYPE_FIELDS = ['propertyType', 'propertyGroup', 'type'];
@@ -40,7 +40,7 @@ const FURNISHING = ['furnished', 'semi', 'unfurnished'];
 const POSSESSION = ['ready', 'under_construction', 'new_launch', 'upcoming'];
 const POSTED_BY = ['owner', 'agent', 'builder'];
 const AGES = ['new', '0-1', '1-5', '5-10', '10+'];
-const AREA_UNITS = ['sqft', 'sqm', 'sqyd', 'acre'];
+const AREA_UNITS = ['sqft', 'sqm', 'sqyd', 'acre', 'hectare'];
 const FLOORS = { ground: [0, 0], '1-5': [1, 5], '6-10': [6, 10], '11-20': [11, 20], '20+': [21, Infinity] };
 const POSTED_SINCE = { '1d': 1, '7d': 7, '30d': 30, '90d': 90, '180d': 180 };
 
@@ -102,20 +102,24 @@ function buildPropertyFilter(q = {}, { includeHidden = false, now = Date.now() }
   const ctx = CONTEXTS[str(q.context, 30)];
   const deal = ['sale', 'rent'].includes(str(q.deal, 6)) ? str(q.deal, 6) : ctx?.deal;
   if (deal) and.push({ [ff('deal')]: deal });
-  if (ctx) and.push({ [ff('segment')]: ctx.segment });
+  const types = list(q.propertyTypes, TYPE_KEYS);
+  // Picking a type from another segment (Commercial or Plot under Buy) widens the slice to it.
+  if (ctx) {
+    const segments = [...new Set([ctx.segment, ...types.map((t) => TYPE_SEGMENTS[t]).filter(Boolean)])];
+    and.push({ [ff('segment')]: segments.length === 1 ? ctx.segment : { $in: segments } });
+  }
   if (ctx?.possession) and.push({ [ff('possession')]: { $in: ctx.possession } });
 
   // Free-text type (Home shortcuts, older links) vs canonical keys from the filter screen.
   const type = str(q.propertyType, 60);
   if (type) and.push(anyField(TYPE_FIELDS, re(type)));
-  const types = list(q.propertyTypes, TYPE_KEYS);
   if (types.length) and.push({ [ff('type')]: { $in: types } });
 
   push(countCondition(ff('bhk'), q.bhk));
   push(countCondition(ff('bathrooms'), q.bathrooms));
   push(range(ff('price'), num(q.minPrice), num(q.maxPrice)));
 
-  const unit = AREA_UNITS.includes(str(q.areaUnit, 6)) ? str(q.areaUnit, 6) : 'sqft';
+  const unit = AREA_UNITS.includes(str(q.areaUnit, 8)) ? str(q.areaUnit, 8) : 'sqft';
   push(range(ff('areaSqft'), toSqft(num(q.minArea, 10), unit), toSqft(num(q.maxArea, 10), unit)));
 
   const furnishing = list(q.furnishing, FURNISHING, (v) => (FURNISHING.includes(v) ? v : furnishingKey(v)));
