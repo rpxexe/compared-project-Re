@@ -280,7 +280,9 @@ export default function PropertyDetailsScreen({ navigation, route }) {
   const toast = useToast();
   const cmp = useCompare();
   const saved = useSaved();
-  const { user, token, openLoginPrompt } = useAuth();
+  // Developers only open this to preview their own listings: no saving, comparing, enquiring
+  // or view tracking.
+  const { user, token, isDeveloper, openLoginPrompt } = useAuth();
   const { data, loading, error, reload } = useApi(() => api.property(id), [id]);
   const p = data?.property || preview;
   // Feeds the "Viewed" count on the Profile dashboard and the user's preferences; signed-in
@@ -288,7 +290,7 @@ export default function PropertyDetailsScreen({ navigation, route }) {
   const viewedId = useRef(null);
   useEffect(() => {
     const prop = data?.property;
-    if (!prop || viewedId.current === prop.id) return;
+    if (!prop || isDeveloper || viewedId.current === prop.id) return;
     viewedId.current = prop.id;
     recordPropertyView(prop);
     if (token) api.recordView(prop.id).catch(() => {});
@@ -462,7 +464,7 @@ export default function PropertyDetailsScreen({ navigation, route }) {
       <StatusBar style={solid ? "dark" : "light"} />
       <Animated.ScrollView
         showsVerticalScrollIndicator={false}
-        contentContainerStyle={{ paddingBottom: 96 + tabBar + Math.max(inset, 10) }}
+        contentContainerStyle={{ paddingBottom: (isDeveloper ? 24 : 96) + tabBar + Math.max(inset, 10) }}
         onScroll={onScroll}
         scrollEventThrottle={16}
       >
@@ -717,9 +719,11 @@ export default function PropertyDetailsScreen({ navigation, route }) {
           <Ionicons name="arrow-back" size={21} color={brand.ink} />
         </PressableScale>
         <View style={{ flexDirection: "row", gap: 10 }}>
-          <View style={styles.round}>
-            <HeartButton id={p.id} size={19} floating={false} />
-          </View>
+          {isDeveloper ? null : (
+            <View style={styles.round}>
+              <HeartButton id={p.id} size={19} floating={false} />
+            </View>
+          )}
           <PressableScale to={0.88} onPress={share} style={styles.round} accessibilityRole="button" accessibilityLabel="Share">
             <Ionicons name="share-social-outline" size={19} color={brand.ink} />
           </PressableScale>
@@ -727,6 +731,7 @@ export default function PropertyDetailsScreen({ navigation, route }) {
       </View>
 
       {/* Sits above whatever the bottom bar reports (the compare card on inner screens), else the system bar. */}
+      {isDeveloper ? null : (
       <Animated.View style={[styles.cta, ctaEnter, { bottom: tabBar, paddingBottom: tabBar ? 12 : Math.max(inset, 10) + 4 }]}>
         <PressableScale
           onPress={() => cmp.toggle(p.id)}
@@ -746,6 +751,7 @@ export default function PropertyDetailsScreen({ navigation, route }) {
           <Text style={styles.contactText}>Send Enquiry</Text>
         </PressableScale>
       </Animated.View>
+      )}
 
       <LoanCalculatorSheet visible={loanOpen} onClose={() => setLoanOpen(false)} initialAmount={p.priceValue} />
 

@@ -9,8 +9,6 @@ const { requirePropertyId, propertyIdMatch } = require("../utils/validate");
 const { withFilterFields } = require("../utils/filterFields");
 const { LOCKED, editableFromDoc, lockedChanges, isOwnManual, listingFields } = require("../utils/ownListing");
 const { removeListing } = require("../utils/listingCleanup");
-const { getSettings } = require("../utils/crmSettings");
-const { notifyPending } = require("./postProperty-controller");
 const { z, validate, text, oneOf } = require("../utils/zod");
 
 // One of the signed-in user's own app-posted listings, or 404 (also for someone else's).
@@ -36,7 +34,7 @@ const getOwnProperty = async (req, res) => {
 };
 
 // PATCH /users/me/properties/:id – edit everything except location, BHK, type and category.
-// The edited listing goes back for review unless the poster is staff (or auto-approve is on).
+// Edits go live straight away, like new listings.
 const updateOwnProperty = async (req, res) => {
   const doc = await findOwnListing(req);
   const patch = req.body && typeof req.body === "object" ? req.body : {};
@@ -48,18 +46,16 @@ const updateOwnProperty = async (req, res) => {
 
   // Same validation as posting, run on the stored listing with the edits applied.
   const { parse } = require("../routes/postProperty");
-  const { d, opt, errors } = parse({ ...editableFromDoc(doc), ...patch, ...Object.fromEntries(LOCKED.map((k) => [k, editableFromDoc(doc)[k]])) });
+  const { d, opt, errors } = parse({ ...editableFromDoc(doc), ...patch, ...Object.fromEntries(LOCKED.map((k) => [k, editableFromDoc(doc)[k]])) }, req.user);
   if (Object.keys(errors).length) throw bad("Please fix the highlighted fields", { errors });
 
-  const staff = ["admin", "superadmin"].includes(req.user.role);
-  const approvalStatus = staff || (await getSettings()).autoApprovePosts ? "approved" : "pending";
+  const approvalStatus = "approved";
   const set = { ...listingFields(d, opt), approvalStatus, updatedAt: new Date() };
   const { filterFields } = withFilterFields({ ...doc, ...set });
   await Property.updateOne({ _id: doc._id }, { $set: { ...set, filterFields }, $unset: { rejectionReason: "" } });
-  if (approvalStatus === "pending") await notifyPending(doc._id, d.title);
   res.json({
     property: { id: String(doc._id), title: d.title, approvalStatus },
-    message: approvalStatus === "approved" ? "Changes saved." : "Changes saved. Your listing will be live again once reviewed.",
+    message: "Changes saved.",
   });
 };
 

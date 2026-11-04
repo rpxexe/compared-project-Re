@@ -21,7 +21,7 @@ function publicSignupUser(user) {
     phone: user.phone || "",
     email: user.email || "",
     role: user.role || "user",
-    purpose: user.purpose || "owner",
+    purpose: user.purpose || (user.role === "developer" ? "developer" : "owner"),
     city: user.city || "Mumbai",
   };
 }
@@ -57,7 +57,7 @@ const signup = async (req, res) => {
     phone,
     email,
     password: passwordHash,
-    role: "user",
+    role: "developer",
     isActive: true,
   });
   res.status(201).json({
@@ -82,11 +82,15 @@ const signin = async (req, res) => {
   if (user.isActive === false)
     throw new AppError(403, "This account has been disabled. Contact support.");
 
-  await SignUpUser.updateOne({ _id: user._id }, { $set: { lastLoginAt: new Date() } });
+  // Email/password is the app's developer sign-in (customers use phone OTP), so accounts created
+  // before developers had their own role become developers; staff roles are left alone.
+  const set = { lastLoginAt: new Date() };
+  if (!user.role || user.role === "user") set.role = "developer";
+  await SignUpUser.updateOne({ _id: user._id }, { $set: set });
   res.json({
     message: "Signed in successfully",
     token: signToken(user),
-    user: publicSignupUser(user),
+    user: publicSignupUser({ ...user, ...set }),
   });
 };
 

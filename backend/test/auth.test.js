@@ -116,8 +116,6 @@ test('profile: purpose + name update; broker purpose grants broker role; role ca
   assert.equal(r.body.user.purpose, 'broker');
   assert.equal(r.body.user.role, 'broker');
   assert.equal((await t.call('PATCH', '/users/me', { token, body: { purpose: 'wizard' } })).status, 400);
-  const admin = await t.call('GET', '/crm/stats', { token });
-  assert.equal(admin.status, 403);
 });
 
 test('admin phones listed in env are elevated after OTP verification', async () => {

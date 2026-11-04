@@ -53,21 +53,21 @@ test('post-property: auth + validation errors listed per field', async () => {
   for (const f of ['title', 'city', 'locality', 'propertyType', 'bhk', 'price', 'area', 'description', 'images']) assert.ok(r.body.errors[f], `error for ${f}`);
 });
 
-test('post-property: creates a pending manual listing that is hidden publicly but visible to its owner', async () => {
+test('post-property: creates a manual listing that goes live straight away', async () => {
   const r = await t.call('POST', '/post-property', { token: owner.token, body: { ...validPost, parking: '1', furnishing: 'semi-furnished', amenities: ['Lift', 'Lift', 'Garden'], images: ['https://img.test/x.jpg'], role: 'admin', approvalStatus: 'approved', ownerUserId: 'hacker' } });
   assert.equal(r.status, 201);
-  assert.equal(r.body.property.approvalStatus, 'pending');
+  assert.equal(r.body.property.approvalStatus, 'approved');
   const row = models.Property._rows.find((p) => p.title === 'Sea Breeze 2BHK');
   assert.equal(row.dataSource, 'manual');
   assert.equal(row.ownerUserId, owner.user.id, 'mass-assignment of owner is ignored');
   assert.equal(row.price, 7500000);
   assert.deepEqual(row.amenities, ['Lift', 'Garden']);
   assert.equal(row.coverImage, 'https://img.test/x.jpg');
-  assert.equal((await t.call('GET', '/properties?search=Sea%20Breeze')).body.total, 0);
-  assert.equal((await t.call('GET', `/properties/${row._id}`)).status, 404);
+  assert.equal((await t.call('GET', '/properties?search=Sea%20Breeze')).body.total, 1);
+  assert.equal((await t.call('GET', `/properties/${row._id}`)).status, 200);
   const mine = await t.call('GET', '/users/me/properties', { token: owner.token });
   assert.equal(mine.body.items.length, 1);
-  assert.equal(mine.body.items[0].approvalStatus, 'pending');
+  assert.equal(mine.body.items[0].approvalStatus, 'approved');
 });
 
 test('plots/commercial do not require BHK', async () => {

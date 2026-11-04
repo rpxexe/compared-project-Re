@@ -20,7 +20,6 @@ const {
 const { summarise, publicRating } = require("../utils/rating");
 const { cached, cachedByKey } = require("../utils/cache");
 const { findAccount } = require("../utils/accounts");
-const { onView, onSave } = require("../utils/leads");
 const { z, validate, text } = require("../utils/zod");
 
 const RATING_ERROR = "Rating must be a whole number from 1 to 5";
@@ -385,7 +384,7 @@ const recordView = async (req, res) => {
   const account = (await findAccount(req.user.id))?.doc;
   const p = normalizeProperty(doc);
   const now = new Date();
-  const view = await PropertyView.findOneAndUpdate(
+  await PropertyView.findOneAndUpdate(
     { user: new mongoose.Types.ObjectId(req.user.id), property: doc._id },
     {
       $set: {
@@ -402,9 +401,8 @@ const recordView = async (req, res) => {
       $inc: { views: 1 },
       $setOnInsert: { firstViewedAt: now, source: "mobile-app" },
     },
-    { upsert: true, new: true },
-  ).lean();
-  await onView({ user: req.user, account, property: doc, views: view?.views || 1 });
+    { upsert: true },
+  );
   res.status(204).end();
 };
 
@@ -423,8 +421,6 @@ async function setSaved(req, res, desired) {
       ? { $addToSet: { savedProperties: id } }
       : { $pull: { savedProperties: id } },
   );
-  if (next && !currently)
-    await onSave({ user: req.user, account: (await findAccount(req.user.id))?.doc, property: exists });
   res.json({ saved: next });
 }
 // Body {saved:true|false} makes the call idempotent; with no body it toggles.

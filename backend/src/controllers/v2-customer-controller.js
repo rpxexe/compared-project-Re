@@ -7,7 +7,6 @@ const { PUBLIC } = require("../utils/propertyQuery");
 const { toCard } = require("../utils/contractProperty");
 const { accountView } = require("../utils/accounts");
 const { findCustomer } = require("../middleware/firebaseAuth");
-const { onSave } = require("../utils/leads");
 const { signToken } = require("../middleware/auth");
 const { publicUser } = require("../utils/user");
 const { z } = require("zod");
@@ -133,7 +132,6 @@ const toggleHeart = async (req, res) => {
     isHearted ? { $addToSet: { savedProperties: property._id } } : { $pull: { savedProperties: property._id } },
   );
   if (!result.matchedCount) return res.status(404).json({ message: "Customer not found" });
-  if (isHearted) await onSave({ user: req.user, account: doc, property });
   const after = await Model.findById(doc._id).lean();
   res.json({ success: true, isHearted, heartedIds: (after?.savedProperties || []).map(String) });
 };

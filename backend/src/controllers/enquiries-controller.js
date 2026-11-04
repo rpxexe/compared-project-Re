@@ -3,8 +3,6 @@ const { Property, Enquiry } = require("../models");
 const { propertyIdMatch, str } = require("../utils/validate");
 const { AppError } = require("../utils/errors");
 const { normalizeProperty } = require("../utils/property");
-const { findAccount } = require("../utils/accounts");
-const { onEnquiry } = require("../utils/leads");
 const { z, validate, text, propertyId: propertyIdField } = require("../utils/zod");
 
 const enquirySchema = z.object({
@@ -20,7 +18,6 @@ const postEnquiry = async (req, res) => {
   const property = await Property.findOne({ _id: propertyIdMatch(propertyId) }).lean();
   if (!property || ["pending", "rejected"].includes(property.approvalStatus))
     throw new AppError(404, "Property not found");
-  const account = (await findAccount(req.user.id))?.doc;
   const name = body.name || req.user.name || "";
   const enquiry = await Enquiry.create({
     user: new mongoose.Types.ObjectId(req.user.id),
@@ -31,7 +28,6 @@ const postEnquiry = async (req, res) => {
     message,
     source: "mobile-app",
   });
-  await onEnquiry({ user: { ...req.user, name }, account, property, enquiry });
   res.status(201).json({
     enquiry: { id: String(enquiry._id), status: "new" },
     message: "Enquiry sent. We will get back to you shortly.",

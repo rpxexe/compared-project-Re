@@ -1,8 +1,6 @@
 // POST /api/v2/leads/customer: contact / enquiry forms, as in the mobile API contract. Public (no
-// auth), deduplicated per email + property for 24 hours, and fed into the CRM as a lead.
-const { CustomerLead, Property } = require("../models");
-const { isPropertyId, propertyIdMatch } = require("../utils/validate");
-const { onFormLead } = require("../utils/leads");
+// auth), deduplicated per email + property for 24 hours, and saved in `customer_leads`.
+const { CustomerLead } = require("../models");
 const { z } = require("zod");
 
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -59,16 +57,9 @@ const createCustomerLead = async (req, res) => {
   }).lean();
   if (duplicate) return res.json({ success: true, message: "Lead already submitted recently" });
 
-  const created = await CustomerLead.create({ ...form, leadStatus: "new", ip: req.ip || "", crmLead: null, createdAt: new Date() });
+  const created = await CustomerLead.create({ ...form, leadStatus: "new", ip: req.ip || "", createdAt: new Date() });
   const lead = created.toObject ? created.toObject() : created;
-
-  const property = form.propertyId && isPropertyId(form.propertyId)
-    ? await Property.findOne({ _id: propertyIdMatch(form.propertyId) }).lean()
-    : null;
-  const crm = await onFormLead({ form, property, customerLeadId: lead._id });
-  if (crm) await CustomerLead.updateOne({ _id: lead._id }, { $set: { crmLead: crm._id } });
-
-  const { ip, crmLead, ...data } = lead;
+  const { ip, ...data } = lead;
   res.status(201).json({ success: true, data: { ...data, _id: String(data._id) } });
 };
 
