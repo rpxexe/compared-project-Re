@@ -103,11 +103,15 @@ export function AuthProvider({ children }) {
     await session.saveUser(next);
   }, []);
 
+  // Developers only post (for sale) and manage their listings; they get no browsing screens.
+  const isDeveloper = !!token && user?.role === 'developer';
+
   const value = useMemo(() => ({
     ready,
     token,
     user,
     isGuest,
+    isDeveloper,
     pendingWelcome,
     loginPrompt,
     openLoginPrompt,
@@ -117,7 +121,7 @@ export function AuthProvider({ children }) {
     signOut,
     updateUser,
     finishWelcome: () => setPendingWelcome(false),
-  }), [ready, token, user, isGuest, pendingWelcome, loginPrompt, openLoginPrompt, closeLoginPrompt, continueAsGuest, signIn, signOut, updateUser]);
+  }), [ready, token, user, isGuest, isDeveloper, pendingWelcome, loginPrompt, openLoginPrompt, closeLoginPrompt, continueAsGuest, signIn, signOut, updateUser]);
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }

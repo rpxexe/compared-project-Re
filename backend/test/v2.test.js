@@ -163,7 +163,7 @@ test('instant search: natural-language parsing, regex match, fuzzy fallback', as
   assert.equal((await t.call('GET', '/v2/properties/search?query=flat&limit=50')).status, 200);
 });
 
-test('hearts: toggle, shared with v1 saves, cap of 200, feeds the CRM', async () => {
+test('hearts: toggle, shared with v1 saves, cap of 200', async () => {
   const tok = fb('uid-phone', { phone: '+919822200000' });
   assert.deepEqual((await t.call('POST', '/v2/customerActivity/toggle-heart/bad', { token: tok })).body, { message: 'Invalid property ID' });
   assert.equal((await t.call('POST', `/v2/customerActivity/toggle-heart/${t.oid()}`, { token: tok })).status, 404);
@@ -173,10 +173,8 @@ test('hearts: toggle, shared with v1 saves, cap of 200, feeds the CRM', async ()
   const off = await t.call('POST', `/v2/customerActivity/toggle-heart/${skyline}`, { token: tok });
   assert.deepEqual(off.body, { success: true, isHearted: false, heartedIds: [harbour] });
 
-  const owner = models.User._rows.find((u) => u.firebaseUid === 'uid-phone');
   const v1 = await t.login('9822200000');
   assert.deepEqual((await t.call('GET', '/properties/saved/list', { token: v1.token })).body.items.map((p) => p.id), [harbour], 'same list as the v1 app');
-  assert.ok(models.Lead._rows.some((l) => String(l.user) === String(owner._id) && l.sources.includes('saved')));
 
   const full = models.User._rows.find((u) => u.firebaseUid === 'uid-new');
   full.savedProperties = Array.from({ length: 200 }, () => t.oid());
@@ -208,7 +206,7 @@ test('my-activity and compare: paginated hearts, compare is a full replace cappe
   assert.deepEqual((await t.call('GET', '/v2/customerActivity/my-activity', { token: tok })).body.compareProperties.map((p) => p._id), [harbour]);
 });
 
-test('leads: public, validated, deduplicated for 24h, and fed into the CRM', async () => {
+test('leads: public, validated, deduplicated for 24h, and saved as submitted', async () => {
   const bad = await t.call('POST', '/v2/leads/customer', { body: { customerName: 'A', customerEmail: 'x', customerPhone: '12345', source: 'nope', loanInterest: 'yes' } });
   assert.equal(bad.status, 400);
   assert.equal(bad.body.success, false);
@@ -237,18 +235,10 @@ test('leads: public, validated, deduplicated for 24h, and fed into the CRM', asy
   assert.equal((await t.call('POST', '/v2/leads/customer', { body: general })).status, 201);
   assert.equal((await t.call('POST', '/v2/leads/customer', { body: general })).status, 200, 'null propertyId is deduplicated too');
 
-  const crm = models.Lead._rows.find((l) => l.phone === '9876501234' && String(l.property) === skyline);
-  assert.ok(crm, 'CRM lead created');
-  assert.deepEqual(crm.sources, ['form']);
-  assert.equal(crm.priority, 'hot');
-  assert.equal(String(models.CustomerLead._rows[0].crmLead), String(crm._id));
-  assert.ok(models.LeadActivity._rows.some((a) => String(a.lead) === String(crm._id) && /Budget: 1-2 Cr/.test(a.body) && /home loan/.test(a.body)));
-
-  // A known customer's form on a listing they already engaged with joins that lead.
-  await t.call('POST', '/v2/leads/customer', { body: { ...body, customerEmail: 'k@x.co', customerPhone: '9822200000', propertyId: harbour } });
-  const joined = models.Lead._rows.filter((l) => l.phone === '9822200000' && String(l.property) === harbour);
-  assert.equal(joined.length, 1);
-  assert.deepEqual([...joined[0].sources].sort(), ['form', 'saved']);
+  const saved = models.CustomerLead._rows.find((l) => l.customerEmail === 'asha@example.com' && l.propertyId === skyline);
+  assert.equal(saved.budget, '1-2 Cr');
+  assert.equal(saved.loanInterest, true);
+  assert.equal(saved.message, 'Call me');
 });
 
 test('429 bodies follow the contract per area', async () => {

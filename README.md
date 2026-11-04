@@ -5,11 +5,11 @@ Discover, compare and post properties. Android-first React Native (Expo) app wit
 ## 1. What it does
 * **Home** – greeting, city selector, search, quick type chips, Featured / New launches / Top rated / Upcoming rails, popular cities, recently added.
 * **Compare Project** – pick up to 4 projects and see them side by side (price, BHK, area, possession, parking, amenities, RERA, rating …). Missing data shows `N/A`.
-* **Post Property** – validated form; saved to the existing `properties` collection with `dataSource: "manual"` and sent for admin approval.
+* **Post Property** – validated form; saved to the existing `properties` collection with `dataSource: "manual"` and live immediately. Developer accounts can only list for sale.
 * **New Project** – New Launch / Upcoming / Under Construction / Ready to Move. A category appears **only if MongoDB has data for it**.
 * **Ratings & reviews** – 1–5 star rating + optional comment on every property, rating distribution, averages shown on cards, a *Top rated* rail and *Top rated* sort. One rating per user per property (editable); owners cannot rate their own listing; admins can remove abusive reviews.
 * **Property details** – swipe gallery, facts, developer, RERA, amenities/facilities/security, floor plans, virtual tour, brochure, map link, save, compare, share, sticky **Enquire Now**.
-* **Profile** – saved properties, my posted properties (with review status), my enquiries, settings, logout. Staff work in the separate CRM (see `CRM_API.md`); the app has no admin screens.
+* **Profile** – saved properties, my posted properties, my enquiries, settings, logout. The app has no admin screens.
 * Login: **mobile + OTP**, animated splash, welcome, purpose selection (Buyer / Investor / Owner / Resale / Broker), animated welcome.
 
 All property content comes from MongoDB through the API. **No demo/fake listings exist anywhere in the shipped app.** (Test fixtures live only in `backend/test/` and the test-suite's in-memory database.)
@@ -59,7 +59,6 @@ npx expo start -c
 | | `OTP_TTL_MINUTES`, `OTP_RESEND_SECONDS`, `OTP_MAX_ATTEMPTS` | OTP policy (5 / 30 / 5) |
 | | `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, `TWILIO_PHONE_NUMBER` | SMS provider |
 | | `ADMIN_PHONES`, `SUPERADMIN_PHONES` | comma-separated 10-digit numbers promoted after OTP login |
-| | `AUTO_APPROVE_POSTS` | `true` = posted properties go live immediately |
 | | `CORS_ORIGINS` | only needed for browser clients |
 | frontend/.env | `EXPO_PUBLIC_API_URL` | backend address ending in `/api` |
 
@@ -87,15 +86,15 @@ cd frontend && npm run bundle:check   # compiles the whole app with Metro
 ```
 Manual device checklist: `TEST-CASES.md`.
 
-## 13. Staff, roles and the CRM
-Roles: `user`, `broker`, `admin`, `superadmin`.
-* Add your number to `ADMIN_PHONES` / `SUPERADMIN_PHONES` in `backend/.env`, restart, log in with OTP → the role is applied. After that, superadmins manage staff and roles from the CRM (`/api/crm/staff`, `PATCH /api/crm/users/:id`).
+## 13. Roles and enquiries
+Roles: `user`, `broker`, `developer`, `admin`, `superadmin`.
+* Add your number to `ADMIN_PHONES` / `SUPERADMIN_PHONES` in `backend/.env`, restart, log in with OTP → the role is applied.
 * Choosing “Broker” as purpose gives the `broker` role (no admin rights).
-* **Security:** every `/api/crm/*` route runs `authRequired` + `requireRole('admin','superadmin')` on the server and re-reads the role from MongoDB on every request, so a hidden button is never the protection. Normal users get **403**, anonymous users **401** (covered by tests).
-* Admin work happens in the CRM, which talks to `/api/crm/*` (full contract in `CRM_API.md`): leads pipeline, listing moderation, customers, staff, audit log and settings. Enquiries, views and saves in the app create CRM leads automatically. After deploying, run `npm run backfill:leads` once in `backend/` to create leads from older enquiries and views.
+* Email/password accounts (the Login screen's Developer card) are `developer`s: they only post listings for sale and manage them; they get no browsing screens.
+* **Enquiries for the CRM:** the backend has no CRM API. Enquiries from the app are saved in the `enquiries` collection and contact forms from `/api/v2/leads/customer` in `customer_leads`; the CRM reads them from MongoDB directly.
 
 ### API summary
-`GET /api/health` · `POST /api/auth/send-otp` · `POST /api/auth/verify-otp` · `GET|PATCH /api/users/me` · `GET /api/users/me/{properties,enquiries}` · `GET /api/properties` (search, filters, sort, paging) · `GET /api/properties/{categories,facets,top-rated,compare,saved/list,:id}` · `POST|DELETE /api/properties/:id/save` · `GET|POST /api/properties/:id/reviews` · `DELETE /api/properties/:id/reviews/mine` · `POST /api/post-property` · `POST /api/enquiries` · CRM (staff only): `/api/crm/*`, see `CRM_API.md`. · Mobile API contract (Firebase customer auth): `/api/v2/*`, see `MOBILE_API.md`.
+`GET /api/health` · `POST /api/auth/send-otp` · `POST /api/auth/verify-otp` · `GET|PATCH /api/users/me` · `GET /api/users/me/{properties,enquiries}` · `GET /api/properties` (search, filters, sort, paging) · `GET /api/properties/{categories,facets,top-rated,compare,saved/list,:id}` · `POST|DELETE /api/properties/:id/save` · `GET|POST /api/properties/:id/reviews` · `DELETE /api/properties/:id/reviews/mine` · `POST /api/post-property` · `POST /api/enquiries` · Mobile API contract (Firebase customer auth): `/api/v2/*`, see `MOBILE_API.md`.
 
 ## 14. Production deployment (Render / Railway)
 * Root directory `backend`, build `npm install`, start `npm start`.

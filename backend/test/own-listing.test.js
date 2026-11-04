@@ -34,7 +34,7 @@ test('own listing: other users and imported listings are not found', async () =>
   assert.equal((await t.call('PATCH', `/users/me/properties/${imported}`, { token: owner.token, body: { price: 1 } })).status, 404);
 });
 
-test('own listing: edits are validated, saved, recompute filters and go back to review', async () => {
+test('own listing: edits are validated, saved, recompute filters and go live', async () => {
   const doc = () => models.Property._rows.find((p) => String(p._id) === id);
   doc().approvalStatus = 'rejected';
   doc().rejectionReason = 'Blurry photos';
@@ -45,7 +45,7 @@ test('own listing: edits are validated, saved, recompute filters and go back to 
 
   const ok = await t.call('PATCH', `/users/me/properties/${id}`, { token: owner.token, body: { price: '8100000', title: 'Sea Breeze 2BHK – renovated', furnishing: 'furnished', city: 'Thane' } });
   assert.equal(ok.status, 200);
-  assert.equal(ok.body.property.approvalStatus, 'pending');
+  assert.equal(ok.body.property.approvalStatus, 'approved');
   assert.equal(doc().price, 8100000);
   assert.equal(doc().title, 'Sea Breeze 2BHK – renovated');
   assert.equal(doc().furnishing, 'furnished');

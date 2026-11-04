@@ -71,21 +71,25 @@ function listingSchema(body) {
 }
 
 const REQUIRED = ["title", "city", "locality", "propertyType", "bhk", "price", "area", "description"];
+const DEVELOPER_SALE_ONLY = "Developers can only list properties for sale";
 
 // -> { d: required fields, opt: optional fields that were sent, errors: { field: message } }.
-function parse(body = {}) {
+// `user` is the poster: developers build and sell, so their listings must be for sale.
+function parse(body = {}, user = null) {
   const result = listingSchema(body || {}).safeParse(body || {});
   if (!result.success) {
     const { fieldErrors } = z.flattenError(result.error);
     return { d: {}, opt: {}, errors: Object.fromEntries(Object.entries(fieldErrors).map(([k, m]) => [k, m[0]])) };
   }
   const data = result.data;
+  if (user?.role === "developer" && data.listingType !== "sale")
+    return { d: {}, opt: {}, errors: { listingType: DEVELOPER_SALE_ONLY } };
   const d = Object.fromEntries(REQUIRED.map((k) => [k, data[k]]));
   const opt = Object.fromEntries(Object.entries(data).filter(([k, v]) => !REQUIRED.includes(k) && v !== undefined));
   return { d, opt, errors: {} };
 }
 
-router.post("/", authRequired, (req, res, next) => { req.postPropertyParsed = parse(req.body); next(); }, postProperty.postProperty);
+router.post("/", authRequired, (req, res, next) => { req.postPropertyParsed = parse(req.body, req.user); next(); }, postProperty.postProperty);
 
 module.exports = router;
 module.exports.parse = parse;

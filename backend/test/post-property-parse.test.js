@@ -45,6 +45,15 @@ test('full payload from the new form (amenities array, image urls, furnishing, p
   assert.equal(r.opt.furnishing, 'semi-furnished');
 });
 
+test('developers can only list for sale', () => {
+  const flat = { ...base, propertyType: 'Flats/Apartments', bhk: '2', category: 'residential' };
+  const dev = { role: 'developer' };
+  assert.ok(parse({ ...flat, listingType: 'rent' }, dev).errors.listingType);
+  assert.ok(parse(flat, dev).errors.listingType);
+  assert.deepEqual(parse({ ...flat, listingType: 'sale' }, dev).errors, {});
+  assert.deepEqual(parse({ ...flat, listingType: 'rent' }, { role: 'broker' }).errors, {});
+});
+
 test('bad purpose is rejected', () => {
   assert.ok(parse({ ...base, propertyType: 'Villa', bhk: '2', listingType: 'resale' }).errors.listingType);
 });

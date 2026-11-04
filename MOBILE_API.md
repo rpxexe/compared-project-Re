@@ -115,9 +115,7 @@ These follow from our data and from what the contract leaves unspecified:
 - **Lead rate limit:** there is no developer-side lead endpoint here, so the 50 per 15 minutes applies only to `/leads/customer`.
 - **Linked to the rest of the system:**
   - Hearts are the same list as v1 saved properties.
-  - Hearting a listing, and every non-duplicate lead form, also create or update a **CRM lead**
-    (sources `saved` and `form`; see `CRM_API.md`), so staff see them straight away.
-  - A form from a phone number that belongs to an app account is merged into that customer's existing lead for the listing.
+  - Every non-duplicate lead form is saved in the `customer_leads` collection, where the CRM reads it.
 
 ---
 
@@ -168,7 +166,7 @@ These follow from our data and from what the contract leaves unspecified:
 1. Sign in on the device with a Firebase test number.
 2. Call `POST /api/v2/customers/register`, then `GET /api/v2/customerActivity/my-activity` with that token.
 3. Both should return `success: true`.
-4. Heart a listing, then check that it appears in **CRM → leads** with source `saved`.
+4. Heart a listing, then check that it appears in `heartedIds` from `my-activity`.
 
 ---
 
@@ -177,7 +175,7 @@ These follow from our data and from what the contract leaves unspecified:
 - the auth messages and account registration and linking
 - every property endpoint: shapes, filters, sorting, paging, 400 and 404 bodies
 - plain-language search and the fuzzy fallback
-- hearts (shared with v1, the 200 cap, the CRM lead)
+- hearts (shared with v1, the 200 cap)
 - my-activity paging and compare's full replace with the 4-item cap
-- lead validation, the 24-hour dedupe and the CRM hand-off
+- lead validation, the 24-hour dedupe and what gets saved
 - the per-area 429 bodies

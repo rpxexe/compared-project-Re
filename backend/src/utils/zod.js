@@ -1,6 +1,6 @@
 // Request validation with zod, in the API's existing error format: a 400 whose message is the
 // field's own message when one field is wrong (otherwise `summary`), plus errors as
-// { field: message }, which is what the app and the CRM read.
+// { field: message }, which is what the app reads.
 const { z } = require("zod");
 const { bad } = require("./errors");
 const { str, cleanPhone, isValidPhone, isObjectId, isPropertyId } = require("./validate");

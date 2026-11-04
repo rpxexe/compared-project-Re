@@ -146,18 +146,8 @@ function installFakeModels() {
     SignUpUser: makeModel('SignUpUser', () => ({ role: 'user', isActive: true })),
     PropertyView: makeModel('PropertyView', () => ({ views: 0, createdAt: new Date() })),
     Notification: makeModel('Notification', () => ({ type: 'info', readAt: null, data: {}, createdAt: new Date() })),
-    Lead: makeModel('Lead', () => ({
-      status: 'new', priority: 'warm', score: 0, viewCount: 0, sources: [], enquiryIds: [], tags: [],
-      assignedTo: null, nextFollowUpAt: null, followUpNotifiedFor: null, createdAt: new Date(),
-    })),
-    LeadActivity: makeModel('LeadActivity', () => ({ createdAt: new Date() })),
-    AuditLog: makeModel('AuditLog', () => ({ createdAt: new Date() })),
-    CrmSetting: makeModel('CrmSetting'),
     CustomerLead: makeModel('CustomerLead', () => ({ leadStatus: 'new', createdAt: new Date() })),
   };
-  const real = { Lead: require('../../src/models/Lead'), LeadActivity: require('../../src/models/LeadActivity') };
-  Object.assign(models.Lead, { STATUSES: real.Lead.STATUSES, SOURCES: real.Lead.SOURCES, PRIORITIES: real.Lead.PRIORITIES });
-  Object.assign(models.LeadActivity, { TYPES: real.LeadActivity.TYPES, MANUAL_TYPES: real.LeadActivity.MANUAL_TYPES, OUTCOMES: real.LeadActivity.OUTCOMES });
   models.SignUpUser.ROLES = ['user', 'broker', 'developer', 'admin', 'superadmin'];
   models.CustomerLead.SOURCES = require('../../src/models/CustomerLead').SOURCES;
   models.Review.unique = ['property', 'user'];

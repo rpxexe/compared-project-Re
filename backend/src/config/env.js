@@ -28,7 +28,6 @@ function load() {
     corsOrigins:String(process.env.CORS_ORIGINS || '').split(',').map((s) => s.trim()).filter(Boolean),
     adminPhones: list(process.env.ADMIN_PHONES),
     superadminPhones: list(process.env.SUPERADMIN_PHONES),
-    autoApprovePosts: String(process.env.AUTO_APPROVE_POSTS || 'false').toLowerCase() === 'true',
     // Firebase Authentication for the /api/v2 customer endpoints. Verifying ID tokens only needs the
     // project id; the service account (JSON, one line) is optional.
     firebase: {

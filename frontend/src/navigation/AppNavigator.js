@@ -34,9 +34,14 @@ import SignUpScreen from "../screens/SignUp";
 const Stack = createNativeStackNavigator();
 const Tab = createBottomTabNavigator();
 
+// Developers only post properties (for sale) and manage their own listings: no browsing,
+// searching, comparing or saving, so their stacks hold just these screens.
+const DEVELOPER_SCREENS = ["PostPropertyForm", "MyProperties", "PropertyDetails", "Settings", "Notification"];
+
 // Screens reachable from every tab. Each tab runs its own stack that includes them, so they open
 // inside the tab and the bottom bar stays visible (the auth screens below stay outside the tabs).
-function sharedScreens(except) {
+// `only` limits the stack to those screens.
+function sharedScreens(except, only) {
   const screens = [
     ["Search", SearchScreen],
     ["SearchFilters", SearchFiltersScreen, { animation: "slide_from_bottom" }],
@@ -56,17 +61,17 @@ function sharedScreens(except) {
     ["ViewedProperties", ViewedPropertiesScreen],
   ];
   return screens
-    .filter(([name]) => name !== except)
+    .filter(([name]) => name !== except && (!only || only.includes(name)))
     .map(([name, component, options]) => <Stack.Screen key={name} name={name} component={component} options={options} />);
 }
 
 // One stack per tab, starting at that tab's own screen.
-function tabStack(rootName, RootComponent) {
+function tabStack(rootName, RootComponent, only) {
   return function TabStack() {
     return (
       <Stack.Navigator screenOptions={base}>
         <Stack.Screen name={rootName} component={RootComponent} />
-        {sharedScreens(rootName)}
+        {sharedScreens(rootName, only)}
       </Stack.Navigator>
     );
   };
@@ -78,8 +83,28 @@ const PostStack = tabStack("PostPropertyForm", PostPropertyFormScreen);
 const CompareStack = tabStack("CompareMain", CompareScreen);
 const ProfileStack = tabStack("ProfileMain", ProfileScreen);
 
+const DevPostStack = tabStack("PostPropertyForm", PostPropertyFormScreen, DEVELOPER_SCREENS);
+const DevListingsStack = tabStack("MyProperties", MyPropertiesScreen, DEVELOPER_SCREENS);
+const DevProfileStack = tabStack("ProfileMain", ProfileScreen, DEVELOPER_SCREENS);
+
+function DeveloperTabs() {
+  return (
+    <Tab.Navigator
+      initialRouteName="Post"
+      tabBar={(props) => <BottomNav {...props} />}
+      screenOptions={{ headerShown: false, lazy: true, animation: "fade" }}
+    >
+      <Tab.Screen name="Post" component={DevPostStack} />
+      <Tab.Screen name="Listings" component={DevListingsStack} />
+      <Tab.Screen name="Profile" component={DevProfileStack} />
+    </Tab.Navigator>
+  );
+}
+
 function Tabs() {
   const { count } = useCompare();
+  const { isDeveloper } = useAuth();
+  if (isDeveloper) return <DeveloperTabs />;
   return (
     <Tab.Navigator
       initialRouteName="Home"

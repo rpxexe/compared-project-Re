@@ -27,6 +27,13 @@ const LISTING_STATUS = [
   { key: 'rejected', label: 'Rejected', color: colors.error },
 ];
 
+// Stat tiles a developer sees for each listing status.
+const LISTING_STAT_STYLE = {
+  approved: { icon: 'checkmark-circle-outline', tint: colors.success, bg: '#E2F5EE' },
+  pending: { icon: 'hourglass-outline', tint: '#B7791F', bg: '#FDF3DC' },
+  rejected: { icon: 'close-circle-outline', tint: colors.error, bg: '#F6E3E3' },
+};
+
 const QUICK_ACTIONS = [
   { label: 'Post', icon: 'add-circle-outline', to: ['Post'] },
   { label: 'Explore', icon: 'search-outline', to: ['Explore'] },
@@ -172,7 +179,7 @@ function Row({ icon, label, onPress, danger, last }) {
 }
 
 export default function ProfileScreen({ navigation }) {
-  const { user, token, signOut } = useAuth();
+  const { user, token, isDeveloper, signOut } = useAuth();
   const saved = useSaved();
   const cmp = useCompare();
   const isGuest = !token;
@@ -183,8 +190,10 @@ export default function ProfileScreen({ navigation }) {
 
   // Account-only data; skipped for guests so the sign-in dialog doesn't pop up on a 401.
   const listings = useApi(() => api.myProperties(), [token], { enabled: !isGuest });
-  const enquiries = useApi(() => api.myEnquiries(), [token], { enabled: !isGuest });
-  const views = useApi(() => api.myViews(), [token], { enabled: !isGuest });
+  // Developers don't browse, so they have no enquiries or viewed properties of their own.
+  const buyer = !isGuest && !isDeveloper;
+  const enquiries = useApi(() => api.myEnquiries(), [token], { enabled: buyer });
+  const views = useApi(() => api.myViews(), [token], { enabled: buyer });
   const [compareHistory, setCompareHistory] = useState([]);
   const [searchCount, setSearchCount] = useState(0);
   const [viewCount, setViewCount] = useState(0);
@@ -203,12 +212,13 @@ export default function ProfileScreen({ navigation }) {
 
   useEffect(() => navigation.addListener('focus', () => {
     loadLocalCounts();
-    if (!isGuest) { listings.refresh(); enquiries.refresh(); views.refresh(); }
-  }), [navigation, isGuest]); // eslint-disable-line react-hooks/exhaustive-deps
+    if (!isGuest) listings.refresh();
+    if (buyer) { enquiries.refresh(); views.refresh(); }
+  }), [navigation, isGuest, buyer]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const onRefresh = async () => {
     setRefreshing(true);
-    await Promise.all([loadLocalCounts(), ...(isGuest ? [] : [listings.refresh(), enquiries.refresh(), views.refresh()])]);
+    await Promise.all([loadLocalCounts(), ...(isGuest ? [] : [listings.refresh()]), ...(buyer ? [enquiries.refresh(), views.refresh()] : [])]);
     setRefreshing(false);
   };
 
@@ -234,7 +244,12 @@ export default function ProfileScreen({ navigation }) {
   ].sort((a, b) => b.at - a.at).slice(0, 4);
 
   const needLogin = () => navigation.navigate('Login');
-  const stats = [
+  const manage = () => navigation.navigate('MyProperties');
+  const developerStats = [
+    { label: 'Listings', icon: 'home-outline', tint: colors.goldDeep, bg: colors.champagneSoft, value: listingItems.length, onPress: manage },
+    ...statusCounts.map((st) => ({ label: st.label, ...LISTING_STAT_STYLE[st.key], value: st.count, onPress: manage })),
+  ];
+  const stats = isDeveloper ? developerStats : [
     { label: 'Saved', icon: 'heart-outline', tint: '#D6336C', bg: '#FDE7EF', value: saved.count, onPress: () => navigation.navigate('Saved') },
     { label: 'Listings', icon: 'home-outline', tint: colors.goldDeep, bg: colors.champagneSoft, value: listingItems.length, locked: isGuest, onPress: isGuest ? needLogin : () => navigation.navigate('MyProperties') },
     { label: 'Enquiries', icon: 'chatbubble-ellipses-outline', tint: '#3B6FE0', bg: '#E3EEFF', value: enquiryItems.length, locked: isGuest, onPress: isGuest ? needLogin : () => navigation.navigate('MyEnquiries') },
@@ -361,6 +376,9 @@ export default function ProfileScreen({ navigation }) {
           </SpringIn>
         ) : null}
 
+        {/* Quick actions and activity are about browsing, which developers don't do. */}
+        {isDeveloper ? null : (
+        <>
         {/* Quick actions */}
         <SpringIn delay={440}>
           <Text style={styles.sec}>Quick actions</Text>
@@ -396,6 +414,8 @@ export default function ProfileScreen({ navigation }) {
             )}
           </View>
         </SpringIn>
+        </>
+        )}
 
         <SpringIn delay={680}>
           <Text style={styles.sec}>Account</Text>

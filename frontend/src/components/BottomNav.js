@@ -54,6 +54,10 @@ const TABS = {
     label: "Post",
     icon: (on, c) => <Ionicons name={on ? "add-circle" : "add-circle-outline"} size={24} color={c} />,
   },
+  Listings: {
+    label: "Listings",
+    icon: (on, c) => <Ionicons name={on ? "albums" : "albums-outline"} size={22} color={c} />,
+  },
   Compare: {
     label: "Compare",
     icon: (on, c) => <EquilibriumIcon color={c} bold={on} />,
@@ -135,7 +139,7 @@ function Badge({ value, style }) {
 
 export default function BottomNav({ state, navigation, badges = {} }) {
   const insets = useSafeAreaInsets();
-  const { token, openLoginPrompt } = useAuth();
+  const { token, isDeveloper, openLoginPrompt } = useAuth();
   const onHeightChange = useContext(BottomTabBarHeightCallbackContext);
   const [width, setWidth] = useState(0);
   const x = useRef(new Animated.Value(0)).current; // notch / bubble centre within the bar
@@ -150,7 +154,7 @@ export default function BottomNav({ state, navigation, badges = {} }) {
   // Only the tabs' own first screens show the bar; anything pushed on top (search results,
   // property details, settings...) is an inner screen and gets the full height.
   const inner = (state.routes[state.index]?.state?.index ?? 0) > 0;
-  const showTray = compareCount > 0 && active !== "Compare";
+  const showTray = !isDeveloper && compareCount > 0 && active !== "Compare";
   const activeCfg = tabConfig(active);
 
   useEffect(() => {

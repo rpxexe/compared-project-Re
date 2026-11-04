@@ -3,18 +3,17 @@ const assert = require('node:assert/strict');
 const { startServer, models } = require('./helpers/harness');
 const seed = require('./seed');
 
-let t; let user; let admin; let propertyId;
+let t; let user; let propertyId;
 test.before(async () => {
   t = await startServer();
   models.Property.seed(seed);
   propertyId = String(models.Property._rows.find((p) => !p.approvalStatus || p.approvalStatus === 'approved')._id);
   user = await t.login('9866666666');
   await t.call('PATCH', '/users/me', { token: user.token, body: { name: 'Lead Person' } });
-  admin = await t.login('9000000001');
 });
 test.after(() => t.close());
 
-test('property views: guests are not stored, signed-in views upsert one lead row', async () => {
+test('property views: guests are not stored, signed-in views keep one row per listing', async () => {
   models.PropertyView.reset();
   assert.equal((await t.call('POST', `/properties/${propertyId}/view`)).status, 204);
   assert.equal(models.PropertyView._rows.length, 0);
@@ -65,17 +64,4 @@ test('by-ids: returns public cards in the order asked, validates input', async (
   assert.deepEqual(r.body.items.map((p) => p.id), ids);
   assert.equal((await t.call('GET', '/properties/by-ids?ids=nope')).status, 400);
   assert.deepEqual((await t.call('GET', '/properties/by-ids')).body.items, []);
-});
-
-test('CRM views: staff only, searchable, counted in stats', async () => {
-  assert.equal((await t.call('GET', '/crm/views')).status, 401);
-  assert.equal((await t.call('GET', '/crm/views', { token: user.token })).status, 403);
-  const r = await t.call('GET', '/crm/views?search=Lead', { token: admin.token });
-  assert.equal(r.status, 200);
-  assert.equal(r.body.total, 2); // this user's two viewed listings (one cleared from their own list)
-  assert.ok(r.body.items.every((l) => l.phone === '9866666666'));
-  assert.equal(r.body.items.find((l) => l.property === propertyId).views, 3);
-  const s = await t.call('GET', '/crm/stats', { token: admin.token });
-  assert.equal(s.body.views, 3);
-  assert.equal(s.body.leads.total, 3, 'every signed-in view also became a CRM lead');
 });

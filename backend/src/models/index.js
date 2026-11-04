@@ -8,9 +8,5 @@ module.exports = {
   SignUpUser: require("./Signup"),
   Notification: require("./Notification"),
   PropertyView: require("./PropertyView"),
-  Lead: require("./Lead"),
-  LeadActivity: require("./LeadActivity"),
-  AuditLog: require("./AuditLog"),
-  CrmSetting: require("./CrmSetting"),
   CustomerLead: require("./CustomerLead"),
 };

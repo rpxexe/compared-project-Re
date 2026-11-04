@@ -1,7 +1,7 @@
 const mongoose = require('mongoose');
 
 // One row per (user, property): how often a signed-in user opened a listing, with a snapshot of
-// their contact details so admins can follow up on it as a lead.
+// their contact details. Feeds the user's "Viewed properties" list.
 const propertyViewSchema = new mongoose.Schema({
   user: { type: mongoose.Schema.Types.ObjectId, required: true, index: true },
   phone: { type: String, default: '' },
@@ -17,7 +17,7 @@ const propertyViewSchema = new mongoose.Schema({
   firstViewedAt: { type: Date },
   lastViewedAt: { type: Date, index: true },
   source: { type: String, default: 'mobile-app' },
-  // "Clear viewed properties" hides rows from the user's own list; admins still see the lead.
+  // "Clear viewed properties" hides rows from the user's own list without deleting them.
   hiddenByUser: { type: Boolean, default: false },
 }, { timestamps: true });
 

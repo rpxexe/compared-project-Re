@@ -20,7 +20,7 @@ import Text from "../components/AppText";
 
 export default function SettingsScreen() {
   const { ensureLocation } = useLocationAccess();
-  const { user, updateUser } = useAuth();
+  const { user, isDeveloper, updateUser } = useAuth();
   const toast = useToast();
   const [name, setName] = useState(user?.name || '');
   const [city, setCity] = useState(user?.city || '');
@@ -75,10 +75,13 @@ export default function SettingsScreen() {
             </Text>
           </Pressable>
         </Reveal>
-        <Reveal delay={130}>
-          <Text style={styles.lbl}>I AM A</Text>
-          <View style={styles.wrap}>{PURPOSES.map((p) => <FilterChip key={p.key} label={p.label} active={purpose === p.key} onPress={() => setPurpose(p.key)} />)}</View>
-        </Reveal>
+        {/* A developer account stays a developer; the buyer / owner purposes don't apply. */}
+        {isDeveloper ? null : (
+          <Reveal delay={130}>
+            <Text style={styles.lbl}>I AM A</Text>
+            <View style={styles.wrap}>{PURPOSES.map((p) => <FilterChip key={p.key} label={p.label} active={purpose === p.key} onPress={() => setPurpose(p.key)} />)}</View>
+          </Reveal>
+        )}
         <Reveal delay={190}>
           <Button title="Save changes" onPress={save} loading={saving} disabled={!dirty} style={{ marginTop: 24 }} />
         </Reveal>

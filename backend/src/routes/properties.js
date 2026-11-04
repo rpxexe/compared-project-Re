@@ -36,7 +36,7 @@ router.post("/:id/save", authRequired, Property.saveProperty);
 
 router.delete("/:id/save", authRequired, Property.deleteSavedProperty);
 
-// Records that a signed-in user opened this listing (lead tracking); a no-op for guests.
+// Records that a signed-in user opened this listing ("Viewed properties"); a no-op for guests.
 router.post("/:id/view", authOptional, Property.recordView);
 
 router.get("/:id/reviews", authOptional, Property.getReviews);

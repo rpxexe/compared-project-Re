@@ -2,8 +2,7 @@ const mongoose = require('mongoose');
 
 const SOURCES = ['home_page_contact', 'property_page_contact', 'smart_properties_page_form', 'quick_links_property_page_form'];
 
-// Contact-form submissions from POST /api/v2/leads/customer, stored as submitted. Each one also
-// feeds a CRM lead (crmLead), which is where staff follow it up.
+// Contact-form submissions from POST /api/v2/leads/customer, stored as submitted.
 const customerLeadSchema = new mongoose.Schema({
   customerName: { type: String, required: true, trim: true, maxlength: 100 },
   customerEmail: { type: String, required: true, trim: true, lowercase: true, maxlength: 254 },
@@ -21,7 +20,6 @@ const customerLeadSchema = new mongoose.Schema({
   customerContactConsent: { type: Boolean, default: true },
   leadStatus: { type: String, enum: ['new', 'contacted', 'qualified', 'closed'], default: 'new' },
   ip: { type: String, default: '' },
-  crmLead: { type: mongoose.Schema.Types.ObjectId, default: null },
 }, { timestamps: true });
 
 // Duplicate check: same email + property within 24 hours.

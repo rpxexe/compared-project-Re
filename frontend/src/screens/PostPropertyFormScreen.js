@@ -102,14 +102,18 @@ function Wizard({ navigation, initial, editId }) {
   const editing = !!editId;
   const { bottom } = useBottomSpace();
   const toast = useToast();
-  const { token, openLoginPrompt } = useAuth();
+  const { token, isDeveloper, openLoginPrompt } = useAuth();
   const { ensureLocation } = useLocationAccess();
+  // Developers only sell, so their listings start (and stay) as "Sell".
+  const listingOptions = isDeveloper ? LISTING_OPTIONS.filter((o) => o.value === "sale") : LISTING_OPTIONS;
+  const startForm = () => sanitizeForType({ ...EMPTY_FORM, ...(ONLY_STEP ? TEST_FORM : {}), ...initial, ...(isDeveloper ? { listingType: "sale" } : {}) });
+  const homeTab = isDeveloper ? "Listings" : "Home";
   const scroll = useRef(null);
   const content = useRef(null);
   const scrollY = useRef(0);
   const viewportH = useRef(0);
   const [step, setStep] = useState(0);
-  const [form, setForm] = useState(() => sanitizeForType({ ...EMPTY_FORM, ...(ONLY_STEP ? TEST_FORM : {}), ...initial }));
+  const [form, setForm] = useState(startForm);
   const [errors, setErrors] = useState({});
   const [apiError, setApiError] = useState("");
   const [submitting, setSubmitting] = useState(false);
@@ -184,7 +188,7 @@ function Wizard({ navigation, initial, editId }) {
   useEffect(() => navigation.addListener("blur", () => {
     if (!doneRef.current) return;
     setDone(null);
-    setForm(sanitizeForType({ ...EMPTY_FORM, ...initial }));
+    setForm(startForm());
     setErrors({});
     setRoom("");
     setStep(0);
@@ -192,8 +196,8 @@ function Wizard({ navigation, initial, editId }) {
 
   const leave = useCallback(() => {
     if (navigation.canGoBack()) navigation.goBack();
-    else navigation.navigate("Tabs", { screen: "Home" });
-  }, [navigation]);
+    else navigation.navigate("Tabs", { screen: homeTab });
+  }, [navigation, homeTab]);
 
   const goBack = useCallback(() => {
     Keyboard.dismiss();
@@ -349,7 +353,7 @@ function Wizard({ navigation, initial, editId }) {
       <Submitted message={done}>
         <Button title="View my properties" icon="list" onPress={() => (editing ? navigation.goBack() : navigation.navigate("MyProperties"))} />
         {editing ? null : <Button title="Post another property" variant="ghost" onPress={() => navigation.replace("PostPropertyForm")} />}
-        <Button title="Back to Home" variant="ghost" onPress={() => navigation.navigate("Tabs", { screen: "Home" })} />
+        {isDeveloper ? null : <Button title="Back to Home" variant="ghost" onPress={() => navigation.navigate("Tabs", { screen: "Home" })} />}
       </Submitted>
     );
   }
@@ -391,7 +395,7 @@ function Wizard({ navigation, initial, editId }) {
     : form[sec.field].filter((i) => !sec.items.includes(i)));
   const pickIn = (field, a) => (field === "grade" ? set("grade", form.grade === a ? "" : a) : set(field, toggle(form[field], a)));
   const summary = [
-    ["swap-horizontal-outline", "Purpose", labelOf(LISTING_OPTIONS, form.listingType), 0],
+    ["swap-horizontal-outline", "Purpose", labelOf(listingOptions, form.listingType), 0],
     ["grid-outline", "Category", labelOf(CATEGORY_OPTIONS, form.category), 0],
     ["business-outline", "Type", typeLabel(form.propertyType), 0],
     ["location-outline", "Location", [form.locality.trim(), form.city.trim()].filter(Boolean).join(", "), 0],
@@ -414,7 +418,8 @@ function Wizard({ navigation, initial, editId }) {
   return (
     <DropdownHost style={s.root}>
       <StatusBar style="dark" />
-      <WizardHeader title={editing ? "Edit your property" : cur.heading || "Post your property"} subtitle={cur.subtitle} onBack={goBack} />
+      <WizardHeader title={editing ? "Edit your property" : cur.heading || "Post your property"}
+        subtitle={isDeveloper && cur.key === "purpose" ? "Get the right buyers." : cur.subtitle} onBack={goBack} />
       {ONLY_STEP ? null : <Stepper steps={STEPS} step={step} onJump={jump} />}
 
       {/* The form scrolls on behind the see-through tab bar; the bottom padding lets its end clear the bar. */}
@@ -446,10 +451,11 @@ function Wizard({ navigation, initial, editId }) {
               <Card index={0}>
                 <FieldLabel icon="swap-horizontal-outline">I want to</FieldLabel>
                 <View style={s.row} accessibilityRole="radiogroup">
-                  {LISTING_OPTIONS.map((o) => (
+                  {listingOptions.map((o) => (
                     <ChoiceTile key={o.value} label={o.label} icon={o.icon} active={form.listingType === o.value} onPress={() => set("listingType", o.value)} />
                   ))}
                 </View>
+                {isDeveloper ? <Text style={s.saleNote}>Developer accounts list properties for sale only.</Text> : null}
                 <ErrorText>{errors.listingType}</ErrorText>
 
                 <FieldLabel icon="grid-outline" style={[s.gap, editing && s.faded]}>Property category</FieldLabel>
@@ -766,6 +772,7 @@ const s = StyleSheet.create({
   faded: { opacity: 0.45 },
   lockNote: { flexDirection: "row", alignItems: "center", gap: 6, marginTop: 10 },
   lockNoteText: { flex: 1, fontSize: 11.5, lineHeight: 16, color: brand.inkSoft },
+  saleNote: { fontSize: 11.5, lineHeight: 16, color: brand.inkSoft, marginTop: 8 },
   locate: { flexDirection: "row", alignItems: "center", gap: 5, paddingHorizontal: 10, minHeight: 30, borderRadius: 15, backgroundColor: brand.lavender },
   locateText: { fontSize: 11.5, fontWeight: "700", color: brand.violet },
 

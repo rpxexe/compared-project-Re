@@ -49,7 +49,7 @@ async function firebaseCustomer(req, res, next) {
   if (!customer || customer.doc.isActive === false) return deny(res, "Customer not found");
   req.firebase = decoded;
   req.customer = customer;
-  // Same shape as the JWT middleware's req.user, so shared helpers (CRM lead hooks) work unchanged.
+  // Same shape as the JWT middleware's req.user, so shared helpers work unchanged.
   req.user = {
     id: String(customer.doc._id),
     phone: customer.doc.phone || "",
