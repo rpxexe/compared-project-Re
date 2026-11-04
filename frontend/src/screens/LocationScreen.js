@@ -15,10 +15,11 @@ import { useCity } from "../hooks/useCity";
 import { useLocationAccess } from "../context/LocationAccessContext";
 import { api } from "../services/api";
 import { POPULAR_CITIES, searchIndiaLocations } from "../services/locationService";
-import { brand, colors, radius, shadow } from "../theme";
+import { brand, colors, gradients, radius, shadow } from "../theme";
 import Text, { AppTextInput as TextInput } from "../components/AppText";
 
 const RECENTS_KEY = "cp_recent_locations";
+const HOT = "#E8590C";
 const MAX_RECENTS = 6;
 
 // Locations picked on this screen, newest first: [{ full, city, title }].
@@ -488,8 +489,15 @@ function SearchResults({ query, searching, places, localities, onPlace, onLocali
   );
 }
 
-// Example searches; tapping one types it into the search box.
-const SEARCH_EXAMPLES = ["Andheri West", "Whitefield", "Hinjewadi", "Gachibowli", "Powai", "Salt Lake", "Golf Course Road", "Sector 62"];
+// Example searches with their city; tapping one types it into the search box.
+const SEARCH_EXAMPLES = [
+  { q: "Andheri West", city: "Mumbai" }, { q: "Whitefield", city: "Bangalore" },
+  { q: "Hinjewadi", city: "Pune" }, { q: "Gachibowli", city: "Hyderabad" },
+  { q: "Powai", city: "Mumbai" }, { q: "Salt Lake", city: "Kolkata" },
+  { q: "Golf Course Road", city: "Gurgaon" }, { q: "Sector 62", city: "Noida" },
+];
+const TRENDING_COUNT = 5;
+const listingsText = (n) => `${n} ${n === 1 ? "listing" : "listings"}`;
 
 // Under the popular cities: Trending (localities with the most listings), Nearby (other
 // localities in the current city; hidden for All of India) and Try searching (examples).
@@ -501,7 +509,7 @@ function Explore({ city, onPick, onSuggest, onlyExamples }) {
     if (onlyExamples) return undefined;
     let alive = true;
     api.locations({ limit: 12 })
-      .then((r) => alive && setTrending((r?.locations || []).filter((l) => l.locality).slice(0, 6)))
+      .then((r) => alive && setTrending((r?.locations || []).filter((l) => l.locality).slice(0, TRENDING_COUNT)))
       .catch(() => alive && setTrending([]));
     return () => { alive = false; };
   }, []);
@@ -517,16 +525,9 @@ function Explore({ city, onPick, onSuggest, onlyExamples }) {
 
   return (
     <>
-      {trending?.length ? (
-        <ChipSection title="Trending" icon="trending-up" delay={360}
-          items={trending.map((l) => ({ key: `${l.locality}|${l.city}`, label: l.locality, sub: l.city, onPress: () => onPick(l) }))} />
-      ) : null}
-      {nearby?.length ? (
-        <ChipSection title={`Nearby in ${city}`} icon="location-outline" delay={420}
-          items={nearby.map((l) => ({ key: `${l.locality}|${l.city}`, label: l.locality, onPress: () => onPick(l) }))} />
-      ) : null}
-      <ChipSection title="Try searching" icon="search" delay={onlyExamples ? 60 : 480}
-        items={SEARCH_EXAMPLES.map((q) => ({ key: q, label: q, onPress: () => onSuggest(q) }))} />
+      {trending?.length ? <TrendingCard items={trending} onPick={onPick} delay={360} /> : null}
+      {nearby?.length ? <NearbyStrip city={city} items={nearby} onPick={onPick} delay={420} /> : null}
+      <SearchExamples onSuggest={onSuggest} delay={onlyExamples ? 60 : 480} bare={onlyExamples} />
     </>
   );
 }
@@ -560,19 +561,115 @@ function RecentList({ title, recents, isCurrent, onPick, onClear, delay = 0, bar
   );
 }
 
-function ChipSection({ title, icon, items, delay }) {
+// Trending localities as a ranked leaderboard: a rank badge (the top three on the brand gradient),
+// the locality and its city, the listing count, and a bar that grows to show how busy each one
+// is next to the leader.
+function TrendingCard({ items, onPick, delay }) {
+  const top = Math.max(1, ...items.map((l) => l.count || 0));
   return (
     <View>
-      <Reveal delay={delay}>
-        <Text style={styles.section}>{title}</Text>
+      <Reveal delay={delay} style={styles.sectionRow}>
+        <Text style={[styles.section, { flex: 1 }]}>Trending localities</Text>
+        <View style={styles.hotTag}>
+          <Ionicons name="flame" size={12} color={HOT} />
+          <Text style={styles.hotText}>Most listings</Text>
+        </View>
       </Reveal>
-      <View style={styles.chips}>
-        {items.map((it, i) => (
-          <PopIn key={it.key} delay={delay + 30 + Math.min(i, 8) * 35}>
-            <PressableScale to={0.94} onPress={it.onPress} style={styles.chip} accessibilityRole="button" accessibilityLabel={it.sub ? `${it.label}, ${it.sub}` : it.label}>
-              <Ionicons name={icon} size={14} color={brand.violet} />
-              <Text style={styles.chipText} numberOfLines={1}>{it.label}</Text>
-              {it.sub ? <Text style={styles.chipSub} numberOfLines={1}>· {it.sub}</Text> : null}
+      <View style={styles.listCard}>
+        {items.map((l, i) => (
+          <Reveal key={`${l.locality}|${l.city}`} delay={delay + 40 + stagger(i, 50)} distance={8}>
+            <TrendingRow item={l} rank={i + 1} share={(l.count || 0) / top} first={i === 0} delay={delay + 220 + i * 70} onPress={() => onPick(l)} />
+          </Reveal>
+        ))}
+      </View>
+    </View>
+  );
+}
+
+function TrendingRow({ item, rank, share, first, delay, onPress }) {
+  const grow = useRef(new Animated.Value(isReducedMotion() ? 1 : 0)).current;
+  useEffect(() => {
+    if (isReducedMotion()) return;
+    Animated.timing(grow, { toValue: 1, duration: 700, delay, easing: Easing.out(Easing.cubic), useNativeDriver: true }).start();
+  }, [grow, delay]);
+  const listings = listingsText(item.count || 0);
+  const podium = rank <= 3;
+  return (
+    <Pressable onPress={onPress} style={({ pressed }) => [styles.row, !first && styles.rowLine, pressed && { backgroundColor: brand.lavender }]}
+      accessibilityRole="button" accessibilityLabel={`Trending number ${rank}: ${item.locality}, ${item.city}, ${listings}`}>
+      {podium ? (
+        <LinearGradient colors={gradients.cta} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.rank}>
+          <Text style={[styles.rankText, { color: colors.white }]}>{rank}</Text>
+        </LinearGradient>
+      ) : (
+        <View style={[styles.rank, styles.rankIdle]}>
+          <Text style={styles.rankText}>{rank}</Text>
+        </View>
+      )}
+      <View style={{ flex: 1 }}>
+        <View style={styles.trendHead}>
+          <Text style={[styles.rowTitle, styles.trendName]} numberOfLines={1}>{item.locality}</Text>
+          <Text style={styles.trendCount}>{listings}</Text>
+        </View>
+        {item.city ? <Text style={styles.rowSub} numberOfLines={1}>{item.city}</Text> : null}
+        <View style={styles.trendTrack}>
+          <Animated.View style={[styles.trendBar, !podium && styles.trendBarIdle, { width: `${Math.max(6, share * 100)}%`, transform: [{ scaleX: grow }] }]} />
+        </View>
+      </View>
+      <Ionicons name="arrow-forward" size={15} color={brand.placeholder} />
+    </Pressable>
+  );
+}
+
+// Other localities in the current city as a swipeable row of cards, each with its listing count.
+function NearbyStrip({ city, items, onPick, delay }) {
+  return (
+    <View>
+      <Reveal delay={delay} style={styles.sectionRow}>
+        <Text style={[styles.section, { flex: 1 }]} numberOfLines={1}>Nearby in {city}</Text>
+        <Text style={styles.sectionHint}>Swipe for more</Text>
+      </Reveal>
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} keyboardShouldPersistTaps="handled"
+        style={styles.stripWrap} contentContainerStyle={styles.strip}>
+        {items.map((l, i) => (
+          <PopIn key={`${l.locality}|${l.city}`} delay={delay + 30 + Math.min(i, 5) * 50}>
+            <PressableScale to={0.95} onPress={() => onPick(l)} style={styles.nearCard} accessibilityRole="button"
+              accessibilityLabel={`${l.locality}, ${listingsText(l.count || 0)}`}>
+              <View style={styles.nearPin}>
+                <Ionicons name="location" size={16} color={brand.violet} />
+              </View>
+              <Text style={styles.nearName} numberOfLines={2}>{l.locality}</Text>
+              <View style={styles.nearFoot}>
+                <Ionicons name="business-outline" size={12} color={brand.inkSoft} />
+                <Text style={styles.nearCount} numberOfLines={1}>{listingsText(l.count || 0)}</Text>
+              </View>
+            </PressableScale>
+          </PopIn>
+        ))}
+      </ScrollView>
+    </View>
+  );
+}
+
+// Example searches in a two-column grid, each with its city. `bare`: inside the dropdown card.
+function SearchExamples({ onSuggest, delay, bare }) {
+  return (
+    <View style={bare ? styles.bareExamples : null}>
+      <Reveal delay={delay}>
+        <Text style={styles.section}>Try searching</Text>
+      </Reveal>
+      <View style={styles.exampleGrid}>
+        {SEARCH_EXAMPLES.map((ex, i) => (
+          <PopIn key={ex.q} delay={delay + 30 + i * 35} style={styles.exampleCell}>
+            <PressableScale to={0.95} onPress={() => onSuggest(ex.q)} style={styles.example} accessibilityRole="button"
+              accessibilityLabel={`Search ${ex.q}, ${ex.city}`}>
+              <View style={styles.exampleIcon}>
+                <Ionicons name="search" size={13} color={brand.violet} />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.exampleText} numberOfLines={1}>{ex.q}</Text>
+                <Text style={styles.exampleCity} numberOfLines={1}>{ex.city}</Text>
+              </View>
             </PressableScale>
           </PopIn>
         ))}
@@ -682,10 +779,38 @@ const styles = StyleSheet.create({
   dropdownNote: { marginHorizontal: 10, marginTop: 12 },
   bareHead: { paddingHorizontal: 10, paddingTop: 10, paddingBottom: 2 },
   bareSection: { marginTop: 0, marginBottom: 0 },
-  chips: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
-  chip: { flexDirection: "row", alignItems: "center", gap: 6, minHeight: 38, maxWidth: "100%", paddingHorizontal: 14, borderRadius: radius.pill, backgroundColor: colors.white, borderWidth: 1.2, borderColor: brand.lavenderMid },
-  chipText: { flexShrink: 1, fontSize: 13, fontWeight: "700", color: brand.ink },
-  chipSub: { fontSize: 12, fontWeight: "600", color: brand.inkSoft },
+  sectionHint: { fontSize: 11.5, fontWeight: "700", color: brand.placeholder, marginTop: 12 },
+
+  // Trending leaderboard.
+  hotTag: { flexDirection: "row", alignItems: "center", gap: 4, marginTop: 12, paddingHorizontal: 9, paddingVertical: 3, borderRadius: radius.pill, backgroundColor: "#FFF0E6" },
+  hotText: { fontSize: 11, fontWeight: "800", color: HOT },
+  rank: { width: 32, height: 32, borderRadius: 11, alignItems: "center", justifyContent: "center" },
+  rankIdle: { backgroundColor: brand.lavender },
+  rankText: { fontSize: 14, fontWeight: "800", color: brand.violet },
+  trendHead: { flexDirection: "row", alignItems: "center", gap: 8 },
+  trendName: { flex: 1 },
+  trendCount: { fontSize: 12, fontWeight: "700", color: brand.violet },
+  trendTrack: { height: 5, marginTop: 7, borderRadius: 3, backgroundColor: "#F1ECFA", overflow: "hidden" },
+  trendBar: { height: 5, borderRadius: 3, backgroundColor: brand.violet, transformOrigin: "left" },
+  trendBarIdle: { backgroundColor: "#B79BF2" },
+
+  // Nearby: swipeable cards running edge to edge.
+  stripWrap: { marginHorizontal: -16 },
+  strip: { paddingHorizontal: 16, gap: 10 },
+  nearCard: { width: 128, minHeight: 118, padding: 12, borderRadius: radius.lg, backgroundColor: colors.white, borderWidth: 1, borderColor: brand.lavenderMid, ...shadow.card },
+  nearPin: { width: 32, height: 32, borderRadius: 16, alignItems: "center", justifyContent: "center", backgroundColor: brand.lavender },
+  nearName: { flex: 1, fontSize: 13.5, lineHeight: 18, fontWeight: "800", color: brand.ink, marginTop: 10 },
+  nearFoot: { flexDirection: "row", alignItems: "center", gap: 4, marginTop: 8 },
+  nearCount: { flexShrink: 1, fontSize: 11.5, fontWeight: "700", color: brand.violet },
+
+  // Try searching: two suggestion tiles per row.
+  bareExamples: { paddingHorizontal: 6 },
+  exampleGrid: { flexDirection: "row", flexWrap: "wrap", justifyContent: "space-between", rowGap: 8 },
+  exampleCell: { width: "48.8%" },
+  example: { flexDirection: "row", alignItems: "center", gap: 10, minHeight: 52, paddingHorizontal: 10, borderRadius: radius.md, backgroundColor: brand.lavender },
+  exampleIcon: { width: 28, height: 28, borderRadius: 14, alignItems: "center", justifyContent: "center", backgroundColor: colors.white },
+  exampleText: { fontSize: 13, fontWeight: "700", color: brand.ink },
+  exampleCity: { fontSize: 11.5, color: brand.inkSoft, marginTop: 1 },
 
   skel: { backgroundColor: "#EEE8FA" },
   skelLine: { height: 12, borderRadius: 6 },
