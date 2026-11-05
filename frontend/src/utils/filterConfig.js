@@ -8,8 +8,11 @@
 //                `short` is the one-line sidebar label (defaults to `label`).
 //                the filter screen's categories; a context without one gets one per filter.
 // Entry: { label, type: range|single_select|multi_select|toggle, queryKey | queryKeys,
-//          options?: [{ value, label, values?, aliases?, icon? }], default?, quick?, hidden?, role?,
-//          display?: how it is drawn (see DISPLAYS), section?: main|advanced, collapsedCount? }
+//          options?: [{ value, label, values?, aliases?, icon?, group? }], default?, quick?, hidden?, role?,
+//          display?: how it is drawn (see DISPLAYS), section?: main|advanced, collapsedCount?,
+//          groups?: [{ id, label, icon? }] - option tabs (e.g. Residential / Commercial) }
+//          Groups are kept only when every option names one of them, so a context that overrides
+//          the options without groups simply shows them untabbed.
 // Invalid entries are dropped (and reported in `errors`) so a bad remote config can't crash the app.
 
 export const FILTER_TYPES = ['range', 'single_select', 'multi_select', 'toggle'];
@@ -47,8 +50,19 @@ function parseOptions(raw, { allowEmpty = false } = {}) {
     seen.add(o.value);
     const values = o.values === undefined ? [o.value] : o.values;
     if (!Array.isArray(values) || !values.length || !values.every(isNonEmpty)) throw new Error(`option "${o.value}" has invalid values`);
-    return { value: o.value, label: o.label, values: [...values], aliases: Array.isArray(o.aliases) ? o.aliases.filter(isStr) : [], icon: isStr(o.icon) ? o.icon : null };
+    return { value: o.value, label: o.label, values: [...values], aliases: Array.isArray(o.aliases) ? o.aliases.filter(isStr) : [], icon: isStr(o.icon) ? o.icon : null, group: isNonEmpty(o.group) ? o.group : null };
   });
+}
+
+// Option tabs, or null when there are none or any option sits outside them. Only groups that
+// actually hold options are kept.
+function parseGroups(raw, options) {
+  if (!Array.isArray(raw)) return null;
+  const groups = raw.filter((g) => g && isNonEmpty(g.id) && isNonEmpty(g.label));
+  const ids = new Set(groups.map((g) => g.id));
+  if (groups.length < 2 || ids.size !== groups.length || !options.every((o) => ids.has(o.group))) return null;
+  const used = groups.filter((g) => options.some((o) => o.group === g.id));
+  return used.length > 1 ? used.map((g) => ({ id: g.id, label: g.label, icon: isStr(g.icon) ? g.icon : null })) : null;
 }
 
 function parseUnit(raw) {
@@ -114,6 +128,7 @@ export function parseEntry(id, raw) {
 
   entry.options = parseOptions(raw.options, { allowEmpty: type === 'single_select' });
   entry.unitLabel = isStr(raw.unitLabel) ? raw.unitLabel : '';
+  entry.groups = parseGroups(raw.groups, entry.options);
   if (type === 'multi_select') {
     entry.default = [];
   } else {

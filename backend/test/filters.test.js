@@ -49,6 +49,8 @@ test.describe('filterFields normaliser', () => {
     assert.deepEqual([land.type, land.segment], ['commercial_land', 'commercial']);
     assert.deepEqual(Object.values(compute({ propertyType: 'Agricultural Land' })).slice(2, 4), ['land', 'land'], 'land is its own type');
     assert.equal(compute({ propertyType: 'Residential Plot' }).type, 'plot');
+    assert.equal(compute({ propertyType: 'Showroom' }).type, 'showroom', 'showrooms are their own type');
+    assert.equal(compute({ propertyType: 'Shop/Showroom' }).type, 'shop', 'a combined listing stays a shop');
   });
 
   test('missing or junk values stay null instead of being invented', () => {

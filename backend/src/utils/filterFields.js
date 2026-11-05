@@ -4,7 +4,7 @@
 // Bump VERSION whenever compute() changes so the sync job rewrites every listing.
 const { numericValue, firstString } = require('./property');
 
-const VERSION = 4;
+const VERSION = 5;
 const FIELD = 'filterFields';
 
 const AREA_TO_SQFT = { sqft: 1, sqm: 10.7639, sqyd: 9, acre: 43560, hectare: 107639 };
@@ -32,7 +32,9 @@ const TYPES = [
   ['independent_house', /\bhouse|bungalow/i, 'residential'],
   ['coworking', /co-?working/i, 'commercial'],
   ['office', /office/i, 'commercial'],
-  ['shop', /shop|showroom|retail/i, 'commercial'],
+  // A combined "Shop/Showroom" listing counts as a shop; only a plain showroom is a showroom.
+  ['shop', /shop|retail/i, 'commercial'],
+  ['showroom', /showroom/i, 'commercial'],
 ];
 function typeOf(p) {
   const raw = firstString(p.propertyType, p.type, p.propertyGroup);

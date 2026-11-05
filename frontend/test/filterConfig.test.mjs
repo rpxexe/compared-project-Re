@@ -56,6 +56,25 @@ test('display and section hints drive the layout', () => {
   assert.match(bad.errors.join(' | '), /unknown section "sidebar"/);
 });
 
+test('property type splits into Residential / Commercial tabs on Buy and Rent', () => {
+  const c = parseFilterConfig(RAW);
+  const labels = (ctx, group) => getFilter(c, ctx, 'propertyType').options.filter((o) => o.group === group).map((o) => o.label);
+  for (const ctx of ['buy_residential', 'rent_residential']) {
+    assert.deepEqual(getFilter(c, ctx, 'propertyType').groups.map((g) => g.id), ['residential', 'commercial'], ctx);
+    assert.deepEqual(labels(ctx, 'commercial'), ['Shop', 'Office space', 'Plot / Land', 'Showroom', 'Co-working space', 'Warehouse'], ctx);
+  }
+  assert.deepEqual(labels('buy_residential', 'residential'), ['Flat', 'Villa', 'Builder floor', 'Plot']);
+  assert.deepEqual(labels('rent_residential', 'residential'), ['Flat', 'Villa', 'Builder floor', 'Plot', 'PG / Co-living']);
+  // Contexts that override the options without groups inherit no tabs.
+  assert.equal(getFilter(c, 'new_projects', 'propertyType').groups, null);
+  assert.equal(getFilter(c, 'commercial', 'propertyType').groups, null);
+
+  const entry = (options, groups) => parseEntry('t', { label: 'T', type: 'multi_select', queryKey: 't', options, groups });
+  const two = [{ id: 'a', label: 'A' }, { id: 'b', label: 'B' }];
+  assert.equal(entry([{ value: 'x', label: 'X', group: 'a' }, { value: 'y', label: 'Y' }], two).groups, null, 'an ungrouped option drops the tabs');
+  assert.equal(entry([{ value: 'x', label: 'X', group: 'a' }, { value: 'y', label: 'Y', group: 'a' }], two).groups, null, 'one used group is no tabs');
+});
+
 test('parsed config is deeply frozen', () => {
   const c = parseFilterConfig(RAW);
   assert.throws(() => { c.contexts.buy_residential.filters[0].label = 'x'; }, TypeError);

@@ -60,9 +60,12 @@ export default function SearchFiltersScreen({ navigation, route }) {
   const stash = useRef({}); // per-tab filters left behind when switching tabs
   const contentRef = useRef(null);
   const searchRef = useRef(null);
-  // Suggestions drop down under the header while the search field is focused.
+  // Suggestions drop down from the search field itself (joined to it) while it is focused.
   const [suggesting, setSuggesting] = useState(false);
   const [bandHeight, setBandHeight] = useState(0);
+  const [headBodyY, setHeadBodyY] = useState(0);
+  const [searchBox, setSearchBox] = useState(null); // { y, height } within the header body
+  const searchBottom = searchBox ? headBodyY + searchBox.y + searchBox.height : 0;
   // The floating tab bar unmounts while the keyboard is up (see BottomNav), so its height must not
   // be reserved then - otherwise the footer's dead space hides the list being typed into.
   const [keyboardUp, setKeyboardUp] = useState(false);
@@ -144,8 +147,8 @@ export default function SearchFiltersScreen({ navigation, route }) {
     searchRef.current?.blur();
     Keyboard.dismiss();
   };
-  // Fits between the header and the keyboard, and never grows past a compact card.
-  const dropdownMax = Math.max(160, Math.min(360, height - bandHeight - keyboardHeight - 24));
+  // Fits between the search field and the keyboard, and never grows past a compact card.
+  const dropdownMax = Math.max(140, Math.min(250, height - searchBottom - keyboardHeight - 24));
   // Picking a suggestion applies it and opens the results, like the keyboard's search key.
   const applyNow = (next) => {
     setDraft(next);
@@ -190,10 +193,12 @@ export default function SearchFiltersScreen({ navigation, route }) {
             </View>
           ) : null}
         </View>
-        <Reveal delay={60} distance={10} style={styles.headBody}>
+        <Reveal delay={60} distance={10} style={styles.headBody} onLayout={(e) => setHeadBodyY(e.nativeEvent.layout.y)}>
           <SearchTabs tabs={tabs} value={draft.context} onChange={switchTab} />
           <SearchField
             inputRef={searchRef}
+            open={suggesting && !!searchBox}
+            onLayout={(e) => setSearchBox(e.nativeEvent.layout)}
             value={draft.query.search}
             onChange={(search) => setDraft((d) => setQuery(d, config, { search }))}
             onFocus={() => setSuggesting(true)}
@@ -240,12 +245,12 @@ export default function SearchFiltersScreen({ navigation, route }) {
         </View>
       )}
 
-      {/* Suggestions drop down over the filters, which stay visible (dimmed) behind; tapping
-          them closes the dropdown. */}
-      {suggesting && bandHeight ? (
+      {/* Suggestions hang straight off the search field as one piece with it, over the filters,
+          which stay visible (dimmed) behind; tapping them closes the dropdown. */}
+      {suggesting && bandHeight && searchBox ? (
         <>
           <Pressable style={[styles.backdrop, { top: bandHeight }]} onPress={closeSuggestions} accessibilityLabel="Close suggestions" />
-          <View style={[styles.dropdown, { top: bandHeight + 6 }]}>
+          <View style={[styles.dropdown, { top: searchBottom }]}>
             <DropdownScroll maxHeight={dropdownMax}>
               <SearchSuggestions
                 text={draft.query.search}
@@ -298,7 +303,7 @@ export default function SearchFiltersScreen({ navigation, route }) {
 
 // Free-text search across city, locality, project and developer. Local text so FilterState's
 // trimming never eats a space while typing.
-function SearchField({ inputRef, value, onChange, onFocus, onBlur, onSubmit }) {
+function SearchField({ inputRef, open, onLayout, value, onChange, onFocus, onBlur, onSubmit }) {
   const [text, setText] = useState(value);
   useEffect(() => {
     if (value !== text.trim()) setText(value);
@@ -308,8 +313,9 @@ function SearchField({ inputRef, value, onChange, onFocus, onBlur, onSubmit }) {
     onChange(v);
   };
   return (
-    <View style={styles.search}>
-      <Ionicons name="search" size={16} color={colors.muted} />
+    // `open`: suggestions hang below, so the bottom corners square off to join them.
+    <View style={[styles.search, open && styles.searchOpen]} onLayout={onLayout}>
+      <Ionicons name="search" size={16} color={open ? brand.violet : colors.muted} />
       <View style={styles.searchBox}>
         {/* Rolling examples stand in for the placeholder until the user types. */}
         {text ? null : <RollingPlaceholder style={StyleSheet.absoluteFill} />}
@@ -412,6 +418,7 @@ const styles = StyleSheet.create({
     borderRadius: radius.md,
     backgroundColor: colors.white,
   },
+  searchOpen: { borderBottomLeftRadius: 0, borderBottomRightRadius: 0 },
   searchBox: { flex: 1, justifyContent: "center" },
   // No horizontal padding, so typed text starts exactly where the rolling hint does.
   searchInput: { fontSize: 14.5, color: colors.ink, paddingVertical: 6, paddingHorizontal: 0 },
@@ -423,9 +430,26 @@ const styles = StyleSheet.create({
   split: { flex: 1, flexDirection: "row", backgroundColor: brand.lavender, paddingTop: 10 },
   content: { flex: 1, backgroundColor: colors.white, borderTopLeftRadius: radius.lg, borderBottomLeftRadius: radius.lg },
   backdrop: { position: "absolute", left: 0, right: 0, bottom: 0, backgroundColor: "rgba(20, 12, 40, 0.18)" },
-  dropdown: { position: "absolute", left: 16, right: 16, borderRadius: radius.md, backgroundColor: colors.white, ...shadow.float },
+  // Same width as the search field (the header body's 16px gutter) and square on top, so the two
+  // read as one card; a hairline marks where the field ends. No shadow - it would spill up over
+  // the field - just a hairline edge, plus a short drop shadow below on iOS (Android's elevation
+  // always shades the top too).
+  dropdown: {
+    position: "absolute",
+    left: 16,
+    right: 16,
+    borderBottomLeftRadius: radius.md,
+    borderBottomRightRadius: radius.md,
+    borderWidth: 1,
+    borderColor: colors.line,
+    backgroundColor: colors.white,
+    ...Platform.select({
+      ios: { shadowColor: "#140A2E", shadowOpacity: 0.12, shadowRadius: 6, shadowOffset: { width: 0, height: 8 } },
+      default: {},
+    }),
+  },
   // Right padding keeps the rows clear of the scroll bar.
-  dropdownInner: { paddingLeft: 8, paddingRight: 18, paddingVertical: 4 },
+  dropdownInner: { paddingLeft: 6, paddingRight: 16, paddingVertical: 2 },
   barTrack: { position: "absolute", top: BAR_INSET, right: 6, width: 5, borderRadius: 3, backgroundColor: brand.lavender },
   barThumb: { width: 5, borderRadius: 3, backgroundColor: brand.violet, opacity: 0.55 },
   contentInner: { padding: 16, paddingBottom: 28 },

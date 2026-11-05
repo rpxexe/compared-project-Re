@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import {
   STEPS, EMPTY_FORM, LISTING_OPTIONS, CATEGORY_OPTIONS, RESIDENTIAL_TYPES, COMMERCIAL_TYPES,
   validateStep, firstInvalidStep, buildPayload, needsBhk, sanitizeForType, typesFor,
+  FLOORS, TOP_FLOOR, floorLabel, formFromListing,
 } from '../src/utils/postPropertyFlow.js';
 
 const ok = (over = {}) => ({
@@ -25,6 +26,17 @@ test('form is 4 steps, and purpose + category are chosen on the first one', () =
 test('property types follow the chosen category', () => {
   assert.deepEqual(typesFor('residential'), RESIDENTIAL_TYPES);
   assert.deepEqual(typesFor('commercial'), COMMERCIAL_TYPES);
+});
+
+test('floors run Ground, 1-59, then "60 & higher"', () => {
+  assert.deepEqual([FLOORS[0], FLOORS[59], FLOORS.at(-1), FLOORS.length], ['Ground', '59', TOP_FLOOR, 61]);
+  assert.ok(!FLOORS.includes('60'), 'no plain 60th floor');
+  assert.equal(floorLabel(TOP_FLOOR), '60 & higher');
+  assert.equal(buildPayload(ok({ totalFloors: '75', floor: TOP_FLOOR })).floor, '60th Floor & above', 'backend reads its leading number');
+  assert.ok(validateStep('purpose', ok({ totalFloors: '40', floor: TOP_FLOOR })).floor, 'above a 40-floor building');
+  assert.deepEqual(validateStep('purpose', ok({ totalFloors: '75', floor: TOP_FLOOR })), {});
+  assert.equal(formFromListing({ floor: '60th Floor & above' }).floor, TOP_FLOOR, 'round-trips for editing');
+  assert.equal(formFromListing({ floor: '72nd Floor' }).floor, TOP_FLOOR, 'older high floors land on it too');
 });
 
 test('a step does not validate until its required fields are valid', () => {

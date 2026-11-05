@@ -132,7 +132,7 @@ test('active count, clear and clearAll', () => {
   const both = fromQueryParams({ propertyType: 'Farm House', propertyTypes: 'villa' }, config, BUY);
   assert.deepEqual(activeFilterIds(both, config), ['propertyType', 'q:propertyType'], 'type filter and free text are distinct');
   assert.equal(chipLabel(both, config, 'q:propertyType'), 'Farm House');
-  assert.equal(chipLabel(both, config, 'propertyType'), 'House / Villa');
+  assert.equal(chipLabel(both, config, 'propertyType'), 'Villa');
   assert.deepEqual(clear(both, config, 'propertyType').query.propertyType, 'Farm House');
   assert.ok(sameState(clear(s, config, 'not-a-filter'), s));
   const none = clearAll(s, config);

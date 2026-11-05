@@ -58,6 +58,24 @@ export function Cover({ uri, style, iconSize = 34, full = false }) {
   );
 }
 
+// "Enquire Now" on a card: guests get the sign-in prompt right here; signed-in users land on the
+// details screen with the enquiry form already open.
+export function useEnquire(p) {
+  const nav = useNavigation();
+  const { token, openLoginPrompt } = useAuth();
+  return () => {
+    if (!token) {
+      openLoginPrompt({
+        reason: "enquiry",
+        title: "Sign In to Enquire",
+        message: `Please sign in to connect directly with the builder for ${listingName(p) || "this property"}.`,
+      });
+      return;
+    }
+    nav.navigate("PropertyDetails", { id: p.id, preview: p, enquire: true });
+  };
+}
+
 function CompareToggle({ id, dark }) {
   const { has, toggle } = useCompare();
   const on = has(id);
@@ -184,27 +202,12 @@ function PropertyCard({ property: p, variant = "row", index = 0, style }) {
 // White card with the details on the left and the photo on the right behind a curved edge;
 // "Enquire Now" and "Add to Compare" pills along the bottom.
 function RowCard({ p, enter, style, open, where, badge, facts }) {
-  const nav = useNavigation();
-  const { token, openLoginPrompt } = useAuth();
   const { has, toggle } = useCompare();
   const inCompare = has(p.id);
   const name = listingName(p);
   const price = p.priceMin ? `${p.priceMin} – ${p.price}` : p.price;
   const rating = ratingLabel(p.rating);
-
-  // Guests get the sign-in prompt right here; signed-in users land on the details screen with
-  // the enquiry form already open.
-  const enquire = () => {
-    if (!token) {
-      openLoginPrompt({
-        reason: "enquiry",
-        title: "Sign In to Enquire",
-        message: `Please sign in to connect directly with the builder for ${name || "this property"}.`,
-      });
-      return;
-    }
-    nav.navigate("PropertyDetails", { id: p.id, preview: p, enquire: true });
-  };
+  const enquire = useEnquire(p);
 
   return (
     <Animated.View style={[enter, style]}>
