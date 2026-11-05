@@ -1,0 +1,105 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {
+    "title": "CompareProjects system architecture",
+    "output": ".archify/architecture-compareprojects-20261105-120255/compareprojects-architecture.html",
+    "quality_profile": "showcase",
+    "locale": "en",
+    "repository": {
+      "url": "https://github.com/rpxexe/compared-project-Re.git",
+      "provider": "github",
+      "link_mode": "web",
+      "revision": "35c129ec4424994a94be4708248abd88848e14e5"
+    }
+  },
+  "components": [
+    { "id": "users", "type": "external", "label": "App users", "sublabel": "guest · owner · agent · developer", "pos": [610, 40], "size": [180, 56] },
+    { "id": "app", "type": "frontend", "label": "Expo mobile app", "sublabel": "React Native 0.81 · Context state · axios", "pos": [570, 160], "size": [260, 80],
+      "sources": [
+        { "path": "frontend/App.js", "line": 78, "end_line": 89, "label": "provider tree" },
+        { "path": "frontend/src/navigation/AppNavigator.js", "line": 106, "end_line": 123, "label": "role-based tabs" },
+        { "path": "frontend/src/services/api.js", "line": 45, "end_line": 95, "label": "axios client + v2 token" }
+      ] },
+    { "id": "geo", "type": "cloud", "label": "Geocoding APIs", "sublabel": "Photon · Nominatim · ipwho.is", "pos": [270, 170], "size": [190, 60],
+      "sources": [ { "path": "frontend/src/services/locationService.js", "line": 142, "end_line": 291, "label": "direct fetch calls" } ] },
+    { "id": "firebase", "type": "security", "label": "Firebase Auth", "sublabel": "phone sign-in · ID tokens", "pos": [940, 170], "size": [170, 60],
+      "sources": [
+        { "path": "frontend/src/services/firebasePhone.js", "line": 27, "end_line": 39, "label": "app phone sign-in" },
+        { "path": "backend/src/utils/firebase.js", "line": 12, "end_line": 20, "label": "server verifyIdToken" }
+      ] },
+    { "id": "gateway", "type": "backend", "label": "Express 5 app (app.js)", "sublabel": "helmet · CORS allow-list · 200 KB JSON · /api/health · error handler", "pos": [240, 330], "size": [920, 60],
+      "sources": [
+        { "path": "backend/src/app.js", "line": 8, "end_line": 66, "label": "middleware + routers" },
+        { "path": "backend/src/server.js", "line": 10, "end_line": 29, "label": "start-up order" }
+      ] },
+    { "id": "auth", "type": "security", "label": "Auth API", "sublabel": "/api/auth · OTP → JWT", "pos": [240, 470], "size": [140, 76],
+      "sources": [
+        { "path": "backend/src/routes/auth.js", "line": 45, "end_line": 49, "label": "OTP + email routes" },
+        { "path": "backend/src/controllers/auth-controller.js", "line": 69, "end_line": 136, "label": "send SMS, issue JWT" },
+        { "path": "backend/src/middleware/auth.js", "line": 10, "end_line": 38, "label": "JWT check" }
+      ] },
+    { "id": "v2", "type": "backend", "label": "v2 contract API", "sublabel": "/api/v2 · Firebase token", "pos": [396, 470], "size": [140, 76],
+      "sources": [
+        { "path": "backend/src/routes/v2.js", "line": 25, "end_line": 46, "label": "v2 routes" },
+        { "path": "backend/src/middleware/firebaseAuth.js", "line": 10, "end_line": 45, "label": "Firebase middleware" }
+      ] },
+    { "id": "listings", "type": "backend", "label": "Listings API", "sublabel": "/properties · /enquiries", "pos": [552, 470], "size": [140, 76],
+      "sources": [
+        { "path": "backend/src/routes/properties.js", "line": 8, "end_line": 46, "label": "search, compare, reviews" },
+        { "path": "backend/src/routes/enquiries.js", "line": 7, "label": "enquiry" },
+        { "path": "backend/src/routes/notifications.js", "line": 6, "end_line": 9, "label": "notifications" }
+      ] },
+    { "id": "post", "type": "backend", "label": "Post & my listings", "sublabel": "/post-property · /users", "pos": [708, 470], "size": [140, 76],
+      "sources": [
+        { "path": "backend/src/routes/postProperty.js", "line": 74, "end_line": 92, "label": "developer sale-only" },
+        { "path": "backend/src/controllers/postProperty-controller.js", "line": 11, "end_line": 27, "label": "insert, live at once" },
+        { "path": "backend/src/routes/users.js", "line": 6, "end_line": 25, "label": "own listings CRUD" }
+      ] },
+    { "id": "sync", "type": "backend", "label": "filterFields sync", "sublabel": "in-process · every 10 min", "pos": [864, 470], "size": [140, 76],
+      "sources": [
+        { "path": "backend/src/utils/filterSync.js", "line": 26, "end_line": 72, "label": "bulkWrite + indexes" },
+        { "path": "backend/src/server.js", "line": 18, "label": "started at boot" }
+      ] },
+    { "id": "uploads", "type": "backend", "label": "Uploads API", "sublabel": "/api/uploads · multer", "pos": [1020, 470], "size": [140, 76],
+      "sources": [ { "path": "backend/src/routes/uploads.js", "line": 14, "end_line": 64, "label": "8 MB image, magic bytes" } ] },
+    { "id": "twilio", "type": "external", "label": "Twilio SMS", "sublabel": "OTP_MODE=twilio", "pos": [30, 477], "size": [130, 62],
+      "sources": [ { "path": "backend/src/utils/sms.js", "line": 8, "end_line": 24, "label": "REST via fetch" } ] },
+    { "id": "mongo", "type": "database", "label": "MongoDB Atlas", "sublabel": "properties (shared, schema-less) · app_users · signupusers · otps · enquiries · reviews · views · notifications · customer_leads", "pos": [240, 626], "size": [764, 64],
+      "sources": [
+        { "path": "backend/src/config/db.js", "line": 12, "end_line": 27, "label": "connect + fallback URI" },
+        { "path": "backend/src/models/Property.js", "line": 4, "end_line": 15, "label": "schema-less properties" }
+      ] },
+    { "id": "disk", "type": "database", "label": "Local disk", "sublabel": "backend/uploads/", "pos": [1020, 626], "size": [140, 64],
+      "sources": [ { "path": "backend/src/app.js", "line": 50, "end_line": 57, "label": "served at /uploads" } ] }
+  ],
+  "boundaries": [
+    { "kind": "region", "label": "Android device", "wraps": ["app"] },
+    { "kind": "region", "label": "Node.js API process (single instance)", "wraps": ["gateway", "auth", "v2", "listings", "post", "sync", "uploads"] }
+  ],
+  "connections": [
+    { "id": "use-app", "from": "users", "to": "app", "label": "uses", "variant": "emphasis" },
+    { "id": "app-geo", "from": "app", "to": "geo", "label": "place search" },
+    { "id": "app-firebase", "from": "app", "to": "firebase", "label": "phone sign-in", "variant": "security" },
+    { "id": "app-api", "from": "app", "to": "gateway", "label": "HTTPS JSON · Bearer JWT", "variant": "emphasis" },
+    { "id": "gw-firebase", "from": "gateway", "to": "firebase", "label": "verify ID token", "variant": "security" },
+    { "id": "gw-auth", "from": "gateway", "to": "auth" },
+    { "id": "gw-v2", "from": "gateway", "to": "v2" },
+    { "id": "gw-listings", "from": "gateway", "to": "listings", "variant": "emphasis" },
+    { "id": "gw-post", "from": "gateway", "to": "post" },
+    { "id": "gw-uploads", "from": "gateway", "to": "uploads" },
+    { "id": "auth-sms", "from": "auth", "to": "twilio", "label": "SMS OTP" },
+    { "id": "auth-db", "from": "auth", "to": "mongo", "label": "users, OTPs" },
+    { "id": "v2-db", "from": "v2", "to": "mongo", "label": "hearts, leads" },
+    { "id": "listings-db", "from": "listings", "to": "mongo", "label": "query, views", "variant": "emphasis" },
+    { "id": "post-db", "from": "post", "to": "mongo", "label": "insert, edit" },
+    { "id": "sync-db", "from": "sync", "to": "mongo", "label": "filterFields", "variant": "dashed" },
+    { "id": "uploads-disk", "from": "uploads", "to": "disk", "label": "image file" }
+  ],
+  "cards": [
+    { "dot": "cyan", "title": "Mobile app", "items": ["Buyer tabs: Home, Explore, Post, Compare, Profile", "Developer tabs: Post, Listings, Profile", "Filter UI generated from config/filters.json", "JWT in SecureStore; history in AsyncStorage"] },
+    { "dot": "rose", "title": "Auth", "items": ["Phone: Firebase on native builds, else backend OTP", "Developers: email + scrypt password", "Every route path returns the same v1 JWT", "admin/superadmin roles exist but no admin routes"] },
+    { "dot": "emerald", "title": "Data", "items": ["properties is shared with the website and a scraper", "API adds an indexed filterFields sub-document", "External CRM reads enquiries and customer_leads"] },
+    { "dot": "amber", "title": "Scaling limits", "items": ["Cache and rate limits are in-memory per process", "Photos on local disk, no CDN or resizing", "Built for one API instance (Render/Railway)"] }
+  ]
+}
