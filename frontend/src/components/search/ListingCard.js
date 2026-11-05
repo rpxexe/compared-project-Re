@@ -1,10 +1,12 @@
-import React, { memo, useState } from "react";
-import { Animated, Pressable, StyleSheet, View } from "react-native";
+import React, { memo } from "react";
+import { Animated, StyleSheet, View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useNavigation } from "@react-navigation/native";
 import PressableScale from "../PressableScale";
 import HeartButton from "../HeartButton";
-import { Cover } from "../PropertyCard";
+import Marquee from "../Marquee";
+import { Cover, useEnquire } from "../PropertyCard";
+import { useAuth } from "../../context/AuthContext";
 import { useCompare } from "../../context/CompareContext";
 import { useEntrance } from "../../hooks/useEntrance";
 import { LinearGradient } from "expo-linear-gradient";
@@ -12,20 +14,18 @@ import { brand, colors, gradients, radius, shadow } from "../../theme";
 import { listingName } from "../../utils/format";
 import Text from "../AppText";
 
-const MAX_DOTS = 3;
-
-// Search-results card: photo carousel on the left (status tag, wishlist heart, arrows, photo
-// count), details on the right - title, location, price with a Compare pill, beds / baths / area,
-// and up to two feature chips. `tag` is the listing status ("For Sale", "For Rent"), `perMonth`
-// suffixes the price for rentals.
-function ListingCard({ property: p, index = 0, tag, perMonth }) {
+// Compact search-results card: cover photo on the left (status tag, wishlist heart), details on
+// the right - scrolling title, location, price, beds / baths / area, one line of feature chips -
+// with small "Compare" and "Enquire Now" buttons at the bottom. `tag` is the listing status
+// ("For Sale", "For Rent"); rentals get a "/month" price suffix.
+function ListingCard({ property: p, index = 0, tag }) {
   const nav = useNavigation();
   const enter = useEntrance(Math.min(index, 6) * 70, 16);
+  const { isDeveloper } = useAuth();
   const { has, toggle } = useCompare();
   const inCompare = has(p.id);
-  const photos = p.galleryImages?.length ? p.galleryImages : [p.image].filter(Boolean);
-  const [shown, setShown] = useState(0);
-  const step = (d) => setShown((i) => (i + d + photos.length) % photos.length);
+  const enquire = useEnquire(p);
+  const cover = p.image || p.galleryImages?.[0];
 
   const name = listingName(p);
   const where = [p.locality, p.city].filter(Boolean).join(", ");
@@ -53,7 +53,7 @@ function ListingCard({ property: p, index = 0, tag, perMonth }) {
         accessibilityLabel={[name, price, where].filter(Boolean).join(", ")}
       >
         <View style={styles.photo}>
-          <Cover uri={photos[shown]} style={StyleSheet.absoluteFill} iconSize={28} />
+          <Cover uri={cover} style={StyleSheet.absoluteFill} iconSize={26} />
           {tag ? (
             <View style={[styles.tag, isRent && styles.tagRent]}>
               {isRent ? null : <LinearGradient colors={gradients.cta} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={StyleSheet.absoluteFill} />}
@@ -61,67 +61,33 @@ function ListingCard({ property: p, index = 0, tag, perMonth }) {
             </View>
           ) : null}
           <View style={styles.heart}>
-            <HeartButton id={p.id} size={16} floating={false} />
+            <HeartButton id={p.id} size={14} floating={false} />
           </View>
-          {photos.length > 1 ? (
-            <>
-              <Arrow side="left" onPress={() => step(-1)} />
-              <Arrow side="right" onPress={() => step(1)} />
-              <View style={styles.dots} pointerEvents="none">
-                {Array.from({ length: Math.min(photos.length, MAX_DOTS) }).map((_, i) => (
-                  <View key={i} style={[styles.dot, i === Math.min(shown, MAX_DOTS - 1) && styles.dotOn]} />
-                ))}
-              </View>
-            </>
-          ) : null}
-          {photos.length ? (
-            <View style={styles.counter} pointerEvents="none">
-              <Ionicons name="images-outline" size={10} color={colors.white} />
-              <Text style={styles.counterText}>{`${shown + 1}/${photos.length}`}</Text>
-            </View>
-          ) : null}
         </View>
 
         <View style={styles.body}>
-          <Text style={styles.title} numberOfLines={1}>{name}</Text>
+          <Marquee style={styles.title}>{name}</Marquee>
           {where ? (
             <View style={styles.whereRow}>
-              <Ionicons name="location-outline" size={12} color={brand.inkSoft} />
+              <Ionicons name="location-outline" size={11} color={brand.inkSoft} />
               <Text style={styles.where} numberOfLines={1}>{where}</Text>
             </View>
           ) : null}
 
-          <View style={styles.priceRow}>
-            {price ? (
-              <Text style={styles.price} numberOfLines={1}>
-                {price}
-                {isRent ? <Text style={styles.perMonth}> /month</Text> : null}
-              </Text>
-            ) : (
-              <Text style={styles.noPrice}>Price on request</Text>
-            )}
-            <PressableScale
-              onPress={(e) => {
-                e?.stopPropagation?.();
-                toggle(p.id);
-              }}
-              to={0.9}
-              hitSlop={6}
-              style={[styles.compare, inCompare && styles.compareOn]}
-              accessibilityRole="button"
-              accessibilityLabel={inCompare ? "Remove from compare" : "Add to compare"}
-            >
-              {inCompare ? <LinearGradient colors={gradients.cta} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={StyleSheet.absoluteFill} /> : null}
-              <Ionicons name={inCompare ? "checkmark" : "swap-horizontal"} size={12} color={inCompare ? colors.white : brand.violet} />
-              <Text style={[styles.compareText, inCompare && { color: colors.white }]}>{inCompare ? "Added" : "Compare"}</Text>
-            </PressableScale>
-          </View>
+          {price ? (
+            <Text style={styles.price} numberOfLines={1}>
+              {price}
+              {isRent ? <Text style={styles.perMonth}> /month</Text> : null}
+            </Text>
+          ) : (
+            <Text style={styles.noPrice}>Price on request</Text>
+          )}
 
           {facts.length ? (
             <View style={styles.facts}>
               {facts.map((f) => (
                 <View key={f.icon} style={styles.fact}>
-                  <Ionicons name={f.icon} size={13} color={brand.ink} />
+                  <Ionicons name={f.icon} size={12} color={brand.ink} />
                   <Text style={styles.factText} numberOfLines={1}>{f.text}</Text>
                 </View>
               ))}
@@ -132,32 +98,50 @@ function ListingCard({ property: p, index = 0, tag, perMonth }) {
             <View style={styles.chips}>
               {chips.map((c) => (
                 <View key={c.text} style={styles.chip}>
-                  <Ionicons name={c.icon} size={11} color={brand.inkSoft} />
+                  <Ionicons name={c.icon} size={10} color={brand.inkSoft} />
                   <Text style={styles.chipText} numberOfLines={1}>{c.text}</Text>
                 </View>
               ))}
             </View>
           ) : null}
+
+          {/* Developers only preview listings: no comparing or enquiring (as on the details screen). */}
+          {isDeveloper ? null : (
+            <View style={styles.actions}>
+              <PressableScale
+                onPress={(e) => {
+                  e?.stopPropagation?.();
+                  toggle(p.id);
+                }}
+                to={0.92}
+                hitSlop={{ top: 6, bottom: 6 }}
+                style={[styles.cmpBtn, inCompare && styles.cmpBtnOn]}
+                accessibilityRole="button"
+                accessibilityLabel={inCompare ? "Remove from compare" : "Add to compare"}
+              >
+                <Ionicons name={inCompare ? "checkmark-circle" : "swap-horizontal"} size={13} color={brand.violet} />
+                <Text style={styles.cmpText} numberOfLines={1}>{inCompare ? "Added" : "Compare"}</Text>
+              </PressableScale>
+              <PressableScale
+                onPress={(e) => {
+                  e?.stopPropagation?.();
+                  enquire();
+                }}
+                to={0.94}
+                hitSlop={{ top: 6, bottom: 6 }}
+                style={styles.enqBtn}
+                accessibilityRole="button"
+                accessibilityLabel={`Enquire now about ${name || "this property"}`}
+              >
+                <LinearGradient colors={gradients.cta} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={StyleSheet.absoluteFill} />
+                <Ionicons name="chatbubble-ellipses" size={12} color={colors.white} />
+                <Text style={styles.enqText} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.85}>Enquire Now</Text>
+              </PressableScale>
+            </View>
+          )}
         </View>
       </PressableScale>
     </Animated.View>
-  );
-}
-
-function Arrow({ side, onPress }) {
-  return (
-    <Pressable
-      onPress={(e) => {
-        e?.stopPropagation?.();
-        onPress();
-      }}
-      hitSlop={8}
-      style={[styles.arrow, side === "left" ? { left: 6 } : { right: 6 }]}
-      accessibilityRole="button"
-      accessibilityLabel={side === "left" ? "Previous photo" : "Next photo"}
-    >
-      <Ionicons name={side === "left" ? "chevron-back" : "chevron-forward"} size={13} color={brand.ink} />
-    </Pressable>
   );
 }
 
@@ -166,92 +150,82 @@ export default memo(ListingCard);
 const styles = StyleSheet.create({
   card: {
     flexDirection: "row",
-    gap: 12,
-    padding: 10,
-    borderRadius: radius.lg,
+    gap: 10,
+    padding: 7,
+    borderRadius: radius.md + 2,
     backgroundColor: colors.white,
     borderWidth: 1,
     borderColor: "rgba(124, 44, 245, 0.06)",
     ...shadow.card,
   },
-  photo: { width: "40%", minHeight: 128, borderRadius: 14, overflow: "hidden", backgroundColor: brand.lavender },
-  tag: { position: "absolute", top: 8, left: 8, paddingHorizontal: 8, paddingVertical: 3, borderRadius: 7, overflow: "hidden" },
+  // Stretches to the details' height.
+  photo: { width: "33%", minHeight: 108, borderRadius: 12, overflow: "hidden", backgroundColor: brand.lavender },
+  tag: { position: "absolute", top: 6, left: 6, paddingHorizontal: 6, paddingVertical: 2, borderRadius: 6, overflow: "hidden" },
   tagRent: { backgroundColor: "rgba(255, 255, 255, 0.92)" },
-  tagText: { fontSize: 10.5, fontWeight: "800", color: colors.white },
+  tagText: { fontSize: 9.5, fontWeight: "800", color: colors.white },
   tagTextRent: { color: brand.deep },
   heart: {
     position: "absolute",
-    top: 6,
-    right: 6,
-    width: 30,
-    height: 30,
-    borderRadius: 15,
+    right: 5,
+    bottom: 5,
+    width: 26,
+    height: 26,
+    borderRadius: 13,
     backgroundColor: colors.white,
     alignItems: "center",
     justifyContent: "center",
   },
-  arrow: {
-    position: "absolute",
-    top: "50%",
-    marginTop: -11,
-    width: 22,
-    height: 22,
-    borderRadius: 11,
-    backgroundColor: "rgba(255, 255, 255, 0.92)",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  dots: { position: "absolute", bottom: 9, left: 0, right: 0, flexDirection: "row", justifyContent: "center", gap: 4 },
-  dot: { width: 5, height: 5, borderRadius: 3, backgroundColor: "rgba(255, 255, 255, 0.55)" },
-  dotOn: { backgroundColor: colors.white },
-  counter: {
-    position: "absolute",
-    right: 6,
-    bottom: 6,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 3,
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: 6,
-    backgroundColor: "rgba(15, 8, 36, 0.6)",
-  },
-  counterText: { fontSize: 10, fontWeight: "700", color: colors.white },
-  body: { flex: 1, minWidth: 0, paddingVertical: 2 },
-  title: { fontSize: 15, fontWeight: "800", color: brand.ink },
-  whereRow: { flexDirection: "row", alignItems: "center", gap: 3, marginTop: 2 },
-  where: { flexShrink: 1, fontSize: 12, color: brand.inkSoft },
-  priceRow: { flexDirection: "row", alignItems: "center", gap: 6, marginTop: 6 },
-  price: { flex: 1, fontSize: 18, fontWeight: "800", color: brand.violet },
-  perMonth: { fontSize: 12, fontWeight: "700", color: brand.inkSoft },
-  noPrice: { flex: 1, fontSize: 13, fontWeight: "700", color: brand.inkSoft },
-  compare: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 4,
-    height: 26,
-    paddingHorizontal: 9,
-    borderRadius: radius.pill,
-    overflow: "hidden",
-    backgroundColor: brand.lavender,
-  },
-  compareOn: { backgroundColor: brand.violet },
-  compareText: { fontSize: 11, fontWeight: "800", color: brand.violet },
-  facts: { flexDirection: "row", flexWrap: "wrap", columnGap: 10, rowGap: 4, marginTop: 8 },
-  fact: { flexDirection: "row", alignItems: "center", gap: 4 },
-  factText: { fontSize: 11.5, fontWeight: "600", color: brand.ink },
-  chips: { flexDirection: "row", flexWrap: "wrap", gap: 6, marginTop: 8 },
+  body: { flex: 1, minWidth: 0, paddingTop: 1, paddingRight: 1 },
+  title: { fontSize: 14.5, lineHeight: 19, fontWeight: "800", color: brand.ink },
+  whereRow: { flexDirection: "row", alignItems: "center", gap: 3, marginTop: 1 },
+  where: { flexShrink: 1, fontSize: 11.5, color: brand.inkSoft },
+  price: { fontSize: 15.5, fontWeight: "800", color: brand.violet, marginTop: 3 },
+  perMonth: { fontSize: 11, fontWeight: "700", color: brand.inkSoft },
+  noPrice: { fontSize: 12.5, fontWeight: "700", color: brand.inkSoft, marginTop: 3 },
+  facts: { flexDirection: "row", flexWrap: "wrap", columnGap: 9, rowGap: 2, marginTop: 3 },
+  fact: { flexDirection: "row", alignItems: "center", gap: 3 },
+  factText: { fontSize: 11, fontWeight: "600", color: brand.ink },
+  // One line only: a chip that doesn't fit shrinks and truncates.
+  chips: { flexDirection: "row", gap: 5, marginTop: 5, overflow: "hidden" },
   chip: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 4,
-    maxWidth: "100%",
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 7,
+    gap: 3,
+    flexShrink: 1,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 6,
     borderWidth: 1,
     borderColor: colors.line,
     backgroundColor: "#FAF8FF",
   },
-  chipText: { flexShrink: 1, fontSize: 10.5, fontWeight: "600", color: brand.inkSoft },
+  chipText: { flexShrink: 1, fontSize: 10, fontWeight: "600", color: brand.inkSoft },
+  // Outlined Compare + gradient Enquire, like the details screen's bottom bar but pocket-sized.
+  actions: { flexDirection: "row", gap: 6, marginTop: 7 },
+  cmpBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 3,
+    height: 28,
+    paddingHorizontal: 8,
+    borderRadius: 9,
+    borderWidth: 1,
+    borderColor: brand.lavenderMid,
+    backgroundColor: colors.white,
+  },
+  cmpBtnOn: { backgroundColor: brand.lavender, borderColor: brand.violet },
+  cmpText: { fontSize: 11, fontWeight: "800", color: brand.violet },
+  enqBtn: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 4,
+    height: 28,
+    paddingHorizontal: 8,
+    borderRadius: 9,
+    overflow: "hidden",
+  },
+  enqText: { flexShrink: 1, fontSize: 11, fontWeight: "800", color: colors.white },
 });

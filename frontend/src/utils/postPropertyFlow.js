@@ -40,7 +40,12 @@ export const SALE_POSSESSION = ["Ready to Move", UNDER_CONSTRUCTION];
 // Worded so the backend's age filter buckets them (0-1, 1-5, 5-10, 10+).
 export const PROPERTY_AGES = ["0-1 Years", "1-5 Years", "5-10 Years", "10+ Years"];
 export const GROUND = "Ground";
-export const FLOORS = [GROUND, ...Array.from({ length: 60 }, (_, i) => String(i + 1))];
+// The last choice covers every floor from 60 up.
+export const TOP_FLOOR = "60+";
+export const FLOORS = [GROUND, ...Array.from({ length: 59 }, (_, i) => String(i + 1)), TOP_FLOOR];
+export const floorLabel = (x) => (x === GROUND ? "Ground floor" : x === TOP_FLOOR ? "60 & higher" : `Floor ${x}`);
+// Ground -> 0, "60+" -> 60, "5" -> 5.
+const floorNum = (x) => (x === GROUND ? 0 : parseInt(x, 10));
 export const FACINGS = ["East", "West", "North", "South", "North-East", "North-West", "South-East", "South-West"];
 export const FURNISHING = ["Unfurnished", "Semi-furnished", "Furnished"];
 export const PARKING = ["Car Parking", "Bike Parking", "Car & Bike", "None"];
@@ -140,9 +145,11 @@ export const showsBuildingFields = (type) => !!type && !isLandType(type);
 // Which floor the unit is on; a villa or house is the whole building.
 export const showsFloor = (type) => showsBuildingFields(type) && type !== "Villa/Independent House";
 const ordinal = (n) => `${n}${[11, 12, 13].includes(n % 100) ? "th" : ["th", "st", "nd", "rd"][n % 10] || "th"}`;
-// "Ground Floor" or "5th Floor", the wording the backend's floor filter reads. Total floors are
-// sent on their own, and the listing page shows them as "5th Floor of 20".
-export const floorText = (f) => (!f.floor ? "" : `${f.floor === GROUND ? "Ground" : ordinal(Number(f.floor))} Floor`);
+// "Ground Floor", "5th Floor" or "60th Floor & above", the wording the backend's floor filter reads
+// (by its leading number). Total floors are sent on their own, and the listing page shows them as
+// "5th Floor of 20".
+export const floorText = (f) =>
+  !f.floor ? "" : f.floor === GROUND ? "Ground Floor" : `${ordinal(floorNum(f.floor))} Floor${f.floor === TOP_FLOOR ? " & above" : ""}`;
 // Age applies to built property that already stands.
 export const showsAge = (f) => showsBuildingFields(f.propertyType) && !(f.listingType === "sale" && f.availability === UNDER_CONSTRUCTION);
 export const typesFor = (category) => (category === "commercial" ? COMMERCIAL_TYPES : RESIDENTIAL_TYPES);
@@ -210,7 +217,7 @@ function stepSchema(stepKey, f) {
         ? z.preprocess(num, z.number({ error: "Enter 1–200" }).int({ error: "Enter 1–200" }).min(1, { error: "Enter 1–200" }).max(200, { error: "Enter 1–200" }))
         : anything,
       floor: anything.refine(
-        () => !(f.floor && f.floor !== GROUND && f.totalFloors && num(f.floor) > num(f.totalFloors)),
+        () => !(f.floor && f.floor !== GROUND && f.totalFloors && floorNum(f.floor) > num(f.totalFloors)),
         { error: "Can't be above the total floors" },
       ),
       price: positive(rent ? "Enter a valid monthly rent in ₹" : "Enter a valid price in ₹"),
@@ -309,7 +316,7 @@ export function formFromListing(p) {
     area: p.area ? String(p.area) : "",
     areaUnit: "sqft",
     bathrooms: p.bathrooms !== "" && p.bathrooms != null ? String(p.bathrooms) : "",
-    floor: floorMatch ? (/ground/i.test(floorMatch[1]) ? GROUND : floorMatch[1]) : "",
+    floor: floorMatch ? (/ground/i.test(floorMatch[1]) ? GROUND : Number(floorMatch[1]) >= floorNum(TOP_FLOOR) ? TOP_FLOOR : floorMatch[1]) : "",
     totalFloors: p.totalFloors !== "" && p.totalFloors != null ? String(p.totalFloors) : "",
     facing: pick(FACINGS, p.facing),
     parking: pick(PARKING, p.parking),

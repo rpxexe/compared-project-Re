@@ -19,7 +19,7 @@ import PressableScale from "../components/PressableScale";
 import { isReducedMotion } from "../hooks/useReducedMotion";
 import { POPULAR_CITIES, getCurrentUserLocation } from "../services/locationService";
 import {
-  AREA_UNITS, BATHROOMS, BHKS, FLOORS, GROUND, CATEGORY_OPTIONS, CUSTOM_DATE, EMPTY_FORM, FACINGS, FURNISHING, FURNISHING_ICONS, LISTING_OPTIONS, MAX_PHOTOS, PARKING,
+  AREA_UNITS, BATHROOMS, BHKS, FLOORS, GROUND, floorLabel, CATEGORY_OPTIONS, CUSTOM_DATE, EMPTY_FORM, FACINGS, FURNISHING, FURNISHING_ICONS, LISTING_OPTIONS, MAX_PHOTOS, PARKING,
   PARKING_ICONS, TYPE_ICONS,
   PROPERTY_AGES, RENT_AVAILABILITY, SALE_POSSESSION, STEPS, availabilityText, buildPayload, firstInvalidStep, formFromListing,
   floorText, maskDate, needsBhk, photoRoomsFor, priceLabel, sanitizeForType, sectionsFor, showsAge, showsBuildingFields, showsFloor, typeLabel, typesFor, validateStep,
@@ -521,8 +521,8 @@ function Wizard({ navigation, initial, editId }) {
                     {showsFloor(form.propertyType) ? (
                       <Appear><SpecRow icon="business-outline" label="Floor no." error={errors.floor}>
                         <SelectField title="Floor" value={form.floor} optionIcon="business-outline" error={errors.floor} onChange={(v) => set("floor", v)}
-                          options={FLOORS.filter((x) => x === GROUND || !form.totalFloors || Number(x) <= Number(form.totalFloors))}
-                          format={(x) => (x === GROUND ? "Ground floor" : `Floor ${x}`)} />
+                          options={FLOORS.filter((x) => x === GROUND || !form.totalFloors || parseInt(x, 10) <= Number(form.totalFloors))}
+                          format={floorLabel} />
                       </SpecRow></Appear>
                     ) : null}
                   </>

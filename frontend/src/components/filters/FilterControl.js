@@ -1,8 +1,9 @@
-import React, { useEffect, useState } from "react";
-import { Pressable, ScrollView, StyleSheet, View } from "react-native";
+import React, { useEffect, useRef, useState } from "react";
+import { Animated, Easing, Platform, Pressable, ScrollView, StyleSheet, View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import Toggle from "../Toggle";
 import DualSlider, { maxToIndex, minToIndex } from "./DualSlider";
+import { isReducedMotion } from "../../hooks/useReducedMotion";
 import { brand, colors, radius } from "../../theme";
 import { formatStep, unitLabel } from "../../utils/filterState";
 import Text from "../AppText";
@@ -31,14 +32,112 @@ export default function FilterControl({ filter, value, onChange, title = true, w
   }
   if (filter.type === "range") return <RangeSelect filter={filter} value={value} onChange={onChange} title={title} />;
 
+  return <Choices filter={filter} value={value} onChange={onChange} title={title} wrap={wrap} />;
+}
+
+// Select-type filters. With `filter.groups` the options sit behind tabs (Residential /
+// Commercial); picks in every tab stay selected, and each tab counts its own.
+function Choices({ filter, value, onChange, title, wrap }) {
   const multi = filter.type === "multi_select";
   const selected = multi ? value || [] : [value ?? filter.default];
   const pick = (v) => onChange(multi ? (selected.includes(v) ? selected.filter((x) => x !== v) : [...selected, v]) : v);
+  // Opens on the tab holding the first selection.
+  const [tab, setTab] = useState(() => filter.options.find((o) => selected.includes(o.value))?.group || filter.groups?.[0].id);
+  const shown = filter.groups ? { ...filter, options: filter.options.filter((o) => o.group === tab) } : filter;
   const Body = { tiles: Tiles, checkbox: Checkboxes, segmented: Segmented }[filter.display] || Pills;
+
+  // The new tab's options slide in from the side being moved towards (-1 left · 0 in place · 1 right).
+  const swap = useRef(new Animated.Value(0)).current;
+  const switchTab = (id) => {
+    if (id === tab) return;
+    const at = (g) => filter.groups.findIndex((x) => x.id === g);
+    setTab(id);
+    if (isReducedMotion()) return;
+    swap.setValue(at(id) > at(tab) ? 1 : -1);
+    Animated.timing(swap, { toValue: 0, duration: 280, easing: Easing.out(Easing.cubic), useNativeDriver: true }).start();
+  };
+  const slide = {
+    opacity: swap.interpolate({ inputRange: [-1, 0, 1], outputRange: [0, 1, 0] }),
+    transform: [
+      { translateX: swap.interpolate({ inputRange: [-1, 0, 1], outputRange: [-36, 0, 36] }) },
+      { scale: swap.interpolate({ inputRange: [-1, 0, 1], outputRange: [0.96, 1, 0.96] }) },
+    ],
+  };
+
   return (
     <View>
       {title ? <Text style={styles.title} accessibilityRole="header">{filter.label}</Text> : null}
-      <Body filter={filter} selected={selected} multi={multi} onPick={pick} wrap={wrap} />
+      {filter.groups ? <GroupTabs filter={filter} selected={selected} value={tab} onChange={switchTab} /> : null}
+      <Animated.View style={filter.groups ? slide : null}>
+        <Body filter={shown} selected={selected} multi={multi} onPick={pick} wrap={wrap} />
+      </Animated.View>
+    </View>
+  );
+}
+
+const TAB_PAD = 4; // track padding, also the gap between tabs
+
+// Tabs on a lavender track. The white highlight springs across to the picked tab and its icon
+// pops; until the track is measured the active tab paints its own highlight.
+function GroupTabs({ filter, selected, value, onChange }) {
+  const count = filter.groups.length;
+  const index = Math.max(0, filter.groups.findIndex((g) => g.id === value));
+  const [trackW, setTrackW] = useState(0);
+  const tabW = trackW ? (trackW - TAB_PAD * 2 - TAB_PAD * (count - 1)) / count : 0;
+  const x = useRef(new Animated.Value(0)).current;
+  const placed = useRef(false);
+  useEffect(() => {
+    if (!tabW) return;
+    const to = index * (tabW + TAB_PAD);
+    // Jump into place the first time (and with reduced motion); spring on every switch after.
+    if (!placed.current || isReducedMotion()) {
+      placed.current = true;
+      x.setValue(to);
+    } else {
+      Animated.spring(x, { toValue: to, speed: 16, bounciness: 7, useNativeDriver: true }).start();
+    }
+  }, [index, tabW, x]);
+
+  const pop = useRef(new Animated.Value(1)).current;
+  const first = useRef(true);
+  useEffect(() => {
+    if (first.current || isReducedMotion()) {
+      first.current = false;
+      return;
+    }
+    pop.setValue(0.6);
+    Animated.spring(pop, { toValue: 1, speed: 14, bounciness: 16, useNativeDriver: true }).start();
+  }, [index, pop]);
+
+  return (
+    <View style={styles.tabs} accessibilityRole="tablist" onLayout={(e) => setTrackW(e.nativeEvent.layout.width)}>
+      {tabW ? <Animated.View pointerEvents="none" style={[styles.tabHighlight, { width: tabW, transform: [{ translateX: x }] }]} /> : null}
+      {filter.groups.map((g) => {
+        const on = g.id === value;
+        const n = filter.options.filter((o) => o.group === g.id && selected.includes(o.value)).length;
+        return (
+          <Pressable
+            key={g.id}
+            onPress={() => onChange(g.id)}
+            style={({ pressed }) => [styles.tab, on && !tabW && styles.tabHighlightStatic, pressed && !on && { opacity: 0.7 }]}
+            accessibilityRole="tab"
+            accessibilityState={{ selected: on }}
+            accessibilityLabel={n ? `${g.label}, ${n} selected` : g.label}
+          >
+            {g.icon ? (
+              <Animated.View style={on ? { transform: [{ scale: pop }] } : null}>
+                <Ionicons name={g.icon} size={15} color={on ? brand.violet : colors.muted} />
+              </Animated.View>
+            ) : null}
+            <Text style={[styles.tabText, on && styles.tabTextOn]} numberOfLines={1}>{g.label}</Text>
+            {n ? (
+              <View style={styles.tabCount}>
+                <Text style={styles.tabCountText}>{n}</Text>
+              </View>
+            ) : null}
+          </Pressable>
+        );
+      })}
     </View>
   );
 }
@@ -156,10 +255,11 @@ function RangeSelect({ filter, value, onChange, title }) {
   const bare = (n) => (filter.format === "inr" ? inrWords(n) : filter.format === "floor" ? formatStep(filter, n) : Number(n).toLocaleString("en-IN"));
   const fmt = (n) => `${prefix}${bare(n)}`;
   const emit = (patch) => onChange({ min, max, unit, ...patch });
-  // Budgets end with an open "20+ Cr" (no upper limit, like the slider's far right) instead of a
-  // "No max" at the top.
+  // Budgets end with an open "30 Cr+" (no upper limit, like the slider's far right) instead of a
+  // "No max" at the top. It stands in for the top step, so a plain "30 Cr" max isn't offered too.
   const openMax = filter.format === "inr";
-  const noMax = { key: "none", label: openMax ? `${fmt(steps[steps.length - 1])}+` : "No max", on: max == null, pick: () => emit({ max: null }) };
+  const top = steps[steps.length - 1];
+  const noMax = { key: "none", label: openMax ? `${fmt(top)}+` : "No max", on: max == null, pick: () => emit({ max: null }) };
 
   const list =
     open === "unit"
@@ -168,7 +268,9 @@ function RangeSelect({ filter, value, onChange, title }) {
         ? [{ key: "none", label: "No min", on: min == null, pick: () => emit({ min: null }) }, ...steps.filter((s) => max == null || s < max).map((s) => ({ key: s, label: fmt(s), on: s === min, pick: () => emit({ min: s }) }))]
         : open === "max"
           ? (() => {
-              const capped = steps.filter((s) => min == null || s > min).map((s) => ({ key: s, label: fmt(s), on: s === max, pick: () => emit({ max: s }) }));
+              const capped = steps
+                .filter((s) => (min == null || s > min) && !(openMax && s === top))
+                .map((s) => ({ key: s, label: fmt(s), on: s === max, pick: () => emit({ max: s }) }));
               return openMax ? [...capped, noMax] : [noMax, ...capped];
             })()
           : [];
@@ -204,6 +306,7 @@ function RangeSelect({ filter, value, onChange, title }) {
         minIndex={minToIndex(steps, min)}
         maxIndex={maxToIndex(steps, max)}
         format={fmt}
+        openTop={openMax}
         label={filter.label.toLowerCase()}
         onChange={(lo, hi) => emit({ min: lo < 0 ? null : steps[lo], max: hi >= steps.length ? null : steps[hi] })}
       />
@@ -231,6 +334,27 @@ function Select({ label, set, open, onPress, a11y }) {
 
 const styles = StyleSheet.create({
   title: { fontSize: 15, fontWeight: "700", color: colors.ink, marginBottom: 12 },
+  // Lavender track with the active tab as a raised white pill, like the filter sidebar's selection.
+  tabs: { flexDirection: "row", gap: TAB_PAD, padding: TAB_PAD, marginBottom: 14, borderRadius: radius.md, backgroundColor: brand.lavender },
+  tab: { flex: 1, minHeight: 38, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 5, paddingHorizontal: 6, borderRadius: 12 },
+  tabHighlight: {
+    position: "absolute",
+    top: TAB_PAD,
+    bottom: TAB_PAD,
+    left: TAB_PAD,
+    borderRadius: 12,
+    backgroundColor: colors.white,
+    // Android elevation would lift it above the tab labels it sits behind, so a hairline edge there.
+    ...Platform.select({
+      android: { borderWidth: 1, borderColor: brand.lavenderMid },
+      default: { shadowColor: brand.deep, shadowOpacity: 0.1, shadowRadius: 6, shadowOffset: { width: 0, height: 2 } },
+    }),
+  },
+  tabHighlightStatic: { backgroundColor: colors.white },
+  tabText: { flexShrink: 1, fontSize: 13, fontWeight: "600", color: colors.muted },
+  tabTextOn: { fontWeight: "800", color: brand.deep },
+  tabCount: { minWidth: 18, height: 18, borderRadius: 9, paddingHorizontal: 5, alignItems: "center", justifyContent: "center", backgroundColor: brand.violet },
+  tabCountText: { fontSize: 10.5, fontWeight: "800", color: colors.white },
   scrollRow: { gap: 10, paddingRight: 8 },
   fillRow: { flexDirection: "row", gap: 12 },
   wrapRow: { flexDirection: "row", flexWrap: "wrap", gap: 10 },

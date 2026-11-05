@@ -1,11 +1,12 @@
 import React, { useEffect, useRef } from "react";
 import { Animated, Pressable, StyleSheet, View } from "react-native";
+import { Ionicons } from "@expo/vector-icons";
 import FilterControl from "../filters/FilterControl";
 import LocationFilter from "./LocationFilter";
 import DeveloperFilter from "./DeveloperFilter";
 import ProjectFilter from "./ProjectFilter";
 import { isReducedMotion } from "../../hooks/useReducedMotion";
-import { brand, colors } from "../../theme";
+import { colors, radius } from "../../theme";
 import Text from "../AppText";
 
 // The selected sidebar category's controls. What to draw comes from the category's config
@@ -48,7 +49,14 @@ export default function FilterContent({ category, filters, draft, count, transit
       <View style={styles.head}>
         <Text style={styles.title} accessibilityRole="header">{category.label}</Text>
         {count ? (
-          <Pressable onPress={onClear} hitSlop={8} style={styles.clear} accessibilityRole="button" accessibilityLabel={`Clear ${category.label}`}>
+          <Pressable
+            onPress={onClear}
+            hitSlop={8}
+            style={({ pressed }) => [styles.clear, pressed && { opacity: 0.7 }]}
+            accessibilityRole="button"
+            accessibilityLabel={`Clear ${category.label}`}
+          >
+            <Ionicons name="close-circle" size={14} color={colors.error} />
             <Text style={styles.clearText}>Clear</Text>
           </Pressable>
         ) : null}
@@ -59,9 +67,30 @@ export default function FilterContent({ category, filters, draft, count, transit
 }
 
 const styles = StyleSheet.create({
-  head: { flexDirection: "row", alignItems: "center", marginBottom: 14, minHeight: 32 },
+  // A divider under the title keeps its Clear button apart from the options below.
+  head: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    minHeight: 32,
+    marginBottom: 14,
+    paddingBottom: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.line,
+  },
   title: { flex: 1, fontSize: 18, fontWeight: "800", color: colors.ink },
-  clear: { minHeight: 44, minWidth: 44, alignItems: "flex-end", justifyContent: "center" },
-  clearText: { fontSize: 14, fontWeight: "800", color: brand.violet },
+  // Red outlined pill (as Compare's "Clear All"), so it never reads as one of the violet options.
+  clear: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    height: 30,
+    paddingHorizontal: 10,
+    borderRadius: radius.pill,
+    borderWidth: 1.2,
+    borderColor: "#F5C2C2",
+    backgroundColor: "#FFF6F6",
+  },
+  clearText: { fontSize: 12.5, fontWeight: "800", color: colors.error },
   next: { marginTop: 24, paddingTop: 20, borderTopWidth: 1, borderTopColor: colors.line },
 });

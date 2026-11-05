@@ -162,7 +162,7 @@ function Row({ icon, title, sub, match, onPress, trailing }) {
       accessibilityLabel={sub ? `${title}, ${sub}` : title}
     >
       <View style={styles.iconWrap}>
-        <Ionicons name={icon} size={17} color={brand.violet} />
+        <Ionicons name={icon} size={15} color={brand.violet} />
       </View>
       <View style={{ flex: 1 }}>
         <Text style={styles.title} numberOfLines={1}>
@@ -176,13 +176,13 @@ function Row({ icon, title, sub, match, onPress, trailing }) {
 }
 
 const styles = StyleSheet.create({
-  section: { fontSize: 12, fontWeight: "800", color: colors.muted, letterSpacing: 0.6, textTransform: "uppercase", marginTop: 12, marginBottom: 4 },
-  row: { flexDirection: "row", alignItems: "center", gap: 12, minHeight: 52, paddingHorizontal: 8, borderRadius: radius.sm },
-  iconWrap: { width: 32, height: 32, borderRadius: 16, alignItems: "center", justifyContent: "center", backgroundColor: brand.lavender },
-  title: { fontSize: 14.5, color: colors.ink },
+  section: { fontSize: 11, fontWeight: "800", color: colors.muted, letterSpacing: 0.6, textTransform: "uppercase", marginTop: 8, marginBottom: 2 },
+  row: { flexDirection: "row", alignItems: "center", gap: 10, minHeight: 44, paddingHorizontal: 6, borderRadius: radius.sm },
+  iconWrap: { width: 28, height: 28, borderRadius: 14, alignItems: "center", justifyContent: "center", backgroundColor: brand.lavender },
+  title: { fontSize: 13.5, color: colors.ink },
   hit: { fontWeight: "800", color: brand.deep },
-  sub: { fontSize: 12.5, color: colors.muted, marginTop: 1 },
+  sub: { fontSize: 11.5, color: colors.muted, marginTop: 1 },
   fill: { transform: [{ rotate: "-45deg" }] },
   remove: { width: 30, height: 30, alignItems: "center", justifyContent: "center" },
-  note: { fontSize: 13.5, color: colors.muted, marginVertical: 12, textAlign: "center" },
+  note: { fontSize: 13, color: colors.muted, marginVertical: 10, textAlign: "center" },
 });

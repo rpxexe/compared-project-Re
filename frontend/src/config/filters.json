@@ -6,7 +6,7 @@
       "type": "range",
       "queryKeys": ["minPrice", "maxPrice"],
       "format": "inr",
-      "steps": [500000, 1000000, 2000000, 3000000, 4000000, 5000000, 6000000, 7500000, 10000000, 15000000, 20000000, 30000000, 50000000, 100000000, 200000000]
+      "steps": [500000, 1000000, 2000000, 3000000, 4000000, 5000000, 6000000, 7500000, 10000000, 15000000, 20000000, 30000000, 50000000, 100000000, 200000000, 250000000, 300000000]
     },
     "rentBudget": {
       "label": "Monthly rent",
@@ -20,14 +20,21 @@
       "type": "multi_select",
       "display": "tiles",
       "queryKey": "propertyTypes",
+      "groups": [
+        { "id": "residential", "label": "Residential", "icon": "home-outline" },
+        { "id": "commercial", "label": "Commercial", "icon": "briefcase-outline" }
+      ],
       "options": [
-        { "value": "apartment", "label": "Flat", "icon": "business-outline", "aliases": ["Flats/Apartments", "Flat / Apartment", "Apartment"] },
-        { "value": "house_villa", "label": "House / Villa", "icon": "home-outline", "values": ["independent_house", "villa"], "aliases": ["Villa", "Independent House"] },
-        { "value": "builder_floor", "label": "Builder floor", "icon": "layers-outline", "aliases": ["Builder Floor"] },
-        { "value": "penthouse", "label": "Penthouse", "icon": "diamond-outline", "aliases": ["Penthouse"] },
-        { "value": "commercial", "label": "Commercial", "icon": "briefcase-outline", "values": ["office", "coworking", "shop", "warehouse", "commercial_land"], "aliases": ["Commercial"] },
-        { "value": "plot", "label": "Plot", "icon": "grid-outline", "aliases": ["Plot", "Plots", "Residential Plot"] },
-        { "value": "land", "label": "Land", "icon": "map-outline", "aliases": ["Land", "Agricultural Land"] }
+        { "value": "apartment", "label": "Flat", "group": "residential", "icon": "business-outline", "aliases": ["Flats/Apartments", "Flat / Apartment", "Apartment"] },
+        { "value": "house_villa", "label": "Villa", "group": "residential", "icon": "home-outline", "values": ["independent_house", "villa"], "aliases": ["Villa", "Independent House"] },
+        { "value": "builder_floor", "label": "Builder floor", "group": "residential", "icon": "layers-outline", "aliases": ["Builder Floor"] },
+        { "value": "plot", "label": "Plot", "group": "residential", "icon": "grid-outline", "aliases": ["Plot", "Plots", "Residential Plot"] },
+        { "value": "shop", "label": "Shop", "group": "commercial", "icon": "storefront-outline", "aliases": ["Shop", "Shop/Showroom"] },
+        { "value": "office", "label": "Office space", "group": "commercial", "icon": "briefcase-outline", "aliases": ["Office Space", "Office"] },
+        { "value": "commercial_land", "label": "Plot / Land", "group": "commercial", "icon": "map-outline", "aliases": ["Commercial Land", "Commercial Plot"] },
+        { "value": "showroom", "label": "Showroom", "group": "commercial", "icon": "pricetags-outline", "aliases": ["Showroom"] },
+        { "value": "coworking", "label": "Co-working space", "group": "commercial", "icon": "people-outline", "aliases": ["Co-working Space"] },
+        { "value": "warehouse", "label": "Warehouse", "group": "commercial", "icon": "cube-outline", "aliases": ["Industrial Warehouse/Godown", "Warehouse"] }
       ]
     },
     "bhk": {
@@ -69,7 +76,7 @@
       "default": "",
       "options": [
         { "value": "", "label": "Any" },
-        { "value": "new", "label": "New property" },
+        { "value": "new", "label": "New projects" },
         { "value": "resale", "label": "Resale" }
       ]
     },
@@ -282,11 +289,17 @@
           "id": "propertyType",
           "quick": true,
           "options": [
-            { "value": "apartment", "label": "Flat", "icon": "business-outline", "aliases": ["Flats/Apartments", "Flat / Apartment", "Apartment"] },
-            { "value": "house_villa", "label": "House / Villa", "icon": "home-outline", "values": ["independent_house", "villa"], "aliases": ["Villa", "Independent House"] },
-            { "value": "builder_floor", "label": "Builder floor", "icon": "layers-outline", "aliases": ["Builder Floor"] },
-            { "value": "pg", "label": "PG / Co-living", "icon": "bed-outline", "aliases": ["PG", "PG/Co-living", "Co-living"] },
-            { "value": "commercial", "label": "Commercial", "icon": "briefcase-outline", "values": ["office", "coworking", "shop", "warehouse", "commercial_land"], "aliases": ["Commercial"] }
+            { "value": "apartment", "label": "Flat", "group": "residential", "icon": "business-outline", "aliases": ["Flats/Apartments", "Flat / Apartment", "Apartment"] },
+            { "value": "house_villa", "label": "Villa", "group": "residential", "icon": "home-outline", "values": ["independent_house", "villa"], "aliases": ["Villa", "Independent House"] },
+            { "value": "builder_floor", "label": "Builder floor", "group": "residential", "icon": "layers-outline", "aliases": ["Builder Floor"] },
+            { "value": "plot", "label": "Plot", "group": "residential", "icon": "grid-outline", "aliases": ["Plot", "Plots", "Residential Plot"] },
+            { "value": "pg", "label": "PG / Co-living", "group": "residential", "icon": "bed-outline", "aliases": ["PG", "PG/Co-living", "Co-living"] },
+            { "value": "shop", "label": "Shop", "group": "commercial", "icon": "storefront-outline", "aliases": ["Shop", "Shop/Showroom"] },
+            { "value": "office", "label": "Office space", "group": "commercial", "icon": "briefcase-outline", "aliases": ["Office Space", "Office"] },
+            { "value": "commercial_land", "label": "Plot / Land", "group": "commercial", "icon": "map-outline", "aliases": ["Commercial Land", "Commercial Plot"] },
+            { "value": "showroom", "label": "Showroom", "group": "commercial", "icon": "pricetags-outline", "aliases": ["Showroom"] },
+            { "value": "coworking", "label": "Co-working space", "group": "commercial", "icon": "people-outline", "aliases": ["Co-working Space"] },
+            { "value": "warehouse", "label": "Warehouse", "group": "commercial", "icon": "cube-outline", "aliases": ["Industrial Warehouse/Godown", "Warehouse"] }
           ]
         },
         { "id": "bhk", "quick": true },
@@ -372,7 +385,7 @@
           "options": [
             { "value": "office", "label": "Office space", "icon": "briefcase-outline", "aliases": ["Office Space", "Office"] },
             { "value": "coworking", "label": "Co-working space", "icon": "people-outline", "aliases": ["Co-working Space"] },
-            { "value": "shop", "label": "Shop / Showroom", "icon": "storefront-outline", "aliases": ["Shop/Showroom", "Shop", "Showroom"] },
+            { "value": "shop", "label": "Shop / Showroom", "icon": "storefront-outline", "values": ["shop", "showroom"], "aliases": ["Shop/Showroom", "Shop", "Showroom"] },
             { "value": "warehouse", "label": "Warehouse", "icon": "cube-outline", "aliases": ["Industrial Warehouse/Godown", "Warehouse"] },
             { "value": "commercial_land", "label": "Commercial land", "icon": "map-outline", "aliases": ["Commercial Land"] }
           ]
