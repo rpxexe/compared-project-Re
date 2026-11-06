@@ -12,6 +12,7 @@ Comprehensive instructions for running **Compare Projects** locally, deploying g
    - [B. Frontend Setup](#b-frontend-setup-local)
    - [C. Finding your Local LAN IP](#c-finding-your-local-lan-ip)
    - [D. Development Login & OTP](#d-development-login--otp)
+   - [E. Developer (email/password) accounts](#e-developer-emailpassword-accounts)
 4. [Running the Project Globally (Production & Remote)](#4-running-the-project-globally-production--remote)
    - [A. Global / Remote Testing with Tunnels](#a-global--remote-testing-with-tunnels-development)
    - [B. Production Backend Deployment](#b-production-backend-deployment-cloud)
@@ -70,7 +71,7 @@ npm start
 * **Success Output:**
   ```text
   MongoDB connected
-  API listening on port 5000 (OTP mode: console)
+  API listening on port 5000 (OTP mode: development)
   ```
 * If MongoDB cannot be reached, the server fails fast with `Startup failed: ...` and terminates cleanly without silent hanging.
 
@@ -95,6 +96,7 @@ Once the server is running, query the live health check endpoint:
   }
   ```
   *(Note: `databaseState: 1` confirms an active, healthy Mongoose connection).*
+  In production (`NODE_ENV=production`, or `NODE_ENV` not set) the endpoint answers only `{"ok": true}` and reveals nothing else.
 
 ---
 
@@ -130,9 +132,9 @@ If this returns a JSON object with `"items": [...]`, your database connection an
    MONGODB_URI=mongodb+srv://<username>:<password>@cluster0.mongodb.net/realestate?retryWrites=true&w=majority
    MONGODB_COLLECTION=properties
    JWT_SECRET=super_secret_jwt_key_at_least_32_characters_long
-   ADMIN_PHONES=9876543210
-   OTP_MODE=console
+   OTP_MODE=development
    ```
+   `OTP_MODE=development` only works with `NODE_ENV=development` (or `test`). If `NODE_ENV` is missing the server treats itself as production and refuses to start with development OTPs.
 5. Verify your database connection:
    ```bash
    npm run check:db
@@ -196,12 +198,17 @@ When running on a physical phone over Wi-Fi, your phone must be able to reach yo
 ---
 
 ### D. Development Login & OTP
-* When you enter any 10-digit phone number in the app, the OTP is generated in **console mode** during development.
-* Check your **backend terminal window** — the 6-digit OTP will be printed directly in the terminal logs:
-  ```text
-  [DEV OTP] Phone: 9876543210  OTP: 123456
-  ```
-* Enter that code in the mobile app to sign in.
+* With `NODE_ENV=development` and `OTP_MODE=development`, the backend returns the code to the app instead of sending an SMS (it is **not** printed in the server log).
+* In a **development build** of the app (Expo Go / `expo run`), the OTP screen shows a "Development mode · tap to fill" chip with the code. Release builds never show it.
+* `ADMIN_PHONES` / `SUPERADMIN_PHONES` are **not** promoted with development OTPs. To test admin roles, use `OTP_MODE=twilio`.
+
+### E. Developer (email/password) accounts
+There is no public sign-up. An administrator creates each developer account from the backend folder:
+```bash
+cd backend
+npm run create:developer -- --email sales@builder.com --name "Skyline Builders" --phone 9876543210
+```
+`--phone` is optional. The command prints a generated password **once** (only a hash is stored); share it with the developer securely. The developer then signs in on the Login screen's **Developer** card. Running it again for the same email fails without changing anything.
 
 ---
 
@@ -249,13 +256,22 @@ You can deploy the backend to cloud platforms like **Render**, **Railway**, **AW
    MONGODB_URI=mongodb+srv://<user>:<password>@cluster0.mongodb.net/realestate?retryWrites=true&w=majority
    MONGODB_COLLECTION=properties
    JWT_SECRET=<generate_a_cryptographically_secure_random_64_character_string>
+   TRUST_PROXY=1
+   PUBLIC_URL=https://api.yourdomain.com
    ADMIN_PHONES=9876543210
    CORS_ORIGINS=https://yourdomain.com,https://admin.yourdomain.com
    OTP_MODE=twilio
+   OTP_GLOBAL_HOURLY_LIMIT=300
    TWILIO_ACCOUNT_SID=ACxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
    TWILIO_AUTH_TOKEN=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
-   TWILIO_SERVICE_SID=VAxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+   TWILIO_PHONE_NUMBER=+1xxxxxxxxxx
+   FIREBASE_PROJECT_ID=your-firebase-project
+   FIREBASE_SERVICE_ACCOUNT={"type":"service_account",...}   # one line
    ```
+   * `NODE_ENV=production` and `OTP_MODE=twilio` with all three `TWILIO_*` values are mandatory; start-up fails otherwise.
+   * `TRUST_PROXY`: `1` behind one proxy (Render, Railway, Nginx); `0` if clients connect directly. Too high a value lets clients fake their IP and bypass rate limits.
+   * `CORS_ORIGINS`: leave empty if only the mobile app uses the API – production then sends no CORS headers at all.
+   * `FIREBASE_SERVICE_ACCOUNT` is required for the `/api/v2` customer routes: Firebase ID tokens are checked for revocation, which needs admin credentials.
 6. **MongoDB Atlas Whitelist:**
    In your MongoDB Atlas Dashboard:
    * Go to **Network Access** &rarr; **IP Access List**.
@@ -311,4 +327,7 @@ To generate standalone distributable APK / AAB files for Android and IPA for iOS
 * **Never commit `.env` files**: Ensure `.env` is listed in `.gitignore`.
 * **Rotate database credentials**: If a connection string was ever shared or exposed, immediately rotate the password in MongoDB Atlas.
 * **Strong JWT Secret**: In production, use a strong, unpredictable `JWT_SECRET` (minimum 32 characters).
-* **Production OTP**: Always switch from `OTP_MODE=console` to `OTP_MODE=twilio` in production environments.
+* **Production OTP**: `OTP_MODE=twilio` is enforced everywhere except `NODE_ENV=development`/`test`; a missing `NODE_ENV` counts as production.
+* **Sign out everywhere**: the app's Log out calls `POST /api/auth/logout-all`, which invalidates every token of the account on all devices (and the linked Firebase session), then wipes the user's local data (history, compare list, locations, filters). To force-revoke a user's sessions as an admin, increment `tokenVersion` on their `app_users` / `signupusers` document.
+* **Developer accounts** are created only with `npm run create:developer`; there is no public sign-up.
+* **Links and images**: listing photos, brochures, map and virtual-tour links must be `https://`; the app refuses to open anything else (`tel:`, `upi:`, `intent:`...).

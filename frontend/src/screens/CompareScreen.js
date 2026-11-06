@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import { Animated, Easing, Linking, ScrollView, StyleSheet, View, useWindowDimensions } from "react-native";
+import { Animated, Easing, ScrollView, StyleSheet, View, useWindowDimensions } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import Screen from "../components/Screen";
 import ScreenHeader from "../components/ScreenHeader";
@@ -15,10 +15,12 @@ import { Cell, DetailsRow, Grid, Row, Section, smoothLayout } from "../component
 import WhyChoose from "../components/compare/WhyChoose";
 import { EmptyState, ErrorState, LoadingState } from "../components/StateViews";
 import { useCompare } from "../context/CompareContext";
+import { useToast } from "../context/ToastContext";
 import { useApi } from "../hooks/useApi";
 import { isReducedMotion } from "../hooks/useReducedMotion";
 import { api } from "../services/api";
 import { addCompareHistory } from "../services/historyService";
+import { isSafeExternalUrl, openExternal } from "../utils/links";
 import { COMPARE_MAX, KEY_ROWS, LOCATION_ROWS, amenityMatrix, buildRows, insights, overallPick } from "../utils/compare";
 import { brand, colors, radius } from "../theme";
 import Text from "../components/AppText";
@@ -33,6 +35,7 @@ const GAP = 10;
 
 export default function CompareScreen({ navigation }) {
   const cmp = useCompare();
+  const toast = useToast();
   const key = cmp.ids.join(",");
   const { data, loading, error, reload } = useApi(() => api.compare(cmp.ids), [key], { enabled: cmp.ids.length > 0 });
   const picks = useApi(
@@ -95,9 +98,9 @@ export default function CompareScreen({ navigation }) {
     rows.map((r, ri) => (
       <Row key={r.key} index={ri} label={r.label} icon={r.icon} labelW={labelW}>
         {r.cells.map((c, ci) =>
-          r.link && r.raw[ci] ? (
+          r.link && isSafeExternalUrl(r.raw[ci]) ? (
             <Cell key={ci} width={colW}>
-              <PressableScale onPress={() => Linking.openURL(r.raw[ci])} to={0.92} style={styles.mapBtn} accessibilityRole="link">
+              <PressableScale onPress={() => openExternal(r.raw[ci], { onError: (message) => toast.show(message, "error") })} to={0.92} style={styles.mapBtn} accessibilityRole="link">
                 <Ionicons name="map-outline" size={13} color={brand.violet} />
                 <Text style={styles.mapText}>Open map</Text>
               </PressableScale>

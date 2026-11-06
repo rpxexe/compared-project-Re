@@ -19,12 +19,16 @@ const SECTIONS = {
 };
 SECTIONS.projects = { $or: [...Object.values(SECTIONS), { propertyGroup: /project/i }] };
 
-// Hide submissions that are waiting for / failed moderation. App posts use approvalStatus; the
-// shared collection's own moderation (website/scraper) uses status. Documents with neither stay visible.
+// Hide submissions that are waiting for / failed moderation or were taken down. App posts use
+// approvalStatus; the shared collection's own moderation (website/scraper) uses status. Documents
+// with neither stay visible. Every public read - lists AND by-id routes - must apply this.
+const HIDDEN_STATUSES = ['pending', 'rejected', 'inactive', 'hidden'];
 const PUBLIC = {
-  approvalStatus: { $nin: ['pending', 'rejected'] },
-  status: { $nin: ['pending', 'rejected'] },
+  approvalStatus: { $nin: HIDDEN_STATUSES },
+  status: { $nin: HIDDEN_STATUSES },
 };
+// The same rule for a document already loaded.
+const isPublic = (doc) => !!doc && !HIDDEN_STATUSES.includes(doc.approvalStatus) && !HIDDEN_STATUSES.includes(doc.status);
 
 // Search contexts the app offers. Each is a fixed slice of the listings; `deal` can be overridden
 // (commercial covers both buying and leasing).
@@ -192,4 +196,4 @@ function titleMatch(q) {
   return search ? anyField(TITLE_FIELDS, re(search)) : null;
 }
 
-module.exports = { buildPropertyFilter, buildSort, titleMatch, SECTIONS, PUBLIC, CONTEXTS };
+module.exports = { buildPropertyFilter, buildSort, titleMatch, SECTIONS, PUBLIC, HIDDEN_STATUSES, isPublic, CONTEXTS };

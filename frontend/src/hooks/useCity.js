@@ -19,6 +19,15 @@ let globalFullAddress = "";
 let globalLocationTitle = "";
 let globalDetecting = false;
 
+// Sign-out: forget the previous person's location in memory (storage is cleared by the caller).
+export function resetCityState() {
+  globalCity = "";
+  globalExactLocation = "";
+  globalFullAddress = "";
+  globalLocationTitle = "";
+  notifyListeners({ city: "", exactLocation: "", fullAddress: "", locationTitle: "" });
+}
+
 export function useCity(availableCities = []) {
   const [city, setCityState] = useState(globalCity);
   const [exactLocation, setExactLocationState] = useState(globalExactLocation);

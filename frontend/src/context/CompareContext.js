@@ -27,19 +27,35 @@ export function CompareProvider({ children }) {
   const { token } = useAuth();
   const [ids, setIds] = useState([]);
   const upload = useRef(Promise.resolve());
+  // Bumped on every sign-out: uploads queued under an earlier session are dropped, so one
+  // person's compare list can never be sent to the next account signed in on this device.
+  const sessionGen = useRef(0);
+  const prevToken = useRef(token);
 
   useEffect(() => { readLocal().then(setIds); }, []);
 
-  // On sign-in the server list wins; an empty server list is filled from this device.
+  // Sign-out: forget the list in memory (AuthContext already wiped it from storage).
+  useEffect(() => {
+    if (prevToken.current && !token) {
+      sessionGen.current += 1;
+      upload.current = Promise.resolve();
+      setIds([]);
+    }
+    prevToken.current = token;
+  }, [token]);
+
+  // On sign-in the server list wins; an empty server list is filled from this device (what was
+  // picked as a guest - a previous account's list was cleared at its sign-out).
   useEffect(() => {
     if (!token || !firebasePhone.signedIn()) return undefined;
     let live = true;
+    const gen = sessionGen.current;
     (async () => {
       try {
         const local = await readLocal();
         const r = await api.v2.myActivity({ heartLimit: 1 });
         const server = (r.compareProperties || []).map((p) => p._id).slice(0, COMPARE_MAX);
-        if (!live) return;
+        if (!live || gen !== sessionGen.current) return;
         if (server.length) {
           setIds(server);
           saveLocal(server);
@@ -55,7 +71,12 @@ export function CompareProvider({ children }) {
     setIds(next);
     saveLocal(next);
     // Uploads run one after another so a quick double tap can't land out of order.
-    if (firebasePhone.signedIn()) upload.current = upload.current.then(() => api.v2.setCompare(next)).catch(() => {});
+    if (firebasePhone.signedIn()) {
+      const gen = sessionGen.current;
+      upload.current = upload.current
+        .then(() => (gen === sessionGen.current ? api.v2.setCompare(next) : null))
+        .catch(() => {});
+    }
   }, []);
 
   const toggle = useCallback((id) => {

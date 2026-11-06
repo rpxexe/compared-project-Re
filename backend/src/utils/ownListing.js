@@ -31,6 +31,9 @@ function editableFromDoc(doc) {
     buildingGrade: doc.buildingGrade || "",
     highlights: doc.highlights || [],
     images: doc.galleryImages || (doc.coverImage ? [doc.coverImage] : []),
+    brochure: doc.brochure || "",
+    mapLink: doc.mapLink || "",
+    virtualTours: doc.virtualTours || [],
     contactName: doc.contactName || "",
     contactPhone: doc.contactPhone || "",
   };

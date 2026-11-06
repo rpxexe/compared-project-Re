@@ -12,7 +12,9 @@ const flag = () => z.boolean({ error: "Expected boolean" }).optional();
 // { formErrors, fieldErrors: { field: [messages] } }.
 const leadSchema = z.object({
   customerName: z.string({ error: "Name must be at least 2 characters" }).trim().min(2, { error: "Name must be at least 2 characters" }).max(100),
-  customerEmail: z.email({ error: "Invalid email address" }).max(254).transform((e) => e.toLowerCase()),
+  // Length first: the email regex only ever sees at most 254 characters.
+  customerEmail: z.string({ error: "Invalid email address" }).max(254, { error: "Invalid email address" })
+    .pipe(z.email({ error: "Invalid email address" })).transform((e) => e.toLowerCase()),
   customerPhone: z.string({ error: "Invalid 10-digit Indian mobile number" }).regex(/^[6-9]\d{9}$/, { error: "Invalid 10-digit Indian mobile number" }),
   source: z.enum(CustomerLead.SOURCES, { error: `Source must be one of: ${CustomerLead.SOURCES.join(", ")}` }),
   propertyId: text(40),

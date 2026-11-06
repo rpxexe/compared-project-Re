@@ -249,6 +249,15 @@ export async function clearCompareHistory() {
 }
 
 /**
+ * Sign-out: tell mounted screens that search and compare history are gone (storage is cleared
+ * by the caller).
+ */
+export function notifyHistoryCleared() {
+  notifyListeners([]);
+  notifyCompare([]);
+}
+
+/**
  * Get user preferences derived from search & view history
  */
 export async function getUserPreferences() {

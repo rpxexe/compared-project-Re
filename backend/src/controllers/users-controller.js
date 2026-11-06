@@ -34,7 +34,8 @@ const getOwnProperty = async (req, res) => {
 };
 
 // PATCH /users/me/properties/:id – edit everything except location, BHK, type and category.
-// Edits go live straight away, like new listings.
+// Edits to a live listing stay live. A listing a moderator rejected or has not approved yet keeps
+// that status (and its rejection reason): editing must never be a way to self-approve.
 const updateOwnProperty = async (req, res) => {
   const doc = await findOwnListing(req);
   const patch = req.body && typeof req.body === "object" ? req.body : {};
@@ -49,10 +50,14 @@ const updateOwnProperty = async (req, res) => {
   const { d, opt, errors } = parse({ ...editableFromDoc(doc), ...patch, ...Object.fromEntries(LOCKED.map((k) => [k, editableFromDoc(doc)[k]])) }, req.user);
   if (Object.keys(errors).length) throw bad("Please fix the highlighted fields", { errors });
 
-  const approvalStatus = "approved";
+  const moderated = ["rejected", "pending"].includes(doc.approvalStatus);
+  const approvalStatus = moderated ? doc.approvalStatus : "approved";
   const set = { ...listingFields(d, opt), approvalStatus, updatedAt: new Date() };
   const { filterFields } = withFilterFields({ ...doc, ...set });
-  await Property.updateOne({ _id: doc._id }, { $set: { ...set, filterFields }, $unset: { rejectionReason: "" } });
+  await Property.updateOne(
+    { _id: doc._id },
+    moderated ? { $set: { ...set, filterFields } } : { $set: { ...set, filterFields }, $unset: { rejectionReason: "" } },
+  );
   res.json({
     property: { id: String(doc._id), title: d.title, approvalStatus },
     message: "Changes saved.",

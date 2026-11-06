@@ -17,6 +17,8 @@ function toContractProperty(doc) {
   const f = doc[FIELD] || compute(doc);
   const loc = doc.location && typeof doc.location === "object" ? doc.location : {};
   const rest = Object.fromEntries(Object.entries(doc).filter(([k]) => !HIDDEN.includes(k)));
+  // Links a client opens are passed through only as https:// (as in the v1 API).
+  for (const k of ["brochure", "mapLink", "virtualTours"]) if (k in rest) rest[k] = n[k];
   return {
     ...rest,
     _id: String(doc._id),

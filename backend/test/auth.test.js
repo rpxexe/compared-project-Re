@@ -118,10 +118,36 @@ test('profile: purpose + name update; broker purpose grants broker role; role ca
   assert.equal((await t.call('PATCH', '/users/me', { token, body: { purpose: 'wizard' } })).status, 400);
 });
 
-test('admin phones listed in env are elevated after OTP verification', async () => {
+// Logs in through a real (faked) SMS: OTP_MODE=twilio with the provider swapped out.
+async function smsLogin(phone) {
+  const { setSmsSender } = require('../src/utils/sms');
+  const sent = [];
+  setSmsSender(async (to, body) => { sent.push(body); });
+  process.env.OTP_MODE = 'twilio';
+  env.reload();
+  try {
+    await t.call('POST', '/auth/send-otp', { body: { phone } });
+    const otp = /code is (\d{6})/.exec(sent[0])[1];
+    return (await t.call('POST', '/auth/verify-otp', { body: { phone, otp } })).body;
+  } finally {
+    process.env.OTP_MODE = 'development';
+    env.reload();
+    setSmsSender(null);
+  }
+}
+
+test('admin phones are NEVER elevated with development OTPs', async () => {
   const a = await t.login('9000000001');
-  assert.equal(a.user.role, 'admin');
+  assert.equal(a.user.role, 'user');
   const s = await t.login('9000000002');
+  assert.equal(s.user.role, 'user');
+});
+
+test('admin phones listed in env are elevated after a real SMS OTP verification', async () => {
+  models.User.reset();
+  const a = await smsLogin('9000000001');
+  assert.equal(a.user.role, 'admin');
+  const s = await smsLogin('9000000002');
   assert.equal(s.user.role, 'superadmin');
 });
 

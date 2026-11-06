@@ -4,14 +4,15 @@
   "private": true,
   "main": "src/server.js",
   "engines": {
-    "node": ">=20"
+    "node": ">=20.9.0"
   },
   "scripts": {
     "start": "node src/server.js",
     "dev": "node --watch src/server.js",
     "test": "node --test \"test/*.test.js\"",
     "check:db": "node scripts/check-db.js",
-    "sync:filters": "node scripts/sync-filter-fields.js"
+    "sync:filters": "node scripts/sync-filter-fields.js",
+    "create:developer": "node scripts/create-developer.js"
   },
   "dependencies": {
     "cors": "^2.8.5",
@@ -24,6 +25,7 @@
     "mongoose": "^8.18.1",
     "mongoose-unique-validator": "^6.1.1",
     "multer": "^2.5.0",
+    "sharp": "^0.35.5",
     "zod": "^4.6.7"
   }
 }

@@ -112,17 +112,33 @@ function makeModel(name, defaults = () => ({})) {
     async updateMany(f, u) { const rs = rows.filter((x) => matches(x, f)); rs.forEach((r) => applyUpdate(r, u)); return { matchedCount: rs.length, modifiedCount: rs.length }; },
     async bulkWrite(ops) { for (const o of ops) await Model.updateOne(o.updateOne.filter, o.updateOne.update); return {}; },
     collection: { createIndex: async () => 'ok', bulkWrite: (ops) => Model.bulkWrite(ops) },
-    // Only the pipeline shape the API uses: [$match, $group by one field with $sum: 1].
+    // Only the pipeline shapes the API uses: $match; $group by "$field" or { name: "$field", ... }
+    // counting with { $sum: 1 } (kept as `n` and under each $sum key); $project of "$path"
+    // references and 1s; $sort; $limit.
     async aggregate(stages) {
+      if (Model.aggregateError) throw Model.aggregateError;
       let out = rows;
+      const ref = (doc, v) => (typeof v === 'string' && v.startsWith('$') ? getPath(doc, v.slice(1)) : v);
       for (const st of stages) {
         if (st.$match) out = out.filter((r) => matches(r, st.$match));
         else if (st.$group) {
-          const key = st.$group._id.slice(1);
+          const idSpec = st.$group._id;
+          const sums = Object.keys(st.$group).filter((k) => k !== '_id');
           const groups = new Map();
-          out.forEach((r) => { const k = getPath(r, key); const g = groups.get(String(k)) || { _id: k, n: 0 }; g.n += 1; groups.set(String(k), g); });
+          out.forEach((r) => {
+            const k = typeof idSpec === 'string' ? ref(r, idSpec) : Object.fromEntries(Object.entries(idSpec).map(([n, v]) => [n, ref(r, v)]));
+            const g = groups.get(JSON.stringify(k)) || { _id: k, n: 0 };
+            g.n += 1;
+            sums.forEach((s) => { g[s] = g.n; });
+            groups.set(JSON.stringify(k), g);
+          });
           out = [...groups.values()];
-        } else throw new Error(`fakeDb: unsupported stage ${Object.keys(st)[0]}`);
+        } else if (st.$project) {
+          out = out.map((r) => Object.fromEntries(Object.entries(st.$project).filter(([, v]) => v !== 0).map(([k, v]) => [k, v === 1 ? r[k] : ref(r, v)])));
+        } else if (st.$sort) {
+          out = [...out].sort((a, b) => { for (const [k, d] of Object.entries(st.$sort)) { const c = cmp(getPath(a, k), getPath(b, k)); if (c) return c * d; } return 0; });
+        } else if (st.$limit) out = out.slice(0, st.$limit);
+        else throw new Error(`fakeDb: unsupported stage ${Object.keys(st)[0]}`);
       }
       return out.map(structuredCloneKeepIds);
     },

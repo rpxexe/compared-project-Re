@@ -117,7 +117,7 @@ export default function OtpScreen({ navigation, route }) {
   const [state, setState] = useState("idle"); // idle | loading | error | success
   const [error, setError] = useState("");
   const [secs, setSecs] = useState(resendIn);
-  const [devOtp, setDevOtp] = useState(initialDev);
+  const [devOtp, setDevOtp] = useState(__DEV__ ? initialDev : null);
   const [resending, setResending] = useState(false);
   const [focused, setFocused] = useState(true);
   const input = useRef(null);
@@ -237,7 +237,7 @@ export default function OtpScreen({ navigation, route }) {
       }
       const r = await api.sendOtp(phone);
       setSecs(r.resendInSeconds ?? 30);
-      setDevOtp(r.devOtp || null);
+      setDevOtp(__DEV__ ? r.devOtp || null : null);
       setCode("");
       input.current?.focus();
     } catch (e) {
@@ -322,7 +322,8 @@ export default function OtpScreen({ navigation, route }) {
           ) : null}
         </View>
 
-        {devOtp ? (
+        {/* Development builds only: a release build never shows a code, whatever the server sends. */}
+        {__DEV__ && devOtp ? (
           <PressableScale onPress={() => onChange(devOtp)} style={styles.dev}>
             <Ionicons
               name="construct-outline"

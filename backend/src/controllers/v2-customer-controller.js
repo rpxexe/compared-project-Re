@@ -44,8 +44,13 @@ async function signedIn(res, status, Model, doc, created) {
   });
 }
 
-// Links the Firebase user to a customer account, creating one if needed. Phone sign-ins attach
-// to the phone (OTP) account with that number; email sign-ins need a verified email.
+// Links the Firebase user to a customer account, creating one if needed.
+//
+// The ONLY identity an existing account is linked by is a Firebase-verified phone number matching
+// a phone (OTP) account: both sides proved ownership of that number. Email is never used to link -
+// an email/password account's address was never verified, so linking by it would let whoever
+// pre-registered an address take over (or be handed) the Firebase user's account. A sign-in with
+// no matching phone account gets a NEW account instead.
 const register = async (req, res) => {
   const t = req.firebase;
   const existing = await findCustomer(t.uid);
@@ -54,35 +59,41 @@ const register = async (req, res) => {
     return signedIn(res, 200, existing.Model, existing.doc, false);
   }
   const name = registerSchema.parse(req.body ?? {}).name || str(t.name, 80);
-  const phone = t.phone_number ? cleanPhone(t.phone_number) : "";
-  const email = str(t.email, 254).toLowerCase();
+  // Firebase only puts phone_number in a token after verifying the number by SMS.
+  const phone = typeof t.phone_number === "string" ? cleanPhone(t.phone_number) : "";
+  const email = typeof t.email === "string" && t.email.length <= 254 ? t.email.trim().toLowerCase() : "";
 
-  let Model;
-  let match;
-  let create;
   if (isValidPhone(phone)) {
-    Model = User;
-    match = { phone };
-    create = { phone, name, role: "user", isActive: true, savedProperties: [], compareProperties: [] };
-  } else if (email) {
-    if (!t.email_verified) return res.status(400).json({ message: "Verify your email address before continuing." });
-    Model = SignUpUser;
-    match = { email };
-    create = { fullName: name || email.split("@")[0], email, phone: "", password: "", role: "user", isActive: true, savedProperties: [], compareProperties: [] };
-  } else {
-    return res.status(400).json({ message: "Sign in with a phone number or an email address." });
+    const account = await User.findOne({ phone }).lean();
+    if (account) {
+      if (account.firebaseUid && account.firebaseUid !== t.uid)
+        return res.status(409).json({ message: "This account is already linked to another sign-in." });
+      if (account.isActive === false) return res.status(403).json({ message: "This account has been disabled. Contact support." });
+      // Only link an account that is not linked yet; a concurrent link to another uid loses.
+      const linked = await User.findOneAndUpdate(
+        { _id: account._id, $or: [{ firebaseUid: { $exists: false } }, { firebaseUid: null }, { firebaseUid: t.uid }] },
+        { $set: { firebaseUid: t.uid } },
+        { new: true },
+      ).lean();
+      if (!linked) return res.status(409).json({ message: "This account is already linked to another sign-in." });
+      return signedIn(res, 200, User, linked, false);
+    }
+    const created = await User.create({
+      phone, name, role: "user", isActive: true, savedProperties: [], compareProperties: [], firebaseUid: t.uid, createdAt: new Date(),
+    });
+    return signedIn(res, 201, User, created.toObject ? created.toObject() : created, true);
   }
 
-  const account = await Model.findOne(match).lean();
-  if (account) {
-    if (account.firebaseUid && account.firebaseUid !== t.uid)
-      return res.status(409).json({ message: "This account is already linked to another sign-in." });
-    if (account.isActive === false) return res.status(403).json({ message: "This account has been disabled. Contact support." });
-    const linked = await Model.findOneAndUpdate({ _id: account._id }, { $set: { firebaseUid: t.uid } }, { new: true }).lean();
-    return signedIn(res, 200, Model, linked, false);
-  }
-  const created = await Model.create({ ...create, firebaseUid: t.uid, createdAt: new Date() });
-  await signedIn(res, 201, Model, created.toObject ? created.toObject() : created, true);
+  if (!email) return res.status(400).json({ message: "Sign in with a phone number or an email address." });
+  if (t.email_verified !== true) return res.status(400).json({ message: "Verify your email address before continuing." });
+  // Email addresses are unique per account, and an existing account is never linked by email.
+  if (await SignUpUser.findOne({ email }).lean())
+    return res.status(409).json({ message: "An account with this email already exists. Sign in with your phone number instead." });
+  const created = await SignUpUser.create({
+    fullName: name || email.split("@")[0], email, phone: "", password: "", role: "user", isActive: true,
+    savedProperties: [], compareProperties: [], firebaseUid: t.uid, createdAt: new Date(),
+  });
+  await signedIn(res, 201, SignUpUser, created.toObject ? created.toObject() : created, true);
 };
 
 // ----- Activity -----------------------------------------------------------------------------

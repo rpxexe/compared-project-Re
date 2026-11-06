@@ -34,10 +34,9 @@ test('own listing: other users and imported listings are not found', async () =>
   assert.equal((await t.call('PATCH', `/users/me/properties/${imported}`, { token: owner.token, body: { price: 1 } })).status, 404);
 });
 
-test('own listing: edits are validated, saved, recompute filters and go live', async () => {
+test('own listing: edits are validated, saved and recompute filters; live listings stay live', async () => {
   const doc = () => models.Property._rows.find((p) => String(p._id) === id);
-  doc().approvalStatus = 'rejected';
-  doc().rejectionReason = 'Blurry photos';
+  assert.equal(doc().approvalStatus, 'approved');
 
   const bad = await t.call('PATCH', `/users/me/properties/${id}`, { token: owner.token, body: { price: -3, title: 'x' } });
   assert.equal(bad.status, 400);
@@ -51,8 +50,29 @@ test('own listing: edits are validated, saved, recompute filters and go live', a
   assert.equal(doc().furnishing, 'furnished');
   assert.equal(doc().city, 'Thane');
   assert.equal(doc().bhk, '2');
-  assert.equal(doc().rejectionReason, undefined);
   assert.ok(doc().filterFields);
+});
+
+test('own listing: editing a rejected listing keeps it rejected (no self-approval)', async () => {
+  const doc = () => models.Property._rows.find((p) => String(p._id) === id);
+  doc().approvalStatus = 'rejected';
+  doc().rejectionReason = 'Blurry photos';
+
+  const r = await t.call('PATCH', `/users/me/properties/${id}`, { token: owner.token, body: { title: 'Sea Breeze 2BHK – new photos' } });
+  assert.equal(r.status, 200);
+  assert.equal(r.body.property.approvalStatus, 'rejected');
+  assert.equal(doc().approvalStatus, 'rejected');
+  assert.equal(doc().rejectionReason, 'Blurry photos');
+  assert.equal(doc().title, 'Sea Breeze 2BHK – new photos');
+  // Still hidden from everyone but the owner.
+  assert.equal((await t.call('GET', `/properties/${id}`, { token: other.token })).status, 404);
+  assert.equal((await t.call('GET', `/properties/${id}`, { token: owner.token })).status, 200);
+
+  doc().approvalStatus = 'pending';
+  await t.call('PATCH', `/users/me/properties/${id}`, { token: owner.token, body: { price: '8200000' } });
+  assert.equal(doc().approvalStatus, 'pending');
+  doc().approvalStatus = 'approved';
+  delete doc().rejectionReason;
 });
 
 test('own listing: location, BHK and property type cannot be changed', async () => {

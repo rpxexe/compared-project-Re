@@ -1,12 +1,11 @@
-const express = require("express");
 const env = require("../config/env");
 const { Otp, User } = require("../models");
-const { signToken } = require("../middleware/auth");
+const { signToken, findAccountById } = require("../middleware/auth");
 const { AppError } = require("../utils/errors");
 const { str } = require("../utils/validate");
 const { generateOtp, hashOtp, otpMatches } = require("../utils/otp");
 const { sendSms } = require("../utils/sms");
-const { rateLimit } = require("../utils/rateLimit");
+const { revokeTokens } = require("../utils/firebase");
 const { publicUser } = require("../utils/user");
 const { z, validate, phone: phoneField } = require("../utils/zod");
 
@@ -14,18 +13,6 @@ const PHONE_ERROR = "Enter a valid 10-digit Indian mobile number";
 const sendSchema = z.object({ phone: phoneField(PHONE_ERROR) });
 const verifySchema = sendSchema.extend({
   otp: z.preprocess((v) => str(v, 6), z.string().regex(/^\d{6}$/, { error: "Enter the 6-digit OTP" })),
-});
-
-// const router = express.Router();
-const sendLimiter = rateLimit({
-  windowMs: 10 * 60 * 1000,
-  max: 20,
-  message: "Too many OTP requests. Please wait a few minutes.",
-});
-const verifyLimiter = rateLimit({
-  windowMs: 10 * 60 * 1000,
-  max: 60,
-  message: "Too many attempts. Please wait a few minutes.",
 });
 
 const sendOTP = async (req, res) => {
@@ -50,13 +37,16 @@ const sendOTP = async (req, res) => {
   const otp = generateOtp();
   const now = Date.now();
   await Otp.deleteMany({ phone });
-  await Otp.create({
+  const created = await Otp.create({
     phone,
     codeHash: hashOtp(phone, otp),
     expiresAt: new Date(now + env.otpTtlMinutes * 60000),
     attempts: 0,
     lastSentAt: new Date(now),
   });
+  // Parallel sends can both pass the cooldown check above; keep only the newest code so a
+  // number never has several live codes (each with its own attempt budget) at once.
+  await Otp.deleteMany({ phone, _id: { $ne: created._id }, lastSentAt: { $lte: created.lastSentAt } });
 
   const body = {
     message: "OTP sent successfully",
@@ -64,7 +54,11 @@ const sendOTP = async (req, res) => {
     resendInSeconds: env.otpResendSeconds,
     mode: env.otpMode,
   };
-  if (env.otpMode === "twilio") {
+  if (env.devOtpEnabled()) {
+    // Development/test only (start-up refuses OTP_MODE=development anywhere else). The code is
+    // returned to the client and never logged.
+    body.devOtp = otp;
+  } else {
     try {
       await sendSms(
         phone,
@@ -74,50 +68,54 @@ const sendOTP = async (req, res) => {
       await Otp.deleteMany({ phone });
       throw e;
     }
-  } else {
-    body.devOtp = otp; // development only – production start-up refuses OTP_MODE=development
-    if (!env.isTest) console.log(`[dev OTP] +91${phone}: ${otp}`);
   }
   res.json(body);
 };
 
-const verifyOTP = async (req, res) => {
-  const { phone, otp } = validate(verifySchema, req.body);
-
+// Why an attempt could not be reserved: no code, an expired one, or one that is locked.
+async function rejectAttempt(phone, now) {
   const record = await Otp.findOne({ phone }).lean();
   if (!record)
-    throw new AppError(
-      401,
-      "OTP not found or already used. Please request a new one.",
-    );
-  if (new Date(record.expiresAt).getTime() < Date.now()) {
+    throw new AppError(401, "OTP not found or already used. Please request a new one.");
+  if (new Date(record.expiresAt).getTime() <= now) {
     await Otp.deleteMany({ phone });
-    throw new AppError(401, "This OTP has expired. Please request a new one.", {
-      code: "OTP_EXPIRED",
-    });
-  }
-  if ((record.attempts || 0) >= env.otpMaxAttempts) {
-    await Otp.deleteMany({ phone });
-    throw new AppError(
-      429,
-      "Too many wrong attempts. Please request a new OTP.",
-      { code: "OTP_LOCKED" },
-    );
-  }
-  if (!otpMatches(record, phone, otp)) {
-    await Otp.updateOne({ _id: record._id }, { $inc: { attempts: 1 } });
-    throw new AppError(401, "Incorrect OTP. Please check and try again.", {
-      code: "OTP_INVALID",
-    });
+    throw new AppError(401, "This OTP has expired. Please request a new one.", { code: "OTP_EXPIRED" });
   }
   await Otp.deleteMany({ phone });
+  throw new AppError(429, "Too many wrong attempts. Please request a new OTP.", { code: "OTP_LOCKED" });
+}
 
-  // Admin bootstrap: numbers listed in env are elevated after proving ownership with an OTP.
-  const elevated = env.superadminPhones.includes(phone)
-    ? "superadmin"
-    : env.adminPhones.includes(phone)
-      ? "admin"
-      : null;
+const verifyOTP = async (req, res) => {
+  const { phone, otp } = validate(verifySchema, req.body);
+  const now = Date.now();
+
+  // Reserve one attempt atomically BEFORE comparing the code: the increment only happens while
+  // attempts are below the limit, so parallel guesses can never get more than otpMaxAttempts
+  // comparisons out of one code (a read-then-increment would let them all pass the check).
+  const record = await Otp.findOneAndUpdate(
+    { phone, attempts: { $lt: env.otpMaxAttempts }, expiresAt: { $gt: new Date(now) } },
+    { $inc: { attempts: 1 } },
+    { new: true },
+  ).lean();
+  if (!record) await rejectAttempt(phone, now);
+
+  if (!otpMatches(record, phone, otp))
+    throw new AppError(401, "Incorrect OTP. Please check and try again.", { code: "OTP_INVALID" });
+  // Single use: only the request that actually deletes the code may sign in.
+  const used = await Otp.deleteOne({ _id: record._id });
+  if (!used.deletedCount)
+    throw new AppError(401, "OTP not found or already used. Please request a new one.");
+  await Otp.deleteMany({ phone });
+
+  // Admin bootstrap: numbers listed in env are elevated after proving ownership with a real SMS
+  // OTP. Never with development OTPs, where anyone can "verify" any number.
+  const elevated = env.devOtpEnabled()
+    ? null
+    : env.superadminPhones.includes(phone)
+      ? "superadmin"
+      : env.adminPhones.includes(phone)
+        ? "admin"
+        : null;
   let user = await User.findOneAndUpdate(
     { phone },
     { $setOnInsert: { phone }, $set: { lastLoginAt: new Date() } },
@@ -139,5 +137,22 @@ const verifyOTP = async (req, res) => {
   });
 };
 
+// POST /auth/logout-all: bumps the account's token version, so every JWT issued so far (on this
+// and every other device) stops working, and revokes the linked Firebase session if there is one.
+const logoutAll = async (req, res) => {
+  const found = await findAccountById(req.user.id);
+  if (!found) throw new AppError(401, "Account not available. Please log in again.");
+  await found.Model.updateOne({ _id: found.user._id }, { $inc: { tokenVersion: 1 } });
+  if (found.user.firebaseUid) {
+    try {
+      await revokeTokens(found.user.firebaseUid);
+    } catch (e) {
+      if (!env.isTest) console.error(`Firebase token revocation failed: ${e?.code || "unknown error"}`);
+    }
+  }
+  res.json({ ok: true, message: "Signed out on all devices" });
+};
+
 exports.sendOTP = sendOTP;
 exports.verifyOTP = verifyOTP;
+exports.logoutAll = logoutAll;

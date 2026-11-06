@@ -40,7 +40,8 @@ export function validatePost(f) {
   if ((f.description || '').trim().length < 10) e.description = 'Add a short description (10+ characters)';
   if (f.contactPhone && !isValidIndianMobile(f.contactPhone)) e.contactPhone = 'Enter a valid 10-digit number';
   const imgs = (f.images || '').split(/[\s,]+/).filter(Boolean);
-  if (imgs.some((u) => !/^https?:\/\/\S+$/i.test(u))) e.images = 'Image links must start with http:// or https://';
+  // Same rule as the backend (which enforces it): secure links only.
+  if (imgs.some((u) => !/^https:\/\/\S+$/i.test(u))) e.images = 'Image links must be secure https:// links';
   return e;
 }
 

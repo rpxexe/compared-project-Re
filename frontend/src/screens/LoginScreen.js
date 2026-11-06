@@ -208,7 +208,7 @@ export default function LoginScreen({ navigation }) {
         phone: digits,
         role,
         name: displayName,
-        devOtp: r.devOtp || null,
+        devOtp: __DEV__ ? r.devOtp || null : null,
         resendIn: r.resendInSeconds ?? 30,
         expiresIn: r.expiresInSeconds ?? 300,
       });
@@ -388,22 +388,6 @@ export default function LoginScreen({ navigation }) {
                       <Ionicons name={showPassword ? "eye-off-outline" : "eye-outline"} size={20} color={brand.inkSoft} />
                     </Pressable>
                   </Field>
-
-                  {__DEV__ ? (
-                    // Development builds only: never ship pre-filled credentials.
-                    <Pressable
-                      onPress={() => {
-                        setEmail("developer@godrej.com");
-                        setPassword("DeveloperPassword123!");
-                        setApiError("");
-                      }}
-                      style={styles.demoFill}
-                      accessibilityRole="button"
-                    >
-                      <Ionicons name="construct-outline" size={14} color={brand.deep} />
-                      <Text style={styles.demoFillText}>Dev only · fill demo developer credentials</Text>
-                    </Pressable>
-                  ) : null}
                 </View>
               ) : (
                 <View style={{ gap: 14 }}>
@@ -625,18 +609,6 @@ const styles = StyleSheet.create({
   divider: { width: 1, height: 24, backgroundColor: "#DDD3F2", marginHorizontal: 12 },
   input: { flex: 1, minHeight: 52, fontSize: 16, color: brand.ink, fontWeight: "600", letterSpacing: 0.3 },
   eyeBtn: { paddingLeft: 10, minHeight: 44, justifyContent: "center" },
-  demoFill: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 8,
-    paddingVertical: 10,
-    borderRadius: radius.md,
-    borderWidth: 1,
-    borderStyle: "dashed",
-    borderColor: "rgba(76,22,184,0.3)",
-  },
-  demoFillText: { color: brand.deep, fontSize: 12.5, fontWeight: "700" },
   errorBox: {
     flexDirection: "row",
     alignItems: "center",
