@@ -29,7 +29,6 @@ import {
   ViewedPropertiesScreen,
 } from "../screens/ListScreens";
 import PrePostPropertyTypeScreen from "../screens/PrePostPropertyTypeScreen";
-import SignUpScreen from "../screens/SignUp";
 
 const Stack = createNativeStackNavigator();
 const Tab = createBottomTabNavigator();
@@ -144,7 +143,6 @@ export default function AppNavigator({ hasStarted = true }) {
         component={Tabs}
         options={{ animation: "fade" }}
       />
-      <Stack.Screen name="SignUp" component={SignUpScreen} />
       <Stack.Screen
         name="Welcome"
         component={GetStartedScreen}

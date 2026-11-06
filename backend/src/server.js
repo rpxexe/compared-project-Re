@@ -16,12 +16,16 @@ async function start() {
   await connectDb();
   console.log("MongoDB connected");
   startFilterSync(env.filterSyncMinutes);
-  if (!require("./utils/firebase").isConfigured())
+  const firebase = require("./utils/firebase");
+  if (!firebase.isConfigured())
     console.warn("WARNING: FIREBASE_PROJECT_ID is not set, so /api/v2 customer routes reject every token (401 Invalid token).");
-  if (env.otpMode === "development") {
+  else if (!env.firebase.serviceAccount && !process.env.GOOGLE_APPLICATION_CREDENTIALS)
+    console.warn("WARNING: FIREBASE_SERVICE_ACCOUNT is not set. Firebase token revocation checks need admin credentials; without them /api/v2 customer routes reject every token.");
+  if (env.devOtpEnabled()) {
     console.warn(
       "WARNING: OTP_MODE=development returns login codes in API responses. Anyone who can reach " +
-        "this server can sign in as any phone number. Never expose it publicly; use OTP_MODE=twilio.",
+        "this server can sign in as any phone number, and ADMIN_PHONES/SUPERADMIN_PHONES are NOT " +
+        "promoted. Never expose it publicly; use OTP_MODE=twilio.",
     );
   }
   const server = createApp().listen(env.port, "0.0.0.0", () =>

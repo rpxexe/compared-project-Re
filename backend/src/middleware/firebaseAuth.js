@@ -1,6 +1,6 @@
 const env = require("../config/env");
 const { User, SignUpUser } = require("../models");
-const { verifyIdToken } = require("../utils/firebase");
+const { verifyIdToken, isTokenError } = require("../utils/firebase");
 
 // Customer auth for /api/v2 (see MOBILE_API.md). Every failure is a 401 with a bare { message },
 // exactly as in the mobile API contract: "No token", "Invalid token" or "Customer not found".
@@ -17,7 +17,9 @@ async function decode(req, res) {
   try {
     return await verifyIdToken(token);
   } catch (e) {
-    if (!env.isTest && /not configured/.test(e.message)) console.error(e.message);
+    // Revoked, expired, disabled or malformed tokens are the client's problem and get the same
+    // bare 401. Anything else (missing config/credentials) is logged by code only - never the token.
+    if (!env.isTest && !isTokenError(e)) console.error(`Firebase token check failed: ${e?.code || e?.message}`);
     deny(res, "Invalid token");
     return null;
   }

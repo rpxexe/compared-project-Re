@@ -8,7 +8,9 @@ const helmet = require("helmet");
 function createApp() {
   const app = express();
   app.disable("x-powered-by");
-  app.set("trust proxy", 1);
+  // How many reverse proxies (or which addresses) to trust for the client IP in X-Forwarded-For.
+  // Rate limits key on req.ip, so trusting more hops than really exist lets clients spoof it.
+  app.set("trust proxy", env.trustProxy);
   // Security headers must be registered before the routes; middleware added after the
   // routes/error handler never runs for API responses. This is a JSON API, so no CSP.
   app.use(
@@ -20,11 +22,15 @@ function createApp() {
       hsts: { maxAge: 31536000, includeSubDomains: true, preload: false },
     }),
   );
-  // Native mobile apps send no Origin header, so CORS only matters for web front-ends.
-  app.use(cors(env.corsOrigins.length ? { origin: env.corsOrigins } : {}));
+  // Native mobile apps send no Origin header, so CORS only matters for web front-ends. Outside
+  // development an empty CORS_ORIGINS sends no CORS headers at all (never a wildcard).
+  if (env.corsOrigins.length) app.use(cors({ origin: env.corsOrigins }));
+  else if (env.isDevLike) app.use(cors());
   app.use(express.json({ limit: "200kb" }));
 
   app.get("/api/health", (req, res) => {
+    // Production reveals nothing beyond liveness.
+    if (!env.isDevLike) return res.json({ ok: true });
     const dbState = mongoose.connection.readyState;
     const dbStatus =
       dbState === 1

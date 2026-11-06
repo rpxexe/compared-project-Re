@@ -2,7 +2,8 @@
 export function normalizeError(err) {
   // Aborted on purpose (a newer request replaced it): callers ignore these.
   if (err?.code === 'ERR_CANCELED' || err?.name === 'CanceledError') return { status: 0, network: false, canceled: true, fieldErrors: null, message: 'Request cancelled.' };
-  if (err?.code === 'NO_API_URL') return { status: 0, network: true, fieldErrors: null, message: 'The API address is not configured. Set EXPO_PUBLIC_API_URL in frontend/.env and restart Expo with: npx expo start -c' };
+  // Setup instructions are for developers; release builds don't describe their configuration.
+  if (err?.code === 'NO_API_URL') return { status: 0, network: true, fieldErrors: null, message: typeof __DEV__ !== 'undefined' && __DEV__ ? 'The API address is not configured. Set EXPO_PUBLIC_API_URL in frontend/.env and restart Expo with: npx expo start -c' : 'The app could not connect. Please update the app or try again later.' };
   const status = err?.response?.status;
   const data = err?.response?.data;
   if (!err?.response) {

@@ -16,6 +16,7 @@ const {
   titleMatch,
   SECTIONS,
   PUBLIC,
+  isPublic,
 } = require("../utils/propertyQuery");
 const { summarise, publicRating } = require("../utils/rating");
 const { cached, cachedByKey } = require("../utils/cache");
@@ -227,74 +228,68 @@ let locationsCacheExpiry = 0;
 const LOCATIONS_CACHE_TTL_MS = 5 * 60 * 1000; // 5 min memory cache to prevent heavy aggregate scans
 
 const getLocations = async (req, res) => {
-  try {
-    const now = Date.now();
-    let allLocations = locationsCache;
+  const now = Date.now();
+  let allLocations = locationsCache;
 
-    if (!allLocations || now > locationsCacheExpiry) {
-      const list = await Property.aggregate([
-        { $match: PUBLIC },
-        {
-          $group: {
-            _id: { locality: "$locality", city: "$city" },
-            count: { $sum: 1 },
-          },
+  if (!allLocations || now > locationsCacheExpiry) {
+    const list = await Property.aggregate([
+      { $match: PUBLIC },
+      {
+        $group: {
+          _id: { locality: "$locality", city: "$city" },
+          count: { $sum: 1 },
         },
-        {
-          $project: {
-            _id: 0,
-            locality: "$_id.locality",
-            city: "$_id.city",
-            count: 1,
-          },
+      },
+      {
+        $project: {
+          _id: 0,
+          locality: "$_id.locality",
+          city: "$_id.city",
+          count: 1,
         },
-        { $sort: { count: -1 } },
-        // Enough pairs that a city-scoped list (?city=) still has localities for smaller cities.
-        { $limit: 3000 },
-      ]);
-      allLocations = list
-        .filter((l) => (l.city && l.city.trim()) || (l.locality && l.locality.trim()))
-        .map((l) => ({
-          locality: (l.locality || "").trim(),
-          city: (l.city || "").trim(),
-          formatted: [l.locality, l.city].filter(Boolean).map((s) => s.trim()).join(", "),
-          count: l.count,
-        }));
-      locationsCache = allLocations;
-      locationsCacheExpiry = now + LOCATIONS_CACHE_TTL_MS;
-    }
-
-    const limit = Math.min(50, Math.max(1, parseInt(req.query.limit, 10) || 15));
-    const page = Math.max(1, parseInt(req.query.page, 10) || 1);
-    const search = (req.query.search || req.query.q || "").trim().toLowerCase();
-    const city = str(req.query.city, 60).toLowerCase();
-
-    let filtered = allLocations;
-    if (city) filtered = filtered.filter((l) => l.city.toLowerCase() === city);
-    if (search) {
-      filtered = filtered.filter(
-        (l) =>
-          l.locality.toLowerCase().includes(search) ||
-          l.city.toLowerCase().includes(search) ||
-          l.formatted.toLowerCase().includes(search)
-      );
-    }
-
-    const total = filtered.length;
-    const skip = (page - 1) * limit;
-    const paged = filtered.slice(skip, skip + limit);
-    const hasMore = skip + paged.length < total;
-
-    res.json({
-      locations: paged,
-      total,
-      page,
-      limit,
-      hasMore,
-    });
-  } catch (err) {
-    res.status(500).json({ message: err.message });
+      },
+      { $sort: { count: -1 } },
+      // Enough pairs that a city-scoped list (?city=) still has localities for smaller cities.
+      { $limit: 3000 },
+    ]);
+    // Imported documents may hold non-string city/locality values; keep only real text.
+    const text = (v) => (typeof v === "string" ? v.trim() : "");
+    allLocations = list
+      .map((l) => ({ locality: text(l.locality), city: text(l.city), count: l.count }))
+      .filter((l) => l.city || l.locality)
+      .map((l) => ({ ...l, formatted: [l.locality, l.city].filter(Boolean).join(", ") }));
+    locationsCache = allLocations;
+    locationsCacheExpiry = now + LOCATIONS_CACHE_TTL_MS;
   }
+
+  // str() turns arrays/objects (?search[]=a, ?search[$ne]=x) into "" instead of crashing on .trim().
+  const { page, limit } = paging(req.query, { defLimit: 15, maxLimit: 50 });
+  const search = (str(req.query.search, 80) || str(req.query.q, 80)).toLowerCase();
+  const city = str(req.query.city, 60).toLowerCase();
+
+  let filtered = allLocations;
+  if (city) filtered = filtered.filter((l) => l.city.toLowerCase() === city);
+  if (search) {
+    filtered = filtered.filter(
+      (l) =>
+        l.locality.toLowerCase().includes(search) ||
+        l.city.toLowerCase().includes(search) ||
+        l.formatted.toLowerCase().includes(search)
+    );
+  }
+
+  const total = filtered.length;
+  const skip = (page - 1) * limit;
+  const paged = filtered.slice(skip, skip + limit);
+  const hasMore = skip + paged.length < total;
+
+  res.json({
+    locations: paged,
+    total,
+    page,
+    limit,
+    hasMore,
+  });
 };
 
 
@@ -354,7 +349,7 @@ const getSavedProperties = async (req, res) => {
   const saved = user?.savedProperties || []; // stored with each listing's own _id type
   const ids = saved.map(String);
   const docs = ids.length
-    ? await Property.find({ _id: { $in: saved } }).lean()
+    ? await Property.find({ $and: [PUBLIC, { _id: { $in: saved } }] }).lean()
     : [];
   const items = await withRatings(docs);
   items.sort((a, b) => ids.indexOf(b.id) - ids.indexOf(a.id)); // most recently saved first
@@ -364,22 +359,26 @@ const getSavedProperties = async (req, res) => {
 // The listing for an id from the URL, whichever type its _id is stored as.
 const findListing = (id) => Property.findOne({ _id: propertyIdMatch(requirePropertyId(id)) }).lean();
 
-const getProperty = async (req, res) => {
+const ownsListing = (user, doc) => Boolean(user && doc?.ownerUserId && String(doc.ownerUserId) === user.id);
+
+// Every by-id route goes through this: a pending/rejected/hidden listing is a 404 for everyone
+// except the user who posted it, exactly as if the id did not exist.
+async function findVisibleListing(req) {
   const doc = await findListing(req.params.id);
-  const hidden = doc && ["pending", "rejected"].includes(doc.approvalStatus);
-  const isOwner = Boolean(
-    req.user && doc?.ownerUserId && String(doc.ownerUserId) === req.user.id,
-  );
-  if (!doc || (hidden && !isOwner))
+  if (!doc || !(isPublic(doc) || ownsListing(req.user, doc)))
     throw new AppError(404, "Property not found");
+  return doc;
+}
+
+const getProperty = async (req, res) => {
+  const doc = await findVisibleListing(req);
   const [item] = await withRatings([doc]);
-  res.json({ property: { ...item, isOwner } });
+  res.json({ property: { ...item, isOwner: ownsListing(req.user, doc) } });
 };
 
 // Guests have no contact details to follow up on, so only signed-in views are kept.
 const recordView = async (req, res) => {
-  const doc = await findListing(req.params.id);
-  if (!doc) throw new AppError(404, "Property not found");
+  const doc = await findVisibleListing(req);
   if (!req.user) return res.status(204).end();
   const account = (await findAccount(req.user.id))?.doc;
   const p = normalizeProperty(doc);
@@ -407,8 +406,7 @@ const recordView = async (req, res) => {
 };
 
 async function setSaved(req, res, desired) {
-  const exists = await findListing(req.params.id);
-  if (!exists) throw new AppError(404, "Property not found");
+  const exists = await findVisibleListing(req);
   const id = exists._id;
   const user = await User.findById(req.user.id).lean();
   const currently = (user?.savedProperties || []).some(
@@ -457,7 +455,8 @@ async function recompute(propertyId) {
 }
 
 const getReviews = async (req, res) => {
-  const propertyId = propertyIdMatch(requirePropertyId(req.params.id));
+  await findVisibleListing(req);
+  const propertyId = propertyIdMatch(req.params.id);
   const { page, limit, skip } = paging(req.query, {
     defLimit: 10,
     maxLimit: 30,
@@ -494,9 +493,7 @@ const getReviews = async (req, res) => {
 const postReview = async (req, res) => {
   requirePropertyId(req.params.id);
   const { rating, comment } = validate(reviewSchema, req.body);
-  const property = await findListing(req.params.id);
-  if (!property || ["pending", "rejected"].includes(property.approvalStatus))
-    throw new AppError(404, "Property not found");
+  const property = await findVisibleListing(req);
   if (property.ownerUserId && String(property.ownerUserId) === req.user.id)
     throw new AppError(403, "You cannot rate your own listing");
 
@@ -525,8 +522,7 @@ const postReview = async (req, res) => {
 };
 
 const deleteReview = async (req, res) => {
-  const property = await findListing(req.params.id);
-  if (!property) throw new AppError(404, "Property not found");
+  const property = await findVisibleListing(req);
   const propertyId = property._id;
   await Review.deleteOne({
     property: propertyId,

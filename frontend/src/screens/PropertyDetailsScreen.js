@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from "react";
-import { Animated, Dimensions, Image, Linking, Pressable, ScrollView, Share, StyleSheet, View } from "react-native";
+import { Animated, Dimensions, Image, Pressable, ScrollView, Share, StyleSheet, View } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -24,6 +24,7 @@ import { useEntrance } from "../hooks/useEntrance";
 import { isReducedMotion } from "../hooks/useReducedMotion";
 import { api } from "../services/api";
 import { recordPropertyView } from "../services/historyService";
+import { openExternal } from "../utils/links";
 import { propertyWebUrl } from "../config/web";
 import { isPresent, listingName } from "../utils/format";
 import { brand, colors, fonts, gradients, radius, shadow } from "../theme";
@@ -366,7 +367,8 @@ export default function PropertyDetailsScreen({ navigation, route }) {
     return () => clearTimeout(t);
   }, [autoEnquire]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const open = (url) => Linking.openURL(url).catch(() => toast.show("Could not open this link", "error"));
+  // Listing links (brochure, tours, map, floor plans) open only when they are https:// web pages.
+  const open = (url) => openExternal(url, { onError: (message) => toast.show(message, "error") });
   const share = () =>
     Share.share({
       message: `${p.title}${p.price ? ` · ${p.price}` : ""}${p.city ? ` · ${p.city}` : ""}\n${propertyWebUrl(p.id)}`.trim(),

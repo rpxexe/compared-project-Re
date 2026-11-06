@@ -17,10 +17,23 @@ function urlOf(value) {
   return '';
 }
 
-function urlList(value) {
+function urlList(value, pick = urlOf) {
   if (!value) return [];
   const arr = Array.isArray(value) ? value : [value];
-  return [...new Set(arr.map(urlOf).filter(Boolean))];
+  return [...new Set(arr.map(pick).filter(Boolean))];
+}
+
+// Links the app hands to the OS to open (brochure, map, virtual tour): absolute https:// only.
+// Imported data may hold http://, tel:, intent: or javascript: values; those are dropped.
+function httpsUrlOf(value) {
+  const url = urlOf(value);
+  if (!url) return '';
+  try {
+    const u = new URL(url);
+    return u.protocol === 'https:' && u.hostname && !u.username && !u.password ? url : '';
+  } catch {
+    return '';
+  }
 }
 
 function numericValue(value) {
@@ -96,7 +109,7 @@ function normalizeProperty(doc) {
     locality,
     address: firstString(typeof p.address === 'string' ? p.address : '', p.fullAddress, addr.line1, addr.street),
     pincode: firstString(p.pincode, addr.pincode),
-    mapLink: urlOf(p.mapLink),
+    mapLink: httpsUrlOf(p.mapLink),
     price: priceText,
     priceMin: priceMinText,
     priceValue,
@@ -125,8 +138,8 @@ function normalizeProperty(doc) {
     facilities: stringList(p.facilities),
     security: stringList(p.security),
     floorPlans: urlList(p.floorPlans),
-    virtualTours: urlList(p.virtualTours),
-    brochure: urlOf(p.brochure),
+    virtualTours: urlList(p.virtualTours, httpsUrlOf),
+    brochure: httpsUrlOf(p.brochure),
     image: cover,
     galleryImages: gallery,
     dataSource: firstString(p.dataSource),
@@ -138,4 +151,4 @@ function normalizeProperty(doc) {
   };
 }
 
-module.exports = { normalizeProperty, formatPrice, numericValue, firstString };
+module.exports = { normalizeProperty, formatPrice, numericValue, firstString, httpsUrlOf };

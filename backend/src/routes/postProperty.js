@@ -1,7 +1,10 @@
 const express = require("express");
 const { authRequired } = require("../middleware/auth");
+const { rateLimit, byUser } = require("../utils/rateLimit");
 const postProperty = require("../controllers/postProperty-controller");
+const env = require("../config/env");
 const { str, cleanPhone, isValidPhone } = require("../utils/validate");
+const { isHttpsUrl } = require("../utils/zod");
 const { z } = require("zod");
 
 const router = express.Router();
@@ -14,6 +17,28 @@ const num = (v) => {
   return Number.isFinite(n) ? n : NaN;
 };
 const given = (v) => v !== undefined && v !== "";
+
+// Listing photos must be https:// links. The one exception is development/test, where the
+// API's own uploads are served over plain http from the dev machine (http://<lan-ip>:5000/uploads/<uuid>.jpg).
+const OWN_UPLOAD_PATH = /^\/uploads\/[0-9a-f-]{36}\.(?:jpg|png|webp)$/i;
+function isAllowedImageUrl(v) {
+  if (isHttpsUrl(v, 500)) return true;
+  if (!env.isDevLike || typeof v !== "string") return false;
+  try {
+    const u = new URL(v);
+    return u.protocol === "http:" && !u.username && !u.password && !u.search && OWN_UPLOAD_PATH.test(u.pathname);
+  } catch {
+    return false;
+  }
+}
+const IMAGE_ERROR = "Image links must be secure https:// links";
+const LINK_ERROR = "Links must be secure https:// web addresses";
+// Optional external link (brochure, map) the app opens in the browser: https only, never
+// tel:, upi:, intent:, javascript:, file: or plain http.
+const httpsLink = () => z.preprocess(
+  (v) => (given(v) && v !== null ? (typeof v === "string" ? v.trim() : v) : undefined),
+  z.string({ error: LINK_ERROR }).refine((u) => isHttpsUrl(u), { error: LINK_ERROR }).optional(),
+);
 
 // Field helpers. Text is trimmed and cut to its maximum (as before) rather than rejected.
 const text = (max) => z.preprocess((v) => str(v, max), z.string());
@@ -59,9 +84,18 @@ function listingSchema(body) {
     buildingGrade: optText(10),
     highlights: tags(12),
     images: z.preprocess(
-      (v) => (Array.isArray(v) ? v.map((u) => str(u, 500)).filter(Boolean) : undefined),
-      z.array(z.string().regex(/^https?:\/\/\S+$/i, { error: "Image links must start with http:// or https://" }))
+      (v) => (Array.isArray(v) ? v.map((u) => (typeof u === "string" ? u.trim() : u)).filter(Boolean) : undefined),
+      z.array(z.string({ error: IMAGE_ERROR }).refine(isAllowedImageUrl, { error: IMAGE_ERROR }))
         .transform((urls) => [...new Set(urls)].slice(0, 8))
+        .optional(),
+    ),
+    brochure: httpsLink(),
+    mapLink: httpsLink(),
+    virtualTours: z.preprocess(
+      (v) => (Array.isArray(v) ? v.map((u) => (typeof u === "string" ? u.trim() : u)).filter(Boolean) : given(v) ? [v] : undefined),
+      z.array(z.string({ error: LINK_ERROR }).refine((u) => isHttpsUrl(u), { error: LINK_ERROR }), { error: LINK_ERROR })
+        .max(5, { error: "Add at most 5 virtual tour links" })
+        .transform((urls) => [...new Set(urls)])
         .optional(),
     ),
     contactName: optText(80),
@@ -89,7 +123,15 @@ function parse(body = {}, user = null) {
   return { d, opt, errors: {} };
 }
 
-router.post("/", authRequired, (req, res, next) => { req.postPropertyParsed = parse(req.body, req.user); next(); }, postProperty.postProperty);
+const postLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000,
+  max: 30,
+  message: "You've posted a lot of listings in a short time. Please try again later.",
+  key: byUser,
+});
+
+router.post("/", authRequired, postLimiter, (req, res, next) => { req.postPropertyParsed = parse(req.body, req.user); next(); }, postProperty.postProperty);
 
 module.exports = router;
 module.exports.parse = parse;
+module.exports.isAllowedImageUrl = isAllowedImageUrl;

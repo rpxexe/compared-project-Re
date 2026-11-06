@@ -21,6 +21,11 @@ async function verifyPassword(password, stored) {
 // Valid-format hash of a random throwaway password, compared against for unknown emails.
 const DUMMY_HASH = `scrypt:${"0".repeat(32)}:${"0".repeat(128)}`;
 
-const validPassword = (p) => typeof p === "string" && p.length >= 8 && p.length <= 128;
+const PASSWORD_MIN = 8;
+const PASSWORD_MAX = 128;
+const validPassword = (p) => typeof p === "string" && p.length >= PASSWORD_MIN && p.length <= PASSWORD_MAX;
 
-module.exports = { hashPassword, verifyPassword, DUMMY_HASH, validPassword };
+// Random password for admin-created accounts: 24 URL-safe characters (144 bits).
+const generatePassword = () => crypto.randomBytes(18).toString("base64url");
+
+module.exports = { hashPassword, verifyPassword, DUMMY_HASH, validPassword, generatePassword, PASSWORD_MIN, PASSWORD_MAX };

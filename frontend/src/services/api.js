@@ -25,7 +25,10 @@ function resolveApiUrl() {
     }
   }
 
-  return envUrl || "http://192.168.1.36:5000/api";
+  if (envUrl) return envUrl;
+  // Release builds use only the configured EXPO_PUBLIC_API_URL (missing -> a clear "not
+  // configured" error); a guessed local address exists for development builds alone.
+  return typeof __DEV__ !== "undefined" && __DEV__ ? "http://localhost:5000/api" : "";
 }
 
 // The backend address dynamically resolves to the dev host or env
@@ -315,5 +318,11 @@ export const api = {
     setCompare: (ids) => v2((headers) => client.put("/v2/customerActivity/compare", { propertyIds: ids }, { headers })),
   },
   signin: (data) => call(client.post("/auth/signin", { data })),
-  signup: (data) => call(client.post("/auth/signup", { data })),
+  // Invalidates every session token of this account (all devices). The token is captured now and
+  // sent explicitly, because sign-out clears the in-memory token right after starting this call.
+  logoutAll: () => {
+    const token = memoryToken;
+    if (!token) return Promise.resolve(null);
+    return call(client.post("/auth/logout-all", null, { headers: { Authorization: `Bearer ${token}` }, timeout: 8000 }));
+  },
 };

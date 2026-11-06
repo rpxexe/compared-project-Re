@@ -12,7 +12,7 @@ import { PURPOSES } from './RoleScreen';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
 import { useLocationAccess } from '../context/LocationAccessContext';
-import { api, API_URL } from '../services/api';
+import { api } from '../services/api';
 import { formatPhone } from '../utils/format';
 import { getCurrentUserLocation } from '../services/locationService';
 import { colors, radius } from '../theme';
@@ -89,7 +89,6 @@ export default function SettingsScreen() {
         <Reveal delay={250} style={styles.about}>
           <Text style={styles.aboutT}>About</Text>
           <Text style={styles.aboutL}>Version {appJson.expo.version}</Text>
-          <Text style={styles.aboutL} numberOfLines={1}>Server: {API_URL || 'not configured'}</Text>
           <Button title="Check server connection" variant="ghost" small style={{ marginTop: 12 }} onPress={async () => { try { await api.health(); toast.show('Server is reachable', 'success'); } catch (e) { toast.show(e.message, 'error'); } }} />
         </Reveal>
       </View>

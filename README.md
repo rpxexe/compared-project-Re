@@ -36,7 +36,7 @@ README.md  SETUP.md  TEST-CASES.md
 cd backend
 npm install
 cp .env.example .env      # then edit MONGODB_URI, JWT_SECRET, ADMIN_PHONES
-npm test                  # 52 tests, no database needed
+npm test                  # no database needed
 npm run check:db          # optional: real MongoDB connectivity check
 npm start                 # http://0.0.0.0:5000/api/health
 ```
@@ -54,19 +54,24 @@ npx expo start -c
 |---|---|---|
 | backend/.env | `MONGODB_URI` | **required** Atlas connection string |
 | | `MONGODB_COLLECTION` | property collection, default `properties` |
-| | `JWT_SECRET` | 24+ random chars (required in production) |
-| | `OTP_MODE` | `development` or `twilio` |
+| | `NODE_ENV` | `development`, `test` or `production`. **Missing/unknown = treated as production** (no dev OTPs, no open CORS) |
+| | `JWT_SECRET` | 24+ random chars (required) |
+| | `OTP_MODE` | `development` (only with NODE_ENV development/test) or `twilio` (everywhere else; default outside development) |
 | | `OTP_TTL_MINUTES`, `OTP_RESEND_SECONDS`, `OTP_MAX_ATTEMPTS` | OTP policy (5 / 30 / 5) |
-| | `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, `TWILIO_PHONE_NUMBER` | SMS provider |
-| | `ADMIN_PHONES`, `SUPERADMIN_PHONES` | comma-separated 10-digit numbers promoted after OTP login |
-| | `CORS_ORIGINS` | only needed for browser clients |
+| | `OTP_GLOBAL_HOURLY_LIMIT` | anti SMS-pumping cap on OTP SMS per hour for the whole server (default 300) |
+| | `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, `TWILIO_PHONE_NUMBER` | SMS provider (required with `OTP_MODE=twilio`) |
+| | `ADMIN_PHONES`, `SUPERADMIN_PHONES` | comma-separated 10-digit numbers promoted after an SMS OTP login (never with development OTPs) |
+| | `TRUST_PROXY` | reverse proxies in front of the API (default `1`; `0` when exposed directly). Rate limits use the client IP derived from it |
+| | `CORS_ORIGINS` | browser origins allowed. Production with this empty sends **no** CORS headers (the mobile app doesn't need CORS) |
+| | `PUBLIC_URL` | public https origin used in uploaded image URLs |
+| | `FIREBASE_PROJECT_ID`, `FIREBASE_SERVICE_ACCOUNT` | /api/v2 customer sign-in; the service account is required for token revocation checks |
 | frontend/.env | `EXPO_PUBLIC_API_URL` | backend address ending in `/api` |
 
 ## 8. OTP – development mode
-`OTP_MODE=development`: the OTP is printed in the backend console and returned as `devOtp`; the OTP screen shows a “tap to fill” chip. Codes are stored hashed (HMAC), single-use, expire after `OTP_TTL_MINUTES`, lock after 5 wrong tries, 30 s resend cooldown.
+`OTP_MODE=development` (only with `NODE_ENV=development` or `test`): the OTP is returned to the app as `devOtp` and is never logged; **development builds** of the app show a “tap to fill” chip (release builds never do). `ADMIN_PHONES` / `SUPERADMIN_PHONES` are **not** promoted in this mode, because anyone can “verify” any number. Codes are stored hashed (HMAC), single-use, expire after `OTP_TTL_MINUTES`, lock after `OTP_MAX_ATTEMPTS` wrong tries (counted atomically, so parallel guesses can't exceed it), 30 s resend cooldown.
 
 ## 9. OTP – production (Twilio)
-Set `OTP_MODE=twilio` plus the three `TWILIO_*` variables on the server. The backend then **refuses to start** in production with `OTP_MODE=development`. Twilio credentials never reach the app. For Indian SMS you may need DLT registration with your provider.
+Set `OTP_MODE=twilio` plus the three `TWILIO_*` variables on the server. Development OTPs **fail closed**: the backend refuses to start with `OTP_MODE=development` unless `NODE_ENV` is explicitly `development` or `test` – a missing `NODE_ENV` counts as production. Twilio credentials never reach the app. OTP sending is limited per IP, per number and globally (`OTP_GLOBAL_HOURLY_LIMIT`) against SMS pumping. For Indian SMS you may need DLT registration with your provider.
 
 ## 10. Android physical phone
 1. Phone and PC on the same Wi-Fi. Find the PC IP (`ipconfig` / `ip a`).
@@ -91,14 +96,23 @@ Roles: `user`, `broker`, `developer`, `admin`, `superadmin`.
 * Add your number to `ADMIN_PHONES` / `SUPERADMIN_PHONES` in `backend/.env`, restart, log in with OTP → the role is applied.
 * Choosing “Broker” as purpose gives the `broker` role (no admin rights).
 * Email/password accounts (the Login screen's Developer card) are `developer`s: they only post listings for sale and manage them; they get no browsing screens.
+* **Developer accounts are created by an administrator only** (there is no public sign-up; `POST /api/auth/signup` returns 404):
+  ```bash
+  cd backend
+  npm run create:developer -- --email sales@builder.com --name "Skyline Builders" [--phone 9876543210]
+  ```
+  It generates a strong random password and prints it **once** (only a scrypt hash is stored). Hand it to the developer over a secure channel. Duplicate emails are refused.
+* **Sign out everywhere:** `POST /api/auth/logout-all` (signed in) bumps the account's `tokenVersion`, so every JWT issued before (all devices) gets 401, and revokes the linked Firebase session. The app calls it on every Log out (best effort – local sign-out and data wipe happen even offline).
 * **Enquiries for the CRM:** the backend has no CRM API. Enquiries from the app are saved in the `enquiries` collection and contact forms from `/api/v2/leads/customer` in `customer_leads`; the CRM reads them from MongoDB directly.
 
 ### API summary
-`GET /api/health` · `POST /api/auth/send-otp` · `POST /api/auth/verify-otp` · `GET|PATCH /api/users/me` · `GET /api/users/me/{properties,enquiries}` · `GET /api/properties` (search, filters, sort, paging) · `GET /api/properties/{categories,facets,top-rated,compare,saved/list,:id}` · `POST|DELETE /api/properties/:id/save` · `GET|POST /api/properties/:id/reviews` · `DELETE /api/properties/:id/reviews/mine` · `POST /api/post-property` · `POST /api/enquiries` · Mobile API contract (Firebase customer auth): `/api/v2/*`, see `MOBILE_API.md`.
+`GET /api/health` · `POST /api/auth/send-otp` · `POST /api/auth/verify-otp` · `POST /api/auth/signin` · `POST /api/auth/logout-all` · `GET|PATCH /api/users/me` · `GET /api/users/me/{properties,enquiries}` · `GET /api/properties` (search, filters, sort, paging) · `GET /api/properties/{categories,facets,top-rated,compare,saved/list,:id}` · `POST|DELETE /api/properties/:id/save` · `GET|POST /api/properties/:id/reviews` · `DELETE /api/properties/:id/reviews/mine` · `POST /api/post-property` · `POST /api/enquiries` · Mobile API contract (Firebase customer auth): `/api/v2/*`, see `MOBILE_API.md`.
 
 ## 14. Production deployment (Render / Railway)
 * Root directory `backend`, build `npm install`, start `npm start`.
-* Environment: `NODE_ENV=production`, `MONGODB_URI`, `JWT_SECRET`, `OTP_MODE=twilio`, `TWILIO_*`, `ADMIN_PHONES`.
+* Environment: `NODE_ENV=production`, `MONGODB_URI`, `JWT_SECRET`, `OTP_MODE=twilio`, `TWILIO_*`, `TRUST_PROXY` (1 on Render/Railway), `PUBLIC_URL`, `FIREBASE_PROJECT_ID` + `FIREBASE_SERVICE_ACCOUNT`, optionally `ADMIN_PHONES`, `CORS_ORIGINS`, `OTP_GLOBAL_HOURLY_LIMIT`.
+* Production `/api/health` answers only `{"ok":true}`.
+* Uploaded photos are re-encoded with `sharp` (EXIF/GPS stripped, JPEG) – `npm install` on the server fetches its Linux binary.
 * Health check path `/api/health`. Use the **https** URL in the app (`EXPO_PUBLIC_API_URL=https://…/api`) – Android release builds block plain `http://`.
 
 ## 15. EAS Android build
@@ -113,9 +127,11 @@ eas build --platform android --profile production   # AAB for Play Store
 Local native build: `npx expo prebuild --platform android && npx expo run:android`.
 
 ## 16. Troubleshooting
-* **“Cannot reach the server”** – wrong `EXPO_PUBLIC_API_URL`, firewall, different Wi-Fi, or you forgot `npx expo start -c` after editing `.env`. Settings → *Check server connection* tests it.
+* **“Cannot reach the server”** – wrong `EXPO_PUBLIC_API_URL`, firewall, different Wi-Fi, or you forgot `npx expo start -c` after editing `.env`. Settings → *Check server connection* tests it. A release build without `EXPO_PUBLIC_API_URL` has no fallback address.
 * **Config error: MONGODB_URI is missing** – create `backend/.env`.
 * **MongoDB timeout** – add your IP in Atlas Network Access.
-* **No OTP arrives** – in development read the backend console; in production verify Twilio variables.
+* **No OTP arrives** – in development the code is shown in the app's dev chip (development builds only); in production verify Twilio variables.
+* **Config error: OTP_MODE must be "twilio"** – set `NODE_ENV=development` for local development, or configure Twilio.
+* **Every /api/v2 request returns 401 "Invalid token"** – set `FIREBASE_SERVICE_ACCOUNT` (needed for token revocation checks).
 * **Empty lists** – the database really has no matching documents; run `npm run check:db`.
 * **Images blank** – the document's image URLs are missing/unreachable; a placeholder is shown, nothing is invented.

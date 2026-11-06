@@ -2,6 +2,7 @@ import React, { createContext, useCallback, useContext, useEffect, useMemo, useS
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { api, session, setUnauthorizedHandler } from '../services/api';
 import * as firebasePhone from '../services/firebasePhone';
+import { clearUserData } from '../services/userData';
 
 const AuthContext = createContext(null);
 export const useAuth = () => useContext(AuthContext);
@@ -19,10 +20,16 @@ export function AuthProvider({ children }) {
     message: '',
   });
 
-  const signOut = useCallback(async () => {
-    await session.clear();
-    await firebasePhone.signOut();
-    await AsyncStorage.removeItem('cp_is_guest');
+  // Signs out on this device and (best effort) everywhere: POST /auth/logout-all revokes every
+  // token issued to the account. It is not awaited and its failure is ignored, so signing out
+  // always completes - offline, or with the server down - and local data is always wiped.
+  // `{ everywhere: false }` skips the server call (the session is already invalid).
+  const signOut = useCallback(async (options) => {
+    if (options?.everywhere !== false) api.logoutAll().catch(() => {});
+    await session.clear().catch(() => {});
+    await firebasePhone.signOut().catch(() => {});
+    // Every user-specific cp_* key (history, compare list, locations, filters, guest flag...).
+    await clearUserData();
     setTokenState(null);
     setUser(null);
     setIsGuest(false);
@@ -54,7 +61,7 @@ export function AuthProvider({ children }) {
   useEffect(() => {
     // A request needed sign-in: drop an expired session, then ask the user to sign in.
     setUnauthorizedHandler(async ({ hadSession } = {}) => {
-      if (hadSession) await signOut();
+      if (hadSession) await signOut({ everywhere: false });
       openLoginPrompt(hadSession
         ? { title: 'Session expired', message: 'Your session has expired. Please sign in again to continue.' }
         : { title: 'Sign In Required', message: 'Please sign in or create an account to continue.' });
