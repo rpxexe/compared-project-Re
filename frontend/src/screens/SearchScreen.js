@@ -6,12 +6,12 @@ import { Ionicons } from "@expo/vector-icons";
 import { useBottomSpace } from "../hooks/useBottomSpace";
 import FilterChip from "../components/FilterChip";
 import { badgeFor } from "../components/PropertyCard";
-import ListingCard from "../components/search/ListingCard";
+import ListingCard, { ListingCardSkeleton, ListingSkeletonList } from "../components/search/ListingCard";
 import BottomSheet from "../components/BottomSheet";
 import Button from "../components/Button";
 import CountUp from "../components/CountUp";
 import Reveal from "../components/Reveal";
-import { EmptyState, ErrorState, LoadingState } from "../components/StateViews";
+import { EmptyState, ErrorState } from "../components/StateViews";
 import QuickFilterSheet from "../components/filters/QuickFilterSheet";
 import { api } from "../services/api";
 import PressableScale from "../components/PressableScale";
@@ -261,8 +261,8 @@ export default function SearchScreen({ navigation, route }) {
       </Reveal>
 
       {firstLoad ? (
-        <View style={{ paddingHorizontal: 20, paddingTop: 6 }}>
-          <LoadingState rows={4} />
+        <View style={{ paddingHorizontal: 16, paddingTop: 4 }}>
+          <ListingSkeletonList rows={4} />
         </View>
       ) : st.error && !items.length ? (
         <ErrorState title="Unable to load results" error={st.error} onRetry={() => load(1, false)} />
@@ -313,7 +313,7 @@ export default function SearchScreen({ navigation, route }) {
           }
           ListFooterComponent={
             st.more ? (
-              <ActivityIndicator color={brand.violet} style={{ margin: 16 }} />
+              <ListingCardSkeleton />
             ) : st.error ? (
               <Button title="Retry" variant="ghost" small onPress={() => load(page + 1, true)} />
             ) : null

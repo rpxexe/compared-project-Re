@@ -18,6 +18,7 @@ import { PURPOSES } from './RoleScreen';
 import { formatPhone, roleLabel } from '../utils/format';
 import { brand, colors, gradients, radius, shadow, type } from '../theme';
 import Text from '../components/AppText';
+import { SkeletonText } from '../components/StateViews';
 
 // Roles the app itself uses. Staff roles (admin, superadmin) belong to the separate CRM, so the
 // profile never shows them, even on accounts promoted before phone-based promotion was removed.
@@ -74,16 +75,19 @@ function Shine() {
   );
 }
 
-function Stat({ label, value, locked, onPress }) {
+function Stat({ label, value, locked, loading, onPress }) {
   return (
     <PressableScale
       onPress={onPress}
       to={0.94}
       style={styles.stat}
       accessibilityRole="button"
-      accessibilityLabel={`${label}: ${locked ? 'sign in to view' : value}`}
+      accessibilityLabel={`${label}: ${locked ? 'sign in to view' : loading ? 'loading' : value}`}
     >
-      {locked ? (
+      {loading ? (
+        // Same box as the number (24px, line ~31px) so the tile keeps its height.
+        <SkeletonText size={24} lineHeight={31} width={30} />
+      ) : locked ? (
         <Ionicons name="lock-closed-outline" size={20} color={colors.muted} style={styles.statLock} />
       ) : (
         <CountUp value={value} style={styles.statV} />
@@ -145,19 +149,22 @@ export default function ProfileScreen({ navigation }) {
 
   const listingItems = listings.data?.items || [];
   const enquiryCount = (enquiries.data?.items || []).length;
+  // Counts that come from the server show a skeleton until their first response.
+  const listingsLoading = !isGuest && listings.loading && !listings.data;
+  const enquiriesLoading = buyer && enquiries.loading && !enquiries.data;
   const countStatus = (key) => listingItems.filter((p) => (p.approvalStatus || 'approved') === key).length;
 
   const needLogin = () => navigation.navigate('Login');
   const manage = () => navigation.navigate('MyProperties');
 
   const stats = isDeveloper ? [
-    { label: 'Listings', value: listingItems.length, onPress: manage },
-    { label: 'Live', value: countStatus('approved'), onPress: manage },
-    { label: 'Pending', value: countStatus('pending'), onPress: manage },
+    { label: 'Listings', value: listingItems.length, loading: listingsLoading, onPress: manage },
+    { label: 'Live', value: countStatus('approved'), loading: listingsLoading, onPress: manage },
+    { label: 'Pending', value: countStatus('pending'), loading: listingsLoading, onPress: manage },
   ] : [
     { label: 'Saved', value: saved.count, onPress: () => navigation.navigate('Saved') },
     { label: 'Compares', value: compareCount, onPress: () => navigation.navigate('Compare', { screen: 'CompareMain' }) },
-    { label: 'Enquiries', value: enquiryCount, locked: isGuest, onPress: isGuest ? needLogin : () => navigation.navigate('MyEnquiries') },
+    { label: 'Enquiries', value: enquiryCount, locked: isGuest, loading: enquiriesLoading, onPress: isGuest ? needLogin : () => navigation.navigate('MyEnquiries') },
   ];
 
   // Push the form onto this tab's own stack (not the Post tab) so its back button returns here;

@@ -12,6 +12,7 @@ import { useEntrance } from "../../hooks/useEntrance";
 import { LinearGradient } from "expo-linear-gradient";
 import { brand, colors, gradients, radius, shadow } from "../../theme";
 import { listingName } from "../../utils/format";
+import { Skeleton, SkeletonText } from "../StateViews";
 import Text from "../AppText";
 
 // Compact search-results card: cover photo on the left (status tag, wishlist heart), details on
@@ -146,6 +147,42 @@ function ListingCard({ property: p, index = 0, tag }) {
 }
 
 export default memo(ListingCard);
+
+// Loading placeholder with the card's exact frame: same padding, photo column and line heights,
+// and the Compare / Enquire row only where the real card has it.
+export function ListingCardSkeleton() {
+  const { isDeveloper } = useAuth();
+  return (
+    <View style={styles.card}>
+      <Skeleton style={styles.photo} />
+      <View style={styles.body}>
+        <SkeletonText size={14.5} lineHeight={19} width="85%" />
+        <SkeletonText size={11.5} width="60%" style={{ marginTop: 1 }} />
+        <SkeletonText size={15.5} width="45%" style={{ marginTop: 3 }} />
+        <SkeletonText size={11} width="70%" style={{ marginTop: 3 }} />
+        <View style={styles.chips}>
+          <Skeleton style={{ width: 62, height: 17, borderRadius: 6 }} />
+          <Skeleton style={{ width: 50, height: 17, borderRadius: 6 }} />
+        </View>
+        {isDeveloper ? null : (
+          <View style={styles.actions}>
+            <Skeleton style={{ width: 78, height: 28, borderRadius: 9 }} />
+            <Skeleton style={{ flex: 1, height: 28, borderRadius: 9 }} />
+          </View>
+        )}
+      </View>
+    </View>
+  );
+}
+
+// `rows` card skeletons with the list's own gap between them.
+export function ListingSkeletonList({ rows = 3, gap = 12 }) {
+  return (
+    <View style={{ gap }} accessibilityLabel="Loading">
+      {Array.from({ length: rows }, (_, i) => <ListingCardSkeleton key={i} />)}
+    </View>
+  );
+}
 
 const styles = StyleSheet.create({
   card: {

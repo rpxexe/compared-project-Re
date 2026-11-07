@@ -21,6 +21,17 @@ export function Skeleton({ style }) {
   return <Animated.View style={[{ backgroundColor: colors.lavender, borderRadius: radius.md, opacity: v }, style]} />;
 }
 
+// Placeholder for one line of text. It takes the line's full height, so nothing jumps when the
+// real text arrives, and draws a bar about as tall as the glyphs. Pass the real text's fontSize
+// (and lineHeight when the style sets one).
+export function SkeletonText({ size = 14, lineHeight = Math.round(size * 1.3), width = '100%', style }) {
+  return (
+    <View style={[{ height: lineHeight, justifyContent: 'center' }, style]}>
+      <Skeleton style={{ height: Math.round(size * 0.8), width, borderRadius: 6 }} />
+    </View>
+  );
+}
+
 export function LoadingState({ rows = 3, variant = 'row' }) {
   return (
     <View style={{ gap: 14 }} accessibilityLabel="Loading">

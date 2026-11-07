@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import { ActivityIndicator, Animated, Keyboard, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, View, useWindowDimensions } from "react-native";
+import { Animated, Keyboard, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, View, useWindowDimensions } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
 import { resultsLabel } from "../components/filters/ApplyBar";
@@ -11,8 +11,8 @@ import PressableScale from "../components/PressableScale";
 import Reveal from "../components/Reveal";
 import RollingPlaceholder from "../components/RollingPlaceholder";
 import SearchTabs from "../components/search/SearchTabs";
-import FilterSidebar from "../components/search/FilterSidebar";
-import FilterContent from "../components/search/FilterContent";
+import FilterSidebar, { FilterSidebarSkeleton } from "../components/search/FilterSidebar";
+import FilterContent, { FilterContentSkeleton } from "../components/search/FilterContent";
 import SearchSuggestions from "../components/search/SearchSuggestions";
 import { filterConfig } from "../hooks/useFilterState";
 import { useLiveCount } from "../hooks/useLiveCount";
@@ -210,7 +210,12 @@ export default function SearchFiltersScreen({ navigation, route }) {
       </LinearGradient>
 
       {!ready ? (
-        <ActivityIndicator color={brand.violet} style={{ marginTop: 40, flex: 1 }} />
+        <View style={[styles.split, { paddingBottom: footerPad + 10 }]} accessibilityLabel="Loading filters">
+          <FilterSidebarSkeleton width={sidebarWidth} />
+          <View style={[styles.content, styles.contentInner]}>
+            <FilterContentSkeleton />
+          </View>
+        </View>
       ) : (
         // The white panel ends above the footer / tab bar with a lavender gap, so its rounded
         // bottom corner is always fully visible instead of running under them.
