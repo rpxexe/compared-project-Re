@@ -24,8 +24,7 @@ async function start() {
   if (env.devOtpEnabled()) {
     console.warn(
       "WARNING: OTP_MODE=development returns login codes in API responses. Anyone who can reach " +
-        "this server can sign in as any phone number, and ADMIN_PHONES/SUPERADMIN_PHONES are NOT " +
-        "promoted. Never expose it publicly; use OTP_MODE=twilio.",
+        "this server can sign in as any phone number. Never expose it publicly; use OTP_MODE=twilio.",
     );
   }
   const server = createApp().listen(env.port, "0.0.0.0", () =>

@@ -1,6 +1,6 @@
 const fs = require("fs");
 const path = require("path");
-const { Property, Review, PropertyRating, PropertyView } = require("../models");
+const { Property, Review, PropertyRating } = require("../models");
 const { escapeRegex } = require("./validate");
 const env = require("../config/env");
 
@@ -53,13 +53,12 @@ async function removeUploadedFiles(doc) {
   return removed;
 }
 
-// Deletes an app-posted listing with its reviews, rating, view rows and uploaded photos.
+// Deletes an app-posted listing with its reviews, rating and uploaded photos.
 async function removeListing(doc) {
   await Property.deleteOne({ _id: doc._id });
   await Promise.all([
     Review.deleteMany({ property: doc._id }),
     PropertyRating.deleteMany({ property: doc._id }),
-    PropertyView.deleteMany({ property: doc._id }),
   ]);
   await removeUploadedFiles(doc);
 }

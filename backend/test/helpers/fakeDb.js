@@ -160,7 +160,6 @@ function installFakeModels() {
     Review: makeModel('Review', () => ({ createdAt: new Date() })),
     PropertyRating: makeModel('PropertyRating'),
     SignUpUser: makeModel('SignUpUser', () => ({ role: 'user', isActive: true })),
-    PropertyView: makeModel('PropertyView', () => ({ views: 0, createdAt: new Date() })),
     Notification: makeModel('Notification', () => ({ type: 'info', readAt: null, data: {}, createdAt: new Date() })),
     CustomerLead: makeModel('CustomerLead', () => ({ leadStatus: 'new', createdAt: new Date() })),
   };

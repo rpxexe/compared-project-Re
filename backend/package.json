@@ -12,7 +12,8 @@
     "test": "node --test \"test/*.test.js\"",
     "check:db": "node scripts/check-db.js",
     "sync:filters": "node scripts/sync-filter-fields.js",
-    "create:developer": "node scripts/create-developer.js"
+    "create:developer": "node scripts/create-developer.js",
+    "migrate:collections": "node scripts/migrate-collections.js"
   },
   "dependencies": {
     "cors": "^2.8.5",

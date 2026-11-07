@@ -1,5 +1,5 @@
-// Accounts live in two collections: phone/OTP accounts (`User`, app_users) and
-// email/password accounts (`SignUpUser`). Lookups check both.
+// Accounts live in two collections: phone/OTP customer accounts (`User`, app_customers) and
+// email/password accounts (`SignUpUser`, app_users). Lookups check both.
 const { User, SignUpUser } = require("../models");
 const { publicUser } = require("./user");
 const { isObjectId } = require("./validate");

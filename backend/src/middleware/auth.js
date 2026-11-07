@@ -61,9 +61,4 @@ async function authOptional(req, res, next) {
   next();
 }
 
-const requireRole = (...roles) => (req, res, next) => {
-  if (!req.user || !roles.includes(req.user.role)) throw new AppError(403, 'You do not have permission to do this');
-  next();
-};
-
-module.exports = { signToken, authRequired, authOptional, requireRole, findAccountById };
+module.exports = { signToken, authRequired, authOptional, findAccountById };

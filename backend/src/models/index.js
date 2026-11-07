@@ -7,6 +7,5 @@ module.exports = {
   PropertyRating: require("./PropertyRating"),
   SignUpUser: require("./Signup"),
   Notification: require("./Notification"),
-  PropertyView: require("./PropertyView"),
   CustomerLead: require("./CustomerLead"),
 };

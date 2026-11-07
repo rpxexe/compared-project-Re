@@ -136,19 +136,12 @@ async function smsLogin(phone) {
   }
 }
 
-test('admin phones are NEVER elevated with development OTPs', async () => {
-  const a = await t.login('9000000001');
-  assert.equal(a.user.role, 'user');
-  const s = await t.login('9000000002');
-  assert.equal(s.user.role, 'user');
-});
-
-test('admin phones listed in env are elevated after a real SMS OTP verification', async () => {
+test('phone logins never change a role, even after a real SMS OTP (roles are managed in the CRM)', async () => {
   models.User.reset();
   const a = await smsLogin('9000000001');
-  assert.equal(a.user.role, 'admin');
-  const s = await smsLogin('9000000002');
-  assert.equal(s.user.role, 'superadmin');
+  assert.equal(a.user.role, 'user');
+  const d = await t.login('9000000002');
+  assert.equal(d.user.role, 'user');
 });
 
 test('invalid JSON body -> 400 JSON error', async () => {

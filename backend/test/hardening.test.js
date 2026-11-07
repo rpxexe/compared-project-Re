@@ -136,7 +136,6 @@ test('hidden listings return 404 on every by-id route, exactly like unknown ids'
       ['POST', `/properties/${id}/reviews`, { token: tok, body: { rating: 5, comment: 'x' } }],
       ['POST', `/properties/${id}/save`, { token: tok, body: { saved: true } }],
       ['DELETE', `/properties/${id}/save`, { token: tok }],
-      ['POST', `/properties/${id}/view`, { token: tok }],
       ['POST', '/enquiries', { token: tok, body: { propertyId: id, message: 'Interested' } }],
       ['GET', `/v2/properties/${id}`, {}],
     ];
@@ -147,7 +146,6 @@ test('hidden listings return 404 on every by-id route, exactly like unknown ids'
   }
   assert.equal(models.Enquiry._rows.length, 0);
   assert.equal(models.Review._rows.length, 0);
-  assert.equal(models.PropertyView._rows.length, 0);
   // Not in lists either.
   const all = await t.call('GET', '/properties?limit=30');
   assert.ok(!all.body.items.some((p) => hidden.includes(p.id)));
@@ -166,7 +164,6 @@ test('hidden listings: the owner can still open their own; visible listings work
   assert.equal((await t.call('POST', `/properties/${visible}/save`, { token: stranger.token, body: { saved: true } })).status, 200);
   assert.equal((await t.call('POST', `/properties/${visible}/reviews`, { token: stranger.token, body: { rating: 4 } })).status, 201);
   assert.equal((await t.call('POST', '/enquiries', { token: stranger.token, body: { propertyId: visible } })).status, 201);
-  assert.equal((await t.call('POST', `/properties/${visible}/view`, { token: stranger.token })).status, 204);
 });
 
 test('a saved listing that gets hidden disappears from the saved list', async () => {

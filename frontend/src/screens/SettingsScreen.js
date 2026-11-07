@@ -1,36 +1,38 @@
 import React, { useState } from 'react';
-import { ActivityIndicator, Pressable, StyleSheet, View } from 'react-native';
+import { ActivityIndicator, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import appJson from '../../app.json';
+import { LinearGradient } from 'expo-linear-gradient';
+import { useNavigation } from '@react-navigation/native';
 import Screen from '../components/Screen';
-import ScreenHeader from '../components/ScreenHeader';
 import Input from '../components/Input';
 import Button from '../components/Button';
-import FilterChip from '../components/FilterChip';
+import GlassView from '../components/GlassView';
+import PressableScale from '../components/PressableScale';
 import Reveal from '../components/Reveal';
-import { PURPOSES } from './RoleScreen';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
 import { useLocationAccess } from '../context/LocationAccessContext';
 import { api } from '../services/api';
 import { formatPhone } from '../utils/format';
 import { getCurrentUserLocation } from '../services/locationService';
-import { colors, radius } from '../theme';
-import Text from "../components/AppText";
+import { brand, colors, gradients, radius, shadow } from '../theme';
+import Text from '../components/AppText';
 
+// Edit profile. Route name stays "Settings" so existing navigate('Settings') calls keep working.
 export default function SettingsScreen() {
+  const nav = useNavigation();
   const { ensureLocation } = useLocationAccess();
-  const { user, isDeveloper, updateUser } = useAuth();
+  const { user, updateUser } = useAuth();
   const toast = useToast();
   const [name, setName] = useState(user?.name || '');
   const [city, setCity] = useState(user?.city || '');
-  const [purpose, setPurpose] = useState(user?.purpose || '');
   const [saving, setSaving] = useState(false);
   const [locatingCity, setLocatingCity] = useState(false);
-  const dirty = name.trim() !== (user?.name || '') || city.trim() !== (user?.city || '') || purpose !== (user?.purpose || '');
+  const dirty = name.trim() !== (user?.name || '') || city.trim() !== (user?.city || '');
+  const initial = (name.trim() || user?.name || 'U').charAt(0).toUpperCase();
 
   const detectCity = async () => {
-    if (!(await ensureLocation("Allow location to detect your city."))) return;
+    if (!(await ensureLocation('Allow location to detect your city.'))) return;
     setLocatingCity(true);
     try {
       const res = await getCurrentUserLocation();
@@ -48,73 +50,100 @@ export default function SettingsScreen() {
   const save = async () => {
     setSaving(true);
     try {
-      const patch = { name: name.trim(), city: city.trim() };
-      if (purpose && purpose !== user.purpose) patch.purpose = purpose;
-      const { user: u } = await api.updateMe(patch);
+      const { user: u } = await api.updateMe({ name: name.trim(), city: city.trim() });
       await updateUser(u);
       toast.show('Profile updated', 'success');
     } catch (e) { toast.show(e.message, 'error'); } finally { setSaving(false); }
   };
 
   return (
-    <Screen keyboard>
-      <ScreenHeader title="Settings" back />
-      <View style={{ paddingHorizontal: 20 }}>
-        <Reveal delay={60}>
-          <Input label="MOBILE NUMBER" value={formatPhone(user?.phone)} editable={false} hint="Your login number cannot be changed." />
-          <Input label="NAME" value={name} onChangeText={setName} placeholder="Your name" maxLength={80} autoCapitalize="words" style={{ marginTop: 16 }} />
-          <Input label="CITY" value={city} onChangeText={setCity} placeholder="Your city" maxLength={80} autoCapitalize="words" style={{ marginTop: 16 }} />
-          <Pressable onPress={detectCity} disabled={locatingCity} style={styles.detectBtn}>
+    <Screen keyboard scroll={false}>
+      {/* Back · centred title · spacer */}
+      <View style={styles.header}>
+        <PressableScale onPress={() => nav.goBack()} to={0.9} hitSlop={8} accessibilityRole="button" accessibilityLabel="Go back">
+          <GlassView level="regular" blur borderRadius={22} style={styles.back}>
+            <Ionicons name="arrow-back" size={21} color={brand.violet} />
+          </GlassView>
+        </PressableScale>
+        <Text style={styles.title} accessibilityRole="header">Edit Profile</Text>
+        <View style={styles.back} />
+      </View>
+
+      <ScrollView
+        style={{ flex: 1 }}
+        contentContainerStyle={styles.body}
+        keyboardShouldPersistTaps="handled"
+        showsVerticalScrollIndicator={false}
+      >
+        <Reveal delay={40} style={styles.avatarWrap}>
+          <LinearGradient colors={gradients.logo} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.avatar}>
+            <Text style={styles.avatarText}>{initial}</Text>
+          </LinearGradient>
+        </Reveal>
+
+        <Reveal delay={90}>
+          <Text style={styles.section}>Basic detail</Text>
+          <Input label="Full name" value={name} onChangeText={setName} placeholder="Your name" maxLength={80} autoCapitalize="words" />
+        </Reveal>
+
+        <Reveal delay={140}>
+          <Text style={styles.section}>Contact detail</Text>
+          <Input
+            label="Mobile number"
+            value={formatPhone(user?.phone)}
+            editable={false}
+            hint="Your login number cannot be changed."
+            inputStyle={{ color: colors.muted }}
+          />
+        </Reveal>
+
+        <Reveal delay={190}>
+          <Text style={styles.section}>Location</Text>
+          <Input label="City" value={city} onChangeText={setCity} placeholder="Your city" maxLength={80} autoCapitalize="words" />
+          <Pressable onPress={detectCity} disabled={locatingCity} style={styles.detectBtn} accessibilityRole="button">
             {locatingCity ? (
               <ActivityIndicator size={12} color={colors.goldDeep} />
             ) : (
               <Ionicons name="navigate-outline" size={13} color={colors.goldDeep} />
             )}
-            <Text style={styles.detectText}>
-              {locatingCity ? 'Detecting...' : 'Use current location'}
-            </Text>
+            <Text style={styles.detectText}>{locatingCity ? 'Detecting...' : 'Use current location'}</Text>
           </Pressable>
         </Reveal>
-        {/* A developer account stays a developer; the buyer / owner purposes don't apply. */}
-        {isDeveloper ? null : (
-          <Reveal delay={130}>
-            <Text style={styles.lbl}>I AM A</Text>
-            <View style={styles.wrap}>{PURPOSES.map((p) => <FilterChip key={p.key} label={p.label} active={purpose === p.key} onPress={() => setPurpose(p.key)} />)}</View>
-          </Reveal>
-        )}
-        <Reveal delay={190}>
-          <Button title="Save changes" onPress={save} loading={saving} disabled={!dirty} style={{ marginTop: 24 }} />
-        </Reveal>
+      </ScrollView>
 
-        <Reveal delay={250} style={styles.about}>
-          <Text style={styles.aboutT}>About</Text>
-          <Text style={styles.aboutL}>Version {appJson.expo.version}</Text>
-          <Button title="Check server connection" variant="ghost" small style={{ marginTop: 12 }} onPress={async () => { try { await api.health(); toast.show('Server is reachable', 'success'); } catch (e) { toast.show(e.message, 'error'); } }} />
-        </Reveal>
+      {/* Save stays pinned above the tab bar */}
+      <View style={styles.footer}>
+        <Button title="Save" onPress={save} loading={saving} disabled={!dirty} />
       </View>
     </Screen>
   );
 }
+
+const AVATAR = 92;
+
 const styles = StyleSheet.create({
-  lbl: { fontSize: 12, fontWeight: '700', color: colors.muted, marginTop: 20, marginBottom: 10, letterSpacing: 0.6 },
-  wrap: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
-  about: { marginTop: 34, backgroundColor: colors.white, borderRadius: radius.lg, padding: 16, borderWidth: 1, borderColor: colors.line },
-  aboutT: { fontWeight: '800', fontSize: 15, color: colors.ink, marginBottom: 6 },
-  aboutL: { color: colors.muted, fontSize: 13, marginTop: 3 },
-  detectBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    alignSelf: 'flex-start',
-    marginTop: 6,
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    borderRadius: radius.pill,
-    backgroundColor: colors.champagneSoft,
+  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 20, marginBottom: 6 },
+  back: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
+  title: { fontSize: 18, fontWeight: '800', color: colors.ink },
+  body: { paddingHorizontal: 20, paddingBottom: 24 },
+
+  avatarWrap: { alignItems: 'center', marginTop: 8, marginBottom: 4 },
+  avatar: {
+    width: AVATAR, height: AVATAR, borderRadius: AVATAR / 2, alignItems: 'center', justifyContent: 'center',
+    borderWidth: 4, borderColor: colors.white, ...shadow.card,
   },
-  detectText: {
-    fontSize: 12,
-    fontWeight: '700',
-    color: colors.goldDeep,
+  avatarText: { fontSize: 36, fontWeight: '800', color: colors.white },
+
+  section: { fontSize: 16, fontWeight: '800', color: brand.deep, marginTop: 24, marginBottom: 12 },
+
+  detectBtn: {
+    flexDirection: 'row', alignItems: 'center', gap: 6, alignSelf: 'flex-start',
+    marginTop: 8, paddingHorizontal: 10, paddingVertical: 5, borderRadius: radius.pill, backgroundColor: colors.champagneSoft,
+  },
+  detectText: { fontSize: 12, fontWeight: '700', color: colors.goldDeep },
+
+  footer: {
+    paddingHorizontal: 20, paddingTop: 12, paddingBottom: 12,
+    backgroundColor: colors.white, borderTopLeftRadius: 24, borderTopRightRadius: 24, ...shadow.glass,
   },
 });
