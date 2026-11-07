@@ -23,7 +23,6 @@ import { useApi } from "../hooks/useApi";
 import { useEntrance } from "../hooks/useEntrance";
 import { isReducedMotion } from "../hooks/useReducedMotion";
 import { api } from "../services/api";
-import { recordPropertyView } from "../services/historyService";
 import { openExternal } from "../utils/links";
 import { propertyWebUrl } from "../config/web";
 import { isPresent, listingName } from "../utils/format";
@@ -281,21 +280,10 @@ export default function PropertyDetailsScreen({ navigation, route }) {
   const toast = useToast();
   const cmp = useCompare();
   const saved = useSaved();
-  // Developers only open this to preview their own listings: no saving, comparing, enquiring
-  // or view tracking.
+  // Developers only open this to preview their own listings: no saving, comparing or enquiring.
   const { user, token, isDeveloper, openLoginPrompt } = useAuth();
   const { data, loading, error, reload } = useApi(() => api.property(id), [id]);
   const p = data?.property || preview;
-  // Feeds the "Viewed" count on the Profile dashboard and the user's preferences; signed-in
-  // views are also stored on the server as leads. Once per opened listing, not on refreshes.
-  const viewedId = useRef(null);
-  useEffect(() => {
-    const prop = data?.property;
-    if (!prop || isDeveloper || viewedId.current === prop.id) return;
-    viewedId.current = prop.id;
-    recordPropertyView(prop);
-    if (token) api.recordView(prop.id).catch(() => {});
-  }, [data?.property]); // eslint-disable-line react-hooks/exhaustive-deps
   const [tab, setTab] = useState("overview");
   const [aboutOpen, setAboutOpen] = useState(false);
   const [rowW, setRowW] = useState(0);

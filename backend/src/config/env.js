@@ -1,6 +1,5 @@
 require('dotenv').config();
 
-const list = (v) => String(v || '').split(',').map((s) => s.replace(/\D/g, '').slice(-10)).filter((s) => s.length === 10);
 const lower = (v) => String(v ?? '').trim().toLowerCase();
 
 const OTP_MODES = ['development', 'twilio'];
@@ -48,8 +47,6 @@ function load() {
     // Public origin used in uploaded image URLs (e.g. https://api.example.com); defaults to the request host.
     publicUrl: String(process.env.PUBLIC_URL || '').trim().replace(/\/+$/, ''),
     corsOrigins:String(process.env.CORS_ORIGINS || '').split(',').map((s) => s.trim()).filter(Boolean),
-    adminPhones: list(process.env.ADMIN_PHONES),
-    superadminPhones: list(process.env.SUPERADMIN_PHONES),
     // Firebase Authentication for the /api/v2 customer endpoints. Revocation checks need admin
     // credentials: the service account (JSON, one line) or Google application default credentials.
     firebase: {

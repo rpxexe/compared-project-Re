@@ -31,9 +31,6 @@ The suite starts the real Express app on a random port and calls it over HTTP. M
 | 22 | Post property: auth, per-field validation, manual + pending, mass-assignment ignored, plots without BHK | ✅ |
 | 23 | Enquiry: stores user, phone, property, title, message, source; my enquiries | ✅ |
 | 24 | Ratings: validation, create, update (1 per user), summary math, public read without identity leak, delete, own-listing block, card rating, top-rated, sort=rating | ✅ |
-| 25 | Admin APIs: anonymous 401, user 403, bad token 401, broker 403 | ✅ |
-| 26 | Admin: stats, users, properties incl. hidden, approve/reject, enquiries workflow, delete review | ✅ |
-| 27 | Superadmin-only: roles, disable, delete (imported data protected), cannot change own role; promotion/demotion immediate | ✅ |
 
 ## B. Automated – frontend (`cd frontend && npm test`) → **8 / 8 passed**
 Price/phone formatting, phone & OTP-paste validation, post-form validation mirroring the server, API-error mapping (offline / timeout / 5xx), compare table logic (N/A, hidden empty rows, lowest price).
@@ -64,8 +61,6 @@ Price/phone formatting, phone & OTP-paste validation, post-form validation mirro
 - [ ] Property details: swipe gallery, save heart animation, compare, share, Enquire Now
 - [ ] Rate a property (stars bounce), edit, remove; average appears on the card
 - [ ] Post Property: validation errors, submit, success animation, appears in My properties as “Pending review”
-- [ ] Admin number: dashboard visible; approve the post → it appears on Home
-- [ ] Normal number: no admin entry anywhere
 - [ ] New Project tab shows only categories that have data
 - [ ] Saved list, My enquiries, Settings save, Logout
 - [ ] Stop backend → friendly error + Retry on each tab

@@ -10,7 +10,7 @@ export const DEVICE_KEYS = [
   "cp_location_prompt_snoozed_at",
 ];
 
-// The user-specific keys among `keys` (e.g. AsyncStorage.getAllKeys()): search/view/compare
+// The user-specific keys among `keys` (e.g. AsyncStorage.getAllKeys()): search/compare
 // history, compare list, recent and exact locations, filters, onboarding intent, session...
 export function userDataKeys(keys) {
   return (Array.isArray(keys) ? keys : []).filter(

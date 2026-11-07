@@ -27,8 +27,4 @@ router.delete("/me/properties/:id", User.deleteOwnProperty);
 
 router.get("/me/enquiries", User.getUserEnquiries);
 
-router.get("/me/views", User.getUserViews);
-
-router.delete("/me/views", User.clearUserViews);
-
 module.exports = router;

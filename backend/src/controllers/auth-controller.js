@@ -107,29 +107,14 @@ const verifyOTP = async (req, res) => {
     throw new AppError(401, "OTP not found or already used. Please request a new one.");
   await Otp.deleteMany({ phone });
 
-  // Admin bootstrap: numbers listed in env are elevated after proving ownership with a real SMS
-  // OTP. Never with development OTPs, where anyone can "verify" any number.
-  const elevated = env.devOtpEnabled()
-    ? null
-    : env.superadminPhones.includes(phone)
-      ? "superadmin"
-      : env.adminPhones.includes(phone)
-        ? "admin"
-        : null;
-  let user = await User.findOneAndUpdate(
+  // Phone logins never change a role: staff and user management live in the separate CRM.
+  const user = await User.findOneAndUpdate(
     { phone },
     { $setOnInsert: { phone }, $set: { lastLoginAt: new Date() } },
     { upsert: true, new: true, setDefaultsOnInsert: true },
   ).lean();
   if (user.isActive === false)
     throw new AppError(403, "This account has been disabled. Contact support.");
-  if (elevated && user.role !== elevated && user.role !== "superadmin") {
-    user = await User.findOneAndUpdate(
-      { _id: user._id },
-      { $set: { role: elevated } },
-      { new: true },
-    ).lean();
-  }
   res.json({
     token: signToken(user),
     user: publicUser(user),

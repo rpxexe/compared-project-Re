@@ -21,8 +21,10 @@ const signUpUserSchema = new mongoose.Schema(
   { timestamps: true },
 );
 
+// Email/password accounts (developers, CRM staff). Collection renamed from `signupusers` to
+// `app_users` (npm run migrate:collections).
 const SignUpUser =
-  mongoose.models.SignUpUser || mongoose.model("SignUpUser", signUpUserSchema);
+  mongoose.models.SignUpUser || mongoose.model("SignUpUser", signUpUserSchema, "app_users");
 SignUpUser.ROLES = ROLES;
 SignUpUser.PURPOSES = PURPOSES;
 module.exports = SignUpUser;

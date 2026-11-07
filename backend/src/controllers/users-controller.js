@@ -1,6 +1,5 @@
 const express = require("express");
-const { User, SignUpUser, Property, Enquiry, PropertyView } = require("../models");
-const { PUBLIC } = require("../utils/propertyQuery");
+const { User, SignUpUser, Property, Enquiry } = require("../models");
 const { AppError, bad } = require("../utils/errors");
 const { str } = require("../utils/validate");
 const { normalizeProperty } = require("../utils/property");
@@ -143,35 +142,10 @@ const getUserEnquiries = async (req, res) => {
   });
 };
 
-// The signed-in user's viewed listings (stored by POST /properties/:id/view), newest first.
-const getUserViews = async (req, res) => {
-  const rows = await PropertyView.find({ user: req.user.id, hiddenByUser: { $ne: true } })
-    .sort({ lastViewedAt: -1, _id: -1 })
-    .limit(50)
-    .lean();
-  const docs = rows.length
-    ? await Property.find({ $and: [PUBLIC, { _id: { $in: rows.map((r) => r.property) } }] }).lean()
-    : [];
-  // Required lazily: properties-controller is the heavier module and owns the rating lookup.
-  const { withRatings } = require("./properties-controller");
-  const byId = new Map((await withRatings(docs)).map((p) => [p.id, p]));
-  const items = rows
-    .map((r) => byId.get(String(r.property)) && { ...byId.get(String(r.property)), viewedAt: r.lastViewedAt, views: r.views })
-    .filter(Boolean);
-  res.json({ items, total: items.length });
-};
-
-const clearUserViews = async (req, res) => {
-  await PropertyView.updateMany({ user: req.user.id }, { $set: { hiddenByUser: true } });
-  res.status(204).end();
-};
-
 exports.getUser = getUser;
 exports.updateUser = updateUser;
 exports.getUserProperties = getUserProperties;
 exports.getUserEnquiries = getUserEnquiries;
-exports.getUserViews = getUserViews;
 exports.getOwnProperty = getOwnProperty;
 exports.updateOwnProperty = updateOwnProperty;
 exports.deleteOwnProperty = deleteOwnProperty;
-exports.clearUserViews = clearUserViews;

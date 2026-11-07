@@ -1,9 +1,7 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 
 const SEARCH_HISTORY_KEY = "cp_search_history";
-const VIEW_HISTORY_KEY = "cp_view_history";
 const MAX_SEARCH_HISTORY = 10;
-const MAX_VIEW_HISTORY = 15;
 const COMPARE_HISTORY_KEY = "cp_compare_history";
 const MAX_COMPARE_HISTORY = 10;
 
@@ -124,57 +122,6 @@ export async function clearSearchHistory() {
   }
 }
 
-/**
- * Get recently viewed properties, newest first
- */
-export async function getViewHistory() {
-  try {
-    const raw = await AsyncStorage.getItem(VIEW_HISTORY_KEY);
-    const parsed = raw ? JSON.parse(raw) : [];
-    return Array.isArray(parsed) ? parsed : [];
-  } catch (err) {
-    console.log("[historyService] Error loading view history:", err?.message);
-    return [];
-  }
-}
-
-/**
- * Clear recently viewed properties
- */
-export async function clearViewHistory() {
-  try {
-    await AsyncStorage.removeItem(VIEW_HISTORY_KEY);
-  } catch (err) {
-    console.log("[historyService] Error clearing view history:", err?.message);
-  }
-}
-
-/**
- * Record a property view
- */
-export async function recordPropertyView(property) {
-  if (!property || !property.id) return;
-  try {
-    const raw = await AsyncStorage.getItem(VIEW_HISTORY_KEY);
-    const list = raw ? JSON.parse(raw) : [];
-    const filtered = list.filter((p) => p.id !== property.id);
-    const item = {
-      id: property.id,
-      title: property.title,
-      city: property.city,
-      locality: property.locality,
-      propertyType: property.propertyType,
-      bhk: property.bhk,
-      price: property.price,
-      viewedAt: Date.now(),
-    };
-    const updated = [item, ...filtered].slice(0, MAX_VIEW_HISTORY);
-    await AsyncStorage.setItem(VIEW_HISTORY_KEY, JSON.stringify(updated));
-  } catch (err) {
-    console.log("[historyService] Error recording property view:", err?.message);
-  }
-}
-
 const compareListeners = new Set();
 
 /**
@@ -258,28 +205,19 @@ export function notifyHistoryCleared() {
 }
 
 /**
- * Get user preferences derived from search & view history
+ * Get user preferences derived from search history
  */
 export async function getUserPreferences() {
   try {
-    const [searches, viewsRaw] = await Promise.all([
-      getSearchHistory(),
-      AsyncStorage.getItem(VIEW_HISTORY_KEY),
-    ]);
-    const views = viewsRaw ? JSON.parse(viewsRaw) : [];
+    const searches = await getSearchHistory();
 
-    // Find most frequent city
+    // Find most frequent city and property type
     const cityCounts = {};
     const typeCounts = {};
 
     searches.forEach((s) => {
-      if (s.city) cityCounts[s.city] = (cityCounts[s.city] || 0) + 2;
-      if (s.propertyType) typeCounts[s.propertyType] = (typeCounts[s.propertyType] || 0) + 2;
-    });
-
-    views.forEach((v) => {
-      if (v.city) cityCounts[v.city] = (cityCounts[v.city] || 0) + 1;
-      if (v.propertyType) typeCounts[v.propertyType] = (typeCounts[v.propertyType] || 0) + 1;
+      if (s.city) cityCounts[s.city] = (cityCounts[s.city] || 0) + 1;
+      if (s.propertyType) typeCounts[s.propertyType] = (typeCounts[s.propertyType] || 0) + 1;
     });
 
     const topCity = Object.entries(cityCounts).sort((a, b) => b[1] - a[1])[0]?.[0] || "";
@@ -288,12 +226,11 @@ export async function getUserPreferences() {
 
     return {
       searches,
-      recentViews: views.slice(0, 5),
       preferredCity: topCity,
       preferredType: topType,
       latestSearch,
     };
   } catch (err) {
-    return { searches: [], recentViews: [], preferredCity: "", preferredType: "", latestSearch: null };
+    return { searches: [], preferredCity: "", preferredType: "", latestSearch: null };
   }
 }

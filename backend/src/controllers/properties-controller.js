@@ -1,5 +1,5 @@
 const mongoose = require("mongoose");
-const { Property, User, Review, PropertyRating, PropertyView } = require("../models");
+const { Property, User, Review, PropertyRating } = require("../models");
 const { AppError, bad } = require("../utils/errors");
 const {
   isPropertyId,
@@ -20,7 +20,6 @@ const {
 } = require("../utils/propertyQuery");
 const { summarise, publicRating } = require("../utils/rating");
 const { cached, cachedByKey } = require("../utils/cache");
-const { findAccount } = require("../utils/accounts");
 const { z, validate, text } = require("../utils/zod");
 
 const RATING_ERROR = "Rating must be a whole number from 1 to 5";
@@ -376,35 +375,6 @@ const getProperty = async (req, res) => {
   res.json({ property: { ...item, isOwner: ownsListing(req.user, doc) } });
 };
 
-// Guests have no contact details to follow up on, so only signed-in views are kept.
-const recordView = async (req, res) => {
-  const doc = await findVisibleListing(req);
-  if (!req.user) return res.status(204).end();
-  const account = (await findAccount(req.user.id))?.doc;
-  const p = normalizeProperty(doc);
-  const now = new Date();
-  await PropertyView.findOneAndUpdate(
-    { user: new mongoose.Types.ObjectId(req.user.id), property: doc._id },
-    {
-      $set: {
-        phone: req.user.phone,
-        name: req.user.name,
-        email: account?.email || "",
-        city: account?.city || "",
-        purpose: account?.purpose || "",
-        propertyTitle: p.title,
-        propertyLocation: [p.locality, p.city].filter(Boolean).join(", "),
-        lastViewedAt: now,
-        hiddenByUser: false,
-      },
-      $inc: { views: 1 },
-      $setOnInsert: { firstViewedAt: now, source: "mobile-app" },
-    },
-    { upsert: true },
-  );
-  res.status(204).end();
-};
-
 async function setSaved(req, res, desired) {
   const exists = await findVisibleListing(req);
   const id = exists._id;
@@ -542,12 +512,9 @@ exports.getCompareProperties = getCompareProperties;
 exports.getPropertiesByIds = getPropertiesByIds;
 exports.getSavedProperties = getSavedProperties;
 exports.getProperty = getProperty;
-exports.recordView = recordView;
 exports.saveProperty = saveProperty;
 exports.deleteSavedProperty = deleteSavedProperty;
 exports.getReviews = getReviews;
 exports.postReview = postReview;
 exports.deleteReview = deleteReview;
-// Used by admin review moderation to refresh a property's rating summary.
-exports.recompute = recompute;
 exports.withRatings = withRatings;

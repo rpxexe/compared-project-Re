@@ -9,11 +9,10 @@ import Reveal, { stagger } from '../components/Reveal';
 import { EmptyState, ErrorState, LoadingState } from '../components/StateViews';
 import { useApi } from '../hooks/useApi';
 import { api } from '../services/api';
-import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
 import { smoothLayout } from '../components/compare/CompareTable';
 import PressableScale from '../components/PressableScale';
-import { clearSearchHistory, clearViewHistory, getSearchHistory, getViewHistory } from '../services/historyService';
+import { clearSearchHistory, getSearchHistory } from '../services/historyService';
 import { timeAgo } from '../utils/format';
 import { colors, radius } from '../theme';
 import Text from "../components/AppText";
@@ -128,7 +127,7 @@ export function MyEnquiriesScreen({ navigation }) {
   );
 }
 
-// Device-local history list shared by Recent searches and Viewed properties.
+// Device-local history list (Recent searches).
 function HistoryList({ navigation, title, load, clear, clearLabel, empty, renderRow }) {
   const [items, setItems] = React.useState(null);
   const reload = React.useCallback(() => load().then(setItems), [load]);
@@ -187,40 +186,6 @@ export function RecentSearchesScreen({ navigation }) {
         <HistoryRow icon="search-outline" title={s.label || s.query || 'Search'} meta={timeAgo(s.timestamp)} onPress={() => rerun(s)} last={last} />
       )}
     />
-  );
-}
-
-// Signed-in users get the views stored on their account (any device); guests get this device's
-// history, whose ids are turned into full cards by the server.
-export function ViewedPropertiesScreen({ navigation }) {
-  const { token } = useAuth();
-  const { data, loading, error, reload, refresh } = useApi(async () => {
-    if (token) return api.myViews();
-    const ids = (await getViewHistory()).map((v) => v.id);
-    return ids.length ? api.propertiesByIds(ids) : { items: [] };
-  }, [token]);
-  const [r, setR] = React.useState(false);
-  React.useEffect(() => navigation.addListener('focus', () => refresh()), [navigation]); // eslint-disable-line react-hooks/exhaustive-deps
-  const onClear = async () => {
-    await Promise.all([clearViewHistory(), token ? api.clearMyViews().catch(() => {}) : null]);
-    await refresh();
-  };
-  const items = data?.items || [];
-  return (
-    <Screen refreshControl={<RefreshControl refreshing={r} onRefresh={async () => { setR(true); await refresh(); setR(false); }} tintColor={colors.gold} />}>
-      <ScreenHeader title="Viewed properties" subtitle={items.length ? `${items.length} propert${items.length === 1 ? 'y' : 'ies'}` : ' '} back />
-      <View style={{ paddingHorizontal: 20, gap: 14 }}>
-        {loading && !data ? <LoadingState rows={3} /> : error && !data ? <ErrorState title="Unable to load viewed properties" error={error} onRetry={reload} />
-          : items.length ? (
-            <>
-              {items.map((p, i) => <ListingCard key={p.id} property={p} index={i} tag={badgeFor(p)} />)}
-              <PressableScale onPress={onClear} style={styles.clearBtn} accessibilityRole="button">
-                <Text style={styles.clearText}>Clear viewed properties</Text>
-              </PressableScale>
-            </>
-          ) : <EmptyState icon="eye-outline" title="No viewed properties" message="Properties you open will appear here." action="Explore properties" onAction={() => navigation.navigate('Explore')} />}
-      </View>
-    </Screen>
   );
 }
 

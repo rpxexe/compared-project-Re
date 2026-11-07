@@ -200,7 +200,6 @@ When running on a physical phone over Wi-Fi, your phone must be able to reach yo
 ### D. Development Login & OTP
 * With `NODE_ENV=development` and `OTP_MODE=development`, the backend returns the code to the app instead of sending an SMS (it is **not** printed in the server log).
 * In a **development build** of the app (Expo Go / `expo run`), the OTP screen shows a "Development mode · tap to fill" chip with the code. Release builds never show it.
-* `ADMIN_PHONES` / `SUPERADMIN_PHONES` are **not** promoted with development OTPs. To test admin roles, use `OTP_MODE=twilio`.
 
 ### E. Developer (email/password) accounts
 There is no public sign-up. An administrator creates each developer account from the backend folder:
@@ -258,7 +257,6 @@ You can deploy the backend to cloud platforms like **Render**, **Railway**, **AW
    JWT_SECRET=<generate_a_cryptographically_secure_random_64_character_string>
    TRUST_PROXY=1
    PUBLIC_URL=https://api.yourdomain.com
-   ADMIN_PHONES=9876543210
    CORS_ORIGINS=https://yourdomain.com,https://admin.yourdomain.com
    OTP_MODE=twilio
    OTP_GLOBAL_HOURLY_LIMIT=300
@@ -328,6 +326,14 @@ To generate standalone distributable APK / AAB files for Android and IPA for iOS
 * **Rotate database credentials**: If a connection string was ever shared or exposed, immediately rotate the password in MongoDB Atlas.
 * **Strong JWT Secret**: In production, use a strong, unpredictable `JWT_SECRET` (minimum 32 characters).
 * **Production OTP**: `OTP_MODE=twilio` is enforced everywhere except `NODE_ENV=development`/`test`; a missing `NODE_ENV` counts as production.
-* **Sign out everywhere**: the app's Log out calls `POST /api/auth/logout-all`, which invalidates every token of the account on all devices (and the linked Firebase session), then wipes the user's local data (history, compare list, locations, filters). To force-revoke a user's sessions as an admin, increment `tokenVersion` on their `app_users` / `signupusers` document.
+* **Sign out everywhere**: the app's Log out calls `POST /api/auth/logout-all`, which invalidates every token of the account on all devices (and the linked Firebase session), then wipes the user's local data (history, compare list, locations, filters). To force-revoke a user's sessions as an admin, increment `tokenVersion` on their `app_customers` (phone) / `app_users` (email) document.
+
+### Collection rename (one-off, before deploying this version)
+Phone accounts moved from `app_users` to `app_customers`, email accounts from `signupusers` to `app_users`, and the `property_views` collection was removed. Stop the API and anything else writing to these collections (including the CRM), then from the backend folder:
+```bash
+npm run migrate:collections            # dry run: prints the plan, changes nothing
+npm run migrate:collections -- --apply # renames app_users -> app_customers, then signupusers -> app_users, drops property_views
+```
+It never overwrites a collection that holds documents and is safe to re-run. Point the CRM at the new names before starting it again.
 * **Developer accounts** are created only with `npm run create:developer`; there is no public sign-up.
 * **Links and images**: listing photos, brochures, map and virtual-tour links must be `https://`; the app refuses to open anything else (`tel:`, `upi:`, `intent:`...).

@@ -189,8 +189,6 @@ export const api = {
   updateMyProperty: (id, patch) => call(client.patch(`/users/me/properties/${id}`, patch)),
   deleteMyProperty: (id) => call(client.delete(`/users/me/properties/${id}`)),
   myEnquiries: () => call(client.get("/users/me/enquiries")),
-  myViews: () => call(client.get("/users/me/views")),
-  clearMyViews: () => call(client.delete("/users/me/views")),
   notifications: () => call(client.get("/notifications")),
   markNotificationRead: (id) => call(client.patch(`/notifications/${id}/read`)),
   markAllNotificationsRead: () => call(client.patch("/notifications/read-all")),
@@ -285,8 +283,6 @@ export const api = {
   saved: () => call(client.get("/properties/saved/list")),
   setSaved: (id, saved) =>
     call(client.post(`/properties/${id}/save`, { saved })),
-  // Lead tracking: stores that the signed-in user opened this listing.
-  recordView: (id) => call(client.post(`/properties/${id}/view`)),
 
   reviews: (id, params) =>
     call(client.get(`/properties/${id}/reviews`, { params })),

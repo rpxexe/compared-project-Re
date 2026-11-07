@@ -26,7 +26,6 @@ import {
   MyPropertiesScreen,
   MyEnquiriesScreen,
   RecentSearchesScreen,
-  ViewedPropertiesScreen,
 } from "../screens/ListScreens";
 import PrePostPropertyTypeScreen from "../screens/PrePostPropertyTypeScreen";
 
@@ -57,7 +56,6 @@ function sharedScreens(except, only) {
     ["MyProperties", MyPropertiesScreen],
     ["MyEnquiries", MyEnquiriesScreen],
     ["RecentSearches", RecentSearchesScreen],
-    ["ViewedProperties", ViewedPropertiesScreen],
   ];
   return screens
     .filter(([name]) => name !== except && (!only || only.includes(name)))

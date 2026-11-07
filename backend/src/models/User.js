@@ -18,7 +18,8 @@ const userSchema = new mongoose.Schema({
   tokenVersion: { type: Number, default: 0 },
 }, { timestamps: true });
 
-const User = mongoose.models.AppUser || mongoose.model('AppUser', userSchema, 'app_users');
+// Phone/OTP customer accounts. Collection renamed from `app_users` (npm run migrate:collections).
+const User = mongoose.models.AppCustomer || mongoose.model('AppCustomer', userSchema, 'app_customers');
 User.ROLES = ROLES;
 User.PURPOSES = PURPOSES;
 module.exports = User;

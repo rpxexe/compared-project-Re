@@ -1,8 +1,6 @@
 process.env.NODE_ENV = 'test';
 process.env.JWT_SECRET = 'test-secret-test-secret-test-secret';
 process.env.OTP_MODE = 'development';
-process.env.ADMIN_PHONES = '9000000001';
-process.env.SUPERADMIN_PHONES = '9000000002';
 const http = require('http');
 const mongoose = require('mongoose');
 const { installFakeModels } = require('./fakeDb');
