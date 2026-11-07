@@ -1,6 +1,4 @@
-// Rate limiting: the limiter itself (bounded memory, windows), the global anti-SMS-pumping OTP cap
-// and the per-route limits. Runs in its own process with a tiny global OTP budget.
-process.env.OTP_GLOBAL_HOURLY_LIMIT = '3';
+// Rate limiting: the limiter itself (bounded memory, windows) and the per-route limits.
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const { startServer, models, env } = require('./helpers/harness');
@@ -45,19 +43,6 @@ test('limiter: memory is bounded - past maxKeys the oldest entries are evicted',
   assert.equal((await hit(limiter, '10.0.0.0')).status, 200);
 });
 
-test('OTP: a global cap stops SMS pumping across many IPs and numbers', async () => {
-  const send = (phone, ip) => t.call('POST', '/auth/send-otp', { body: { phone }, headers: { 'X-Forwarded-For': ip } });
-  for (let i = 0; i < env.otpGlobalHourlyLimit; i += 1) {
-    assert.equal((await send(`981230000${i}`, `203.0.113.${i}`)).status, 200);
-  }
-  const pumped = await send('9812399999', '198.51.100.7');
-  assert.equal(pumped.status, 429);
-  assert.match(pumped.body.message, /too many sign-in requests/i);
-  assert.equal(pumped.body.retryAfterSeconds, undefined, 'not mistaken for a resend cooldown');
-  // Malformed numbers are rejected by validation and don't touch the budget.
-  assert.equal((await send('123', '198.51.100.8')).status, 400);
-});
-
 test('v1 search, count and insights are rate limited per client', async () => {
   for (const [path, max] of [['/properties/insights', 30], ['/properties', 120], ['/properties/count', 240]]) {
     const ip = `192.0.2.${max}`;
@@ -72,7 +57,6 @@ test('v1 search, count and insights are rate limited per client', async () => {
 });
 
 test('enquiries, reviews and new listings are rate limited per user', async () => {
-  // Tokens are minted directly: this file's tiny global OTP budget is already used up.
   const { signToken } = require('../src/middleware/auth');
   const user = await models.User.create({ phone: '9812300100', role: 'user', isActive: true });
   const other = await models.User.create({ phone: '9812300101', role: 'user', isActive: true });

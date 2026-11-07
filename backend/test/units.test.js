@@ -3,7 +3,6 @@ const assert = require('node:assert/strict');
 const { normalizeProperty, formatPrice, numericValue } = require('../src/utils/property');
 const { cleanPhone, isValidPhone, escapeRegex, isObjectId } = require('../src/utils/validate');
 const { summarise, publicRating } = require('../src/utils/rating');
-const { generateOtp, hashOtp, otpMatches } = require('../src/utils/otp');
 const { buildPropertyFilter } = require('../src/utils/propertyQuery');
 const { matches } = require('./helpers/fakeDb');
 
@@ -52,15 +51,6 @@ test('rating summary math', () => {
   assert.equal(s.distribution[4], 2);
   assert.equal(publicRating({ count: 0, average: 0 }), null);
   assert.deepEqual(publicRating({ count: 2, average: 4.5 }), { average: 4.5, count: 2 });
-});
-
-test('OTP hashing', () => {
-  assert.match(generateOtp(), /^\d{6}$/);
-  const rec = { codeHash: hashOtp('9876543210', '123456') };
-  assert.equal(otpMatches(rec, '9876543210', '123456'), true);
-  assert.equal(otpMatches(rec, '9876543210', '654321'), false);
-  assert.equal(otpMatches(rec, '9876543211', '123456'), false, 'OTP is bound to the phone number');
-  assert.equal(otpMatches(rec, '9876543210', 'abc'), false);
 });
 
 test('filter builder: only strings are used, junk input is ignored', () => {

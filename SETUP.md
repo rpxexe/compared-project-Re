@@ -11,7 +11,7 @@ Comprehensive instructions for running **Compare Projects** locally, deploying g
    - [A. Backend Setup](#a-backend-setup-local)
    - [B. Frontend Setup](#b-frontend-setup-local)
    - [C. Finding your Local LAN IP](#c-finding-your-local-lan-ip)
-   - [D. Development Login & OTP](#d-development-login--otp)
+   - [D. Phone Login (Firebase OTP)](#d-phone-login-firebase-otp)
    - [E. Developer (email/password) accounts](#e-developer-emailpassword-accounts)
 4. [Running the Project Globally (Production & Remote)](#4-running-the-project-globally-production--remote)
    - [A. Global / Remote Testing with Tunnels](#a-global--remote-testing-with-tunnels-development)
@@ -71,7 +71,7 @@ npm start
 * **Success Output:**
   ```text
   MongoDB connected
-  API listening on port 5000 (OTP mode: development)
+  API listening on port 5000
   ```
 * If MongoDB cannot be reached, the server fails fast with `Startup failed: ...` and terminates cleanly without silent hanging.
 
@@ -132,9 +132,10 @@ If this returns a JSON object with `"items": [...]`, your database connection an
    MONGODB_URI=mongodb+srv://<username>:<password>@cluster0.mongodb.net/realestate?retryWrites=true&w=majority
    MONGODB_COLLECTION=properties
    JWT_SECRET=super_secret_jwt_key_at_least_32_characters_long
-   OTP_MODE=development
+   FIREBASE_PROJECT_ID=your-firebase-project
+   FIREBASE_SERVICE_ACCOUNT={"type":"service_account",...}   # one line
    ```
-   `OTP_MODE=development` only works with `NODE_ENV=development` (or `test`). If `NODE_ENV` is missing the server treats itself as production and refuses to start with development OTPs.
+   Phone sign-in goes through Firebase, so the two `FIREBASE_*` values are needed even locally.
 5. Verify your database connection:
    ```bash
    npm run check:db
@@ -197,9 +198,15 @@ When running on a physical phone over Wi-Fi, your phone must be able to reach yo
 
 ---
 
-### D. Development Login & OTP
-* With `NODE_ENV=development` and `OTP_MODE=development`, the backend returns the code to the app instead of sending an SMS (it is **not** printed in the server log).
-* In a **development build** of the app (Expo Go / `expo run`), the OTP screen shows a "Development mode · tap to fill" chip with the code. Release builds never show it.
+### D. Phone Login (Firebase OTP)
+Phone sign-in uses **Firebase Authentication**: the app asks Firebase to send the SMS, Firebase checks the 6-digit code (on Android it can read the SMS and sign in by itself), and the app then exchanges the Firebase ID token for an app session at `POST /api/v2/customers/register`. The backend sends no SMS and stores no codes.
+
+* Firebase console → *Authentication → Sign-in method* → enable **Phone**, and allow India under *Settings → SMS region policy*.
+* Android: add the app's SHA-1 and SHA-256 keys (debug and release) to the Firebase Android app, then download `google-services.json` into `frontend/`.
+* Backend: `FIREBASE_PROJECT_ID` and `FIREBASE_SERVICE_ACCOUNT` are required for sign-in.
+* Phone sign-in needs a development or release build (`npx expo run:android` / EAS). **Expo Go has no Firebase native module**, so the login screen shows an error there.
+* Testing without real SMS: add **test phone numbers** with fixed codes under *Authentication → Sign-in method → Phone → Phone numbers for testing*.
+* Firebase enforces its own sending limits and SMS-abuse protection; existing phone accounts are linked to Firebase automatically the first time they sign in with the same number.
 
 ### E. Developer (email/password) accounts
 There is no public sign-up. An administrator creates each developer account from the backend folder:
@@ -258,18 +265,13 @@ You can deploy the backend to cloud platforms like **Render**, **Railway**, **AW
    TRUST_PROXY=1
    PUBLIC_URL=https://api.yourdomain.com
    CORS_ORIGINS=https://yourdomain.com,https://admin.yourdomain.com
-   OTP_MODE=twilio
-   OTP_GLOBAL_HOURLY_LIMIT=300
-   TWILIO_ACCOUNT_SID=ACxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
-   TWILIO_AUTH_TOKEN=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
-   TWILIO_PHONE_NUMBER=+1xxxxxxxxxx
    FIREBASE_PROJECT_ID=your-firebase-project
    FIREBASE_SERVICE_ACCOUNT={"type":"service_account",...}   # one line
    ```
-   * `NODE_ENV=production` and `OTP_MODE=twilio` with all three `TWILIO_*` values are mandatory; start-up fails otherwise.
+   * `NODE_ENV=production`, `MONGODB_URI` and a strong `JWT_SECRET` are mandatory; start-up fails otherwise. Without the `FIREBASE_*` values the server starts but phone sign-in fails.
    * `TRUST_PROXY`: `1` behind one proxy (Render, Railway, Nginx); `0` if clients connect directly. Too high a value lets clients fake their IP and bypass rate limits.
    * `CORS_ORIGINS`: leave empty if only the mobile app uses the API – production then sends no CORS headers at all.
-   * `FIREBASE_SERVICE_ACCOUNT` is required for the `/api/v2` customer routes: Firebase ID tokens are checked for revocation, which needs admin credentials.
+   * `FIREBASE_SERVICE_ACCOUNT` is required for phone sign-in and the `/api/v2` customer routes: Firebase ID tokens are checked for revocation, which needs admin credentials.
 6. **MongoDB Atlas Whitelist:**
    In your MongoDB Atlas Dashboard:
    * Go to **Network Access** &rarr; **IP Access List**.
@@ -325,7 +327,7 @@ To generate standalone distributable APK / AAB files for Android and IPA for iOS
 * **Never commit `.env` files**: Ensure `.env` is listed in `.gitignore`.
 * **Rotate database credentials**: If a connection string was ever shared or exposed, immediately rotate the password in MongoDB Atlas.
 * **Strong JWT Secret**: In production, use a strong, unpredictable `JWT_SECRET` (minimum 32 characters).
-* **Production OTP**: `OTP_MODE=twilio` is enforced everywhere except `NODE_ENV=development`/`test`; a missing `NODE_ENV` counts as production.
+* **Phone OTP**: handled entirely by Firebase Authentication; the backend never sees or stores the code.
 * **Sign out everywhere**: the app's Log out calls `POST /api/auth/logout-all`, which invalidates every token of the account on all devices (and the linked Firebase session), then wipes the user's local data (history, compare list, locations, filters). To force-revoke a user's sessions as an admin, increment `tokenVersion` on their `app_customers` (phone) / `app_users` (email) document.
 
 ### Collection rename (one-off, before deploying this version)

@@ -33,7 +33,7 @@ function rateLimit({
       else prune(now);
       hits.set(k, { count: 1, reset: now + windowMs });
     } else if (++entry.count > max) {
-      // Header only: the app reads a `retryAfterSeconds` body field as "an OTP was just sent".
+      // Retry-After goes in the header only; the body keeps the usual error shape.
       res.set('Retry-After', String(Math.ceil((entry.reset - now) / 1000)));
       if (body) return res.status(429).json(body);
       return next(new AppError(429, message));

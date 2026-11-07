@@ -30,19 +30,6 @@ test('repeated failed sign-ins for one account are throttled', async () => {
   assert.ok(blocked.headers.get('retry-after'));
 });
 
-test('OTP sends are capped per phone number, without looking like a resend cooldown', async () => {
-  const phone = '9876500001';
-  for (let i = 0; i < 6; i += 1) {
-    models.Otp.reset(); // bypass the 30s resend cooldown so only the hourly cap applies
-    assert.equal((await t.call('POST', '/auth/send-otp', { body: { phone } })).status, 200);
-  }
-  models.Otp.reset();
-  const capped = await t.call('POST', '/auth/send-otp', { body: { phone } });
-  assert.equal(capped.status, 429);
-  // The app treats `retryAfterSeconds` as "a code was just sent"; the cap must not include it.
-  assert.equal(capped.body.retryAfterSeconds, undefined);
-});
-
 test('tokens signed with a different algorithm are rejected', async () => {
   const { user } = await t.login('9876500002');
   const forged = jwt.sign({ id: user.id }, env.secret(), { algorithm: 'HS512' });

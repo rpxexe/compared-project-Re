@@ -2,9 +2,7 @@ require('dotenv').config();
 
 const lower = (v) => String(v ?? '').trim().toLowerCase();
 
-const OTP_MODES = ['development', 'twilio'];
-// Only these environments may run with development conveniences (dev OTPs, open CORS, verbose
-// health). A missing or misspelt NODE_ENV is treated like production, never like development.
+// Only these environments may run with development conveniences (open CORS, verbose health). A missing or misspelt NODE_ENV is treated like production, never like development.
 const DEV_ENVS = ['development', 'test'];
 
 // TRUST_PROXY -> Express "trust proxy" value: a hop count ("1"), true/false, or a comma-separated
@@ -32,22 +30,11 @@ function load() {
     mongoCollection: process.env.MONGODB_COLLECTION || 'properties',
     jwtSecret: process.env.JWT_SECRET || '',
     jwtExpiresIn: process.env.JWT_EXPIRES_IN || '30d',
-    // Unset defaults to development only in an explicit development/test environment.
-    otpMode: lower(process.env.OTP_MODE) || (isDevLike ? 'development' : 'twilio'),
-    otpTtlMinutes: Number(process.env.OTP_TTL_MINUTES || 5),
-    otpResendSeconds: Number(process.env.OTP_RESEND_SECONDS || 30),
-    otpMaxAttempts: Number(process.env.OTP_MAX_ATTEMPTS || 5),
-    // Anti SMS-pumping: total OTP SMS the whole server sends per hour, across all IPs and numbers.
-    otpGlobalHourlyLimit: Number(process.env.OTP_GLOBAL_HOURLY_LIMIT || 300),
-    twilio: {
-      sid: process.env.TWILIO_ACCOUNT_SID || '',
-      token: process.env.TWILIO_AUTH_TOKEN || '',
-      from: process.env.TWILIO_PHONE_NUMBER || '',
-    },
     // Public origin used in uploaded image URLs (e.g. https://api.example.com); defaults to the request host.
     publicUrl: String(process.env.PUBLIC_URL || '').trim().replace(/\/+$/, ''),
     corsOrigins:String(process.env.CORS_ORIGINS || '').split(',').map((s) => s.trim()).filter(Boolean),
-    // Firebase Authentication for the /api/v2 customer endpoints. Revocation checks need admin
+    // Firebase Authentication: phone sign-in (POST /api/v2/customers/register) and the /api/v2
+    // customer endpoints. Revocation checks need admin
     // credentials: the service account (JSON, one line) or Google application default credentials.
     firebase: {
       projectId: String(process.env.FIREBASE_PROJECT_ID || '').trim(),
@@ -62,12 +49,9 @@ const env = load();
 // Re-read hook so tests can tune the environment.
 env.reload = () => Object.assign(env, load());
 
-// Secret used for JWT + OTP hashing. The fixed fallback exists only for the test suite;
+// Secret used to sign JWTs. The fixed fallback exists only for the test suite;
 // everywhere else start-up refuses to run without a real JWT_SECRET (see validate()).
 env.secret = () => env.jwtSecret || (env.isTest ? 'test-only-insecure-secret' : '');
-
-// Development OTPs (code returned to the client, no SMS) - only ever in development/test.
-env.devOtpEnabled = () => env.otpMode === 'development' && env.isDevLike;
 
 env.validate = function validate() {
   const problems = [];
@@ -75,12 +59,6 @@ env.validate = function validate() {
   // Required in every environment: a missing/weak secret means anyone can forge login tokens,
   // and servers do end up exposed without NODE_ENV=production being set.
   if (!env.isTest && env.jwtSecret.length < 24) problems.push('JWT_SECRET must be a random string of at least 24 characters. Generate one with: node -e "console.log(require(`crypto`).randomBytes(32).toString(`hex`))"');
-  if (!OTP_MODES.includes(env.otpMode)) problems.push(`OTP_MODE must be one of: ${OTP_MODES.join(', ')}.`);
-  // Fail closed: development OTPs need an explicit NODE_ENV=development (or test).
-  if (env.otpMode !== 'twilio' && !env.isDevLike)
-    problems.push(`OTP_MODE must be "twilio" unless NODE_ENV is development or test (NODE_ENV is "${env.nodeEnv || 'not set'}"; development OTPs are returned to the client).`);
-  if (env.otpMode === 'twilio' && !(env.twilio.sid && env.twilio.token && env.twilio.from)) problems.push('OTP_MODE=twilio needs TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN and TWILIO_PHONE_NUMBER.');
-  if (!(env.otpGlobalHourlyLimit > 0)) problems.push('OTP_GLOBAL_HOURLY_LIMIT must be a positive number.');
   return problems;
 };
 

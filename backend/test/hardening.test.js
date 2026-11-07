@@ -1,4 +1,4 @@
-// Regression tests for the security-hardening fixes: oversized email input, OTP attempt races,
+// Regression tests for the security-hardening fixes: oversized email input,
 // token revocation (logout-all), hidden listings, https-only links, getLocations input handling
 // and production CORS / health output.
 const test = require('node:test');
@@ -51,38 +51,6 @@ test('sign-in: an email over 254 characters is rejected, never truncated into a 
   const ok = await t.call('POST', '/auth/signin', { body: { email: ' DEV@builder.co ', password: 'longpassword1' } });
   assert.equal(ok.status, 200, 'normal emails still work (trimmed, any case)');
   assert.equal((await t.call('POST', '/auth/signin', { body: { email: 'dev@builder.co', password: 'x'.repeat(5000) } })).status, 400);
-});
-
-// ----- 2. OTP attempts ------------------------------------------------------------------------
-test('OTP: parallel wrong guesses cannot get more than the allowed number of comparisons', async () => {
-  models.Otp.reset();
-  const phone = '9811000003';
-  const s = await t.call('POST', '/auth/send-otp', { body: { phone } });
-  const guesses = Array.from({ length: 30 }, (_, i) => String(200000 + i)).filter((c) => c !== s.body.devOtp);
-  const results = await Promise.all(guesses.map((otp) => t.call('POST', '/auth/verify-otp', { body: { phone, otp } })));
-  const compared = results.filter((r) => r.body.code === 'OTP_INVALID').length;
-  assert.equal(compared, env.otpMaxAttempts, `only ${env.otpMaxAttempts} guesses may be checked, got ${compared}`);
-  assert.ok(results.every((r) => r.status === 401 || r.status === 429));
-  // The real code no longer works either: the lockout held.
-  const late = await t.call('POST', '/auth/verify-otp', { body: { phone, otp: s.body.devOtp } });
-  assert.notEqual(late.status, 200);
-  assert.equal(late.body.token, undefined);
-});
-
-test('OTP: parallel sends leave at most one live code per number', async () => {
-  models.Otp.reset();
-  const phone = '9811000006';
-  const sends = await Promise.all([1, 2, 3, 4].map(() => t.call('POST', '/auth/send-otp', { body: { phone } })));
-  assert.ok(sends.some((r) => r.status === 200));
-  assert.ok(models.Otp._rows.filter((r) => r.phone === phone).length <= 1);
-});
-
-test('OTP: the right code sent twice in parallel signs in only once', async () => {
-  models.Otp.reset();
-  const phone = '9811000004';
-  const s = await t.call('POST', '/auth/send-otp', { body: { phone } });
-  const results = await Promise.all([1, 2, 3].map(() => t.call('POST', '/auth/verify-otp', { body: { phone, otp: s.body.devOtp } })));
-  assert.equal(results.filter((r) => r.status === 200).length, 1);
 });
 
 // ----- 3. Token revocation --------------------------------------------------------------------
