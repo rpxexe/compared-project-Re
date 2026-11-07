@@ -10,98 +10,155 @@ import { useAuth } from "../context/AuthContext";
 import exitAuthFlow from "../navigation/exitAuthFlow";
 import { otpDigits } from "../utils/validators";
 import { formatPhone } from "../utils/format";
-import PressableScale from "../components/PressableScale";
-import { brand, colors, fonts, radius, shadow } from "../theme";
+import { brand, colors, fonts } from "../theme";
+import { isReducedMotion } from "../hooks/useReducedMotion";
 import Text, { AppTextInput as TextInput } from "../components/AppText";
 
 const LEN = 6;
+// Soft lavender-grey tile: the theme's take on the light grey boxes.
+const BOX_BG = "#F3EFFA";
 
+// One code box. It rises in on mount (staggered left to right), lifts with a pulsing ring while
+// it's the box being typed into, drops each digit in, jitters in a wave on a wrong code and hops
+// in a wave on success. Reduced motion keeps only the colour changes.
 function Box({ char, active, state, index }) {
-  const pop = useRef(new Animated.Value(1)).current;
+  const reduced = isReducedMotion();
+  const enter = useRef(new Animated.Value(reduced ? 1 : 0)).current;
+  const lift = useRef(new Animated.Value(0)).current;
+  const drop = useRef(new Animated.Value(1)).current;
+  const jitter = useRef(new Animated.Value(0)).current;
+  const hop = useRef(new Animated.Value(0)).current;
   const prev = useRef("");
+
   useEffect(() => {
-    if (char && char !== prev.current) {
-      Animated.sequence([
-        Animated.timing(pop, {
-          toValue: 1.14,
-          duration: 90,
-          useNativeDriver: true,
-        }),
-        Animated.spring(pop, {
-          toValue: 1,
-          useNativeDriver: true,
-          bounciness: 12,
-        }),
-      ]).start();
+    if (reduced) return;
+    Animated.spring(enter, { toValue: 1, delay: 80 + index * 55, speed: 10, bounciness: 10, useNativeDriver: true }).start();
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    if (reduced) return;
+    Animated.spring(lift, { toValue: active ? 1 : 0, speed: 16, bounciness: 8, useNativeDriver: true }).start();
+  }, [active]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    if (char && char !== prev.current && !reduced) {
+      drop.setValue(0);
+      Animated.spring(drop, { toValue: 1, speed: 18, bounciness: 12, useNativeDriver: true }).start();
     }
     prev.current = char;
-  }, [char, pop]);
+  }, [char]); // eslint-disable-line react-hooks/exhaustive-deps
+
   useEffect(() => {
-    if (state === "success")
+    if (reduced) return;
+    if (state === "error") {
+      jitter.setValue(0);
       Animated.sequence([
-        Animated.delay(index * 60),
-        Animated.timing(pop, {
-          toValue: 0.85,
-          duration: 120,
-          useNativeDriver: true,
-        }),
-        Animated.spring(pop, {
-          toValue: 1,
-          useNativeDriver: true,
-          bounciness: 14,
-        }),
+        Animated.delay(index * 40),
+        ...[-7, 7, -5, 5, -2, 0].map((v) => Animated.timing(jitter, { toValue: v, duration: 50, useNativeDriver: true })),
       ]).start();
+    } else if (state === "success") {
+      hop.setValue(0);
+      Animated.sequence([
+        Animated.delay(index * 70),
+        Animated.timing(hop, { toValue: 1, duration: 160, easing: Easing.out(Easing.quad), useNativeDriver: true }),
+        Animated.spring(hop, { toValue: 0, speed: 12, bounciness: 14, useNativeDriver: true }),
+      ]).start();
+    }
   }, [state]); // eslint-disable-line react-hooks/exhaustive-deps
+
   const borderColor =
     state === "error"
       ? colors.error
       : state === "success"
         ? colors.success
-        : active || char
+        : active
           ? brand.violet
-          : "#E3D9F7";
+          : "transparent";
+  const slot = {
+    opacity: enter,
+    transform: [
+      {
+        translateY: Animated.add(
+          Animated.add(
+            enter.interpolate({ inputRange: [0, 1], outputRange: [18, 0] }),
+            lift.interpolate({ inputRange: [0, 1], outputRange: [0, -4] }),
+          ),
+          hop.interpolate({ inputRange: [0, 1], outputRange: [0, -12] }),
+        ),
+      },
+      { translateX: jitter },
+      { scale: hop.interpolate({ inputRange: [0, 1], outputRange: [1, 1.08] }) },
+    ],
+  };
   return (
-    <Animated.View style={{ transform: [{ scale: pop }] }}>
+    // Six boxes share the row (up to 52px each) so they fit narrow phones too.
+    <Animated.View style={[styles.boxSlot, slot]}>
+      {active && !reduced ? <PulseRing /> : null}
       <View
         style={[
           styles.box,
           {
             borderColor,
-            backgroundColor: state === "success" ? "#E8F3EC" : colors.white,
+            backgroundColor: state === "success" ? "#E8F3EC" : state === "error" ? brand.errorSoft : active ? colors.white : BOX_BG,
           },
           active && styles.boxGlow,
         ]}
       >
-        <Text
-          style={[
-            styles.digit,
-            state === "success" && { color: colors.success },
-            state === "error" && { color: colors.error },
-          ]}
+        <Animated.View
+          style={char ? {
+            opacity: drop,
+            transform: [
+              { translateY: drop.interpolate({ inputRange: [0, 1], outputRange: [-14, 0] }) },
+              { scale: drop.interpolate({ inputRange: [0, 1], outputRange: [0.5, 1] }) },
+            ],
+          } : null}
         >
-          {char}
-        </Text>
+          <Text
+            style={[
+              styles.digit,
+              !char && styles.dash,
+              state === "success" && { color: colors.success },
+              state === "error" && { color: colors.error },
+            ]}
+          >
+            {char || (active ? "" : "-")}
+          </Text>
+        </Animated.View>
         {active && !char ? <Caret /> : null}
       </View>
     </Animated.View>
   );
 }
 
+// Soft violet ring that keeps pulsing out of the active box.
+function PulseRing() {
+  const v = useRef(new Animated.Value(0)).current;
+  useEffect(() => {
+    const loop = Animated.loop(
+      Animated.timing(v, { toValue: 1, duration: 1300, easing: Easing.out(Easing.quad), useNativeDriver: true }),
+    );
+    loop.start();
+    return () => loop.stop();
+  }, [v]);
+  return (
+    <Animated.View
+      pointerEvents="none"
+      style={[styles.pulse, {
+        opacity: v.interpolate({ inputRange: [0, 0.2, 1], outputRange: [0, 0.45, 0] }),
+        transform: [{ scaleX: v.interpolate({ inputRange: [0, 1], outputRange: [1, 1.22] }) }, { scaleY: v.interpolate({ inputRange: [0, 1], outputRange: [1, 1.14] }) }],
+      }]}
+    />
+  );
+}
+
+// Caret that breathes (eased fade) instead of hard blinking.
 function Caret() {
   const o = useRef(new Animated.Value(1)).current;
   useEffect(() => {
     const l = Animated.loop(
       Animated.sequence([
-        Animated.timing(o, {
-          toValue: 0,
-          duration: 500,
-          useNativeDriver: true,
-        }),
-        Animated.timing(o, {
-          toValue: 1,
-          duration: 500,
-          useNativeDriver: true,
-        }),
+        Animated.timing(o, { toValue: 0.15, duration: 480, easing: Easing.inOut(Easing.quad), useNativeDriver: true }),
+        Animated.timing(o, { toValue: 1, duration: 480, easing: Easing.inOut(Easing.quad), useNativeDriver: true }),
       ]),
     );
     l.start();
@@ -111,17 +168,15 @@ function Caret() {
 }
 
 export default function OtpScreen({ navigation, route }) {
-  const { phone, role, name, firebase = false, devOtp: initialDev, resendIn = 30 } = route.params;
+  const { phone, role, name, resendIn = 30 } = route.params;
   const { signIn } = useAuth();
   const [code, setCode] = useState("");
   const [state, setState] = useState("idle"); // idle | loading | error | success
   const [error, setError] = useState("");
   const [secs, setSecs] = useState(resendIn);
-  const [devOtp, setDevOtp] = useState(__DEV__ ? initialDev : null);
   const [resending, setResending] = useState(false);
   const [focused, setFocused] = useState(true);
   const input = useRef(null);
-  const shake = useRef(new Animated.Value(0)).current;
   const check = useRef(new Animated.Value(0)).current;
   const verifying = useRef(false);
 
@@ -131,24 +186,11 @@ export default function OtpScreen({ navigation, route }) {
     return () => clearTimeout(t);
   }, [secs]);
 
-  const doShake = useCallback(() => {
-    shake.setValue(0);
-    Animated.sequence(
-      [10, -10, 8, -8, 4, 0].map((v) =>
-        Animated.timing(shake, {
-          toValue: v,
-          duration: 55,
-          easing: Easing.linear,
-          useNativeDriver: true,
-        }),
-      ),
-    ).start();
-  }, [shake]);
-
   const done = useRef(false);
 
-  // Firebase mode: the signed-in Firebase user -> customer account + app session. Skips the code
-  // check when Firebase already signed this number in (Android auto-verification or a retry).
+  // Firebase checks the code; the signed-in Firebase user is then exchanged for the app's customer
+  // account + session. Skips the code check when Firebase already signed this number in (Android
+  // auto-verification or a retry).
   const firebaseSession = useCallback(async (value) => {
     if (firebasePhone.currentPhone() !== `+91${phone}`) await firebasePhone.confirmCode(value);
     return api.v2.register(await firebasePhone.idToken(), name);
@@ -161,7 +203,7 @@ export default function OtpScreen({ navigation, route }) {
       setState("loading");
       setError("");
       try {
-        const r = firebase ? await firebaseSession(value) : await api.verifyOtp(phone, value);
+        const r = await firebaseSession(value);
         done.current = true;
         await session.save(r.token, r.user); // makes the token available to the profile update below
         let user = r.user;
@@ -194,8 +236,7 @@ export default function OtpScreen({ navigation, route }) {
       } catch (e) {
         setState("error");
         setError(String(e.code || "").startsWith("auth/") ? firebasePhone.friendlyError(e) : e.message);
-        doShake();
-        if (e.code === "OTP_EXPIRED" || e.code === "OTP_LOCKED" || firebasePhone.needsNewCode(e)) setSecs(0);
+        if (firebasePhone.needsNewCode(e)) setSecs(0);
         setTimeout(() => {
           setCode("");
           setState("idle");
@@ -205,16 +246,13 @@ export default function OtpScreen({ navigation, route }) {
         verifying.current = false;
       }
     },
-    [phone, role, name, firebase, firebaseSession, navigation, check, doShake, signIn],
+    [phone, role, name, firebaseSession, navigation, check, signIn],
   );
 
   // Android may read the SMS and sign in by itself; finish as if the code had been typed.
-  useEffect(() => {
-    if (!firebase) return undefined;
-    return firebasePhone.onSignedIn((user) => {
-      if (user.phoneNumber === `+91${phone}`) verify("");
-    });
-  }, [firebase, phone, verify]);
+  useEffect(() => firebasePhone.onSignedIn((user) => {
+    if (user.phoneNumber === `+91${phone}`) verify("");
+  }), [phone, verify]);
 
   const onChange = (text) => {
     if (state === "loading" || state === "success") return;
@@ -228,20 +266,11 @@ export default function OtpScreen({ navigation, route }) {
     setResending(true);
     setError("");
     try {
-      if (firebase) {
-        await firebasePhone.sendCode(phone);
-        setSecs(30);
-        setCode("");
-        input.current?.focus();
-        return;
-      }
-      const r = await api.sendOtp(phone);
-      setSecs(r.resendInSeconds ?? 30);
-      setDevOtp(__DEV__ ? r.devOtp || null : null);
+      await firebasePhone.sendCode(phone);
+      setSecs(30);
       setCode("");
       input.current?.focus();
     } catch (e) {
-      if (e.status === 429 && e.retryAfterSeconds) setSecs(e.retryAfterSeconds);
       setError(String(e.code || "").startsWith("auth/") ? firebasePhone.friendlyError(e) : e.message);
     } finally {
       setResending(false);
@@ -249,23 +278,24 @@ export default function OtpScreen({ navigation, route }) {
   };
 
   const chars = code.split("");
+  const complete = code.length === LEN;
   return (
     <Screen keyboard>
       <ScreenHeader title=" " back style={{ marginBottom: 8 }} />
-      <View style={{ paddingHorizontal: 24 }}>
-        <Text style={styles.h1}>Verify your number</Text>
-        <Text style={styles.sub}>Enter the 6-digit code sent to</Text>
+      <View style={styles.body}>
+        <Text style={styles.h1} accessibilityRole="header">Verify Code</Text>
+        <Text style={styles.sub}>Please enter the 6-digit code we just sent to</Text>
         <View style={styles.phoneRow}>
           <Text style={styles.phone}>{formatPhone(phone)}</Text>
-          <Pressable onPress={() => navigation.goBack()} hitSlop={10}>
-            <Text style={styles.edit}>Change</Text>
+          <Pressable onPress={() => navigation.goBack()} hitSlop={10} accessibilityRole="button" accessibilityLabel="Change number">
+            <Ionicons name="create-outline" size={16} color={brand.violet} />
           </Pressable>
         </View>
 
         <View style={styles.boxesWrap}>
           <Animated.View
             pointerEvents="none"
-            style={[styles.boxes, { transform: [{ translateX: shake }] }]}
+            style={styles.boxes}
           >
             {Array.from({ length: LEN }).map((_, i) => (
               <Box
@@ -310,34 +340,27 @@ export default function OtpScreen({ navigation, route }) {
                 { opacity: check, transform: [{ scale: check }] },
               ]}
             >
-              <View style={styles.okCircle}>
-                <Ionicons name="checkmark" size={22} color={colors.white} />
+              <View>
+                <Animated.View
+                  pointerEvents="none"
+                  style={[styles.okBurst, {
+                    opacity: check.interpolate({ inputRange: [0, 0.3, 1], outputRange: [0, 0.5, 0], extrapolate: "clamp" }),
+                    transform: [{ scale: check.interpolate({ inputRange: [0, 1], outputRange: [0.6, 2] }) }],
+                  }]}
+                />
+                <View style={styles.okCircle}>
+                  <Ionicons name="checkmark" size={18} color={colors.white} />
+                </View>
               </View>
               <Text style={styles.okText}>Verified</Text>
             </Animated.View>
-          ) : state === "loading" ? (
-            <Text style={styles.verifying}>Verifying…</Text>
           ) : error ? (
             <Text style={styles.err}>{error}</Text>
           ) : null}
         </View>
 
-        {/* Development builds only: a release build never shows a code, whatever the server sends. */}
-        {__DEV__ && devOtp ? (
-          <PressableScale onPress={() => onChange(devOtp)} style={styles.dev}>
-            <Ionicons
-              name="construct-outline"
-              size={16}
-              color={colors.goldDeep}
-            />
-            <Text style={styles.devText}>
-              Development mode · tap to fill{" "}
-              <Text style={{ fontWeight: "800" }}>{devOtp}</Text>
-            </Text>
-          </PressableScale>
-        ) : null}
-
-        <View style={{ alignItems: "center", marginTop: 26 }}>
+        <View style={styles.resendWrap}>
+          <Text style={styles.resendQ}>Didn't receive OTP?</Text>
           {secs > 0 ? (
             <Text style={styles.timer}>
               Resend code in{" "}
@@ -346,40 +369,45 @@ export default function OtpScreen({ navigation, route }) {
               </Text>
             </Text>
           ) : (
-            <Button
-              title="Resend OTP"
-              variant="ghost"
-              small
-              onPress={resend}
-              loading={resending}
-            />
+            <Pressable onPress={resend} disabled={resending} hitSlop={10} accessibilityRole="button">
+              <Text style={[styles.resend, resending && { opacity: 0.5 }]}>
+                {resending ? "Sending…" : "Resend code"}
+              </Text>
+            </Pressable>
           )}
         </View>
+
+        {/* The code verifies itself once all 6 digits are in; the button lets you tap it manually. */}
+        <Button
+          title={state === "success" ? "Verified" : "Verify"}
+          onPress={() => verify(code)}
+          loading={state === "loading"}
+          disabled={!complete || state === "success"}
+          style={styles.verifyBtn}
+        />
       </View>
     </Screen>
   );
 }
 
 const styles = StyleSheet.create({
+  body: { paddingHorizontal: 24, alignItems: "center" },
   h1: {
     fontFamily: fonts.serif,
     fontWeight: "700",
     letterSpacing: -0.6,
-    fontSize: 32,
+    fontSize: 30,
     color: brand.ink,
-    marginTop: 8,
+    marginTop: 12,
+    textAlign: "center",
   },
-  sub: { color: colors.muted, fontSize: 14.5, marginTop: 10 },
-  phoneRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 12,
-    marginTop: 4,
-  },
-  phone: { fontSize: 17, fontWeight: "800", color: colors.ink },
-  edit: { color: brand.violet, fontWeight: "800", fontSize: 13.5 },
-  boxesWrap: { marginTop: 32, height: 60 },
-  boxes: { flexDirection: "row", justifyContent: "space-between" },
+  sub: { color: colors.muted, fontSize: 14, marginTop: 10, textAlign: "center" },
+  phoneRow: { flexDirection: "row", alignItems: "center", gap: 6, marginTop: 4 },
+  phone: { fontSize: 15, fontWeight: "700", color: brand.violet },
+  boxesWrap: { marginTop: 32, height: 58, alignSelf: "stretch" },
+  boxes: { flexDirection: "row", justifyContent: "center", gap: 8 },
+  boxSlot: { flex: 1, maxWidth: 52 },
+  pulse: { ...StyleSheet.absoluteFillObject, borderRadius: 14, borderWidth: 2, borderColor: brand.violet },
   overlay: {
     position: "absolute",
     left: 0,
@@ -392,68 +420,49 @@ const styles = StyleSheet.create({
     opacity: 0.02,
   },
   box: {
-    width: 48,
-    height: 60,
-    borderRadius: radius.md,
+    height: 58,
+    borderRadius: 14,
     borderWidth: 1.5,
-    borderColor: "rgba(255, 255, 255, 0.95)",
-    backgroundColor: "rgba(255, 255, 255, 0.9)",
     alignItems: "center",
     justifyContent: "center",
-    ...shadow.glass,
   },
   boxGlow: {
     shadowColor: brand.violet,
-    shadowOpacity: 0.55,
-    shadowRadius: 12,
+    shadowOpacity: 0.35,
+    shadowRadius: 10,
     shadowOffset: { width: 0, height: 0 },
-    elevation: 4,
+    elevation: 3,
   },
-  digit: { fontSize: 26, fontWeight: "800", color: colors.ink },
+  digit: { fontSize: 22, fontWeight: "800", color: colors.ink },
+  dash: { color: brand.placeholder, fontWeight: "600" },
   caret: {
     position: "absolute",
     width: 2,
-    height: 26,
+    height: 24,
     backgroundColor: brand.violet,
     borderRadius: 1,
   },
-  status: {
-    minHeight: 48,
-    justifyContent: "center",
-    alignItems: "center",
-    marginTop: 16,
-  },
+  status: { minHeight: 36, justifyContent: "center", alignItems: "center", marginTop: 12 },
   err: {
     color: colors.error,
     fontWeight: "700",
     fontSize: 13.5,
     textAlign: "center",
   },
-  verifying: { color: colors.muted, fontWeight: "600" },
-  okRow: { flexDirection: "row", alignItems: "center", gap: 10 },
+  okRow: { flexDirection: "row", alignItems: "center", gap: 8 },
   okCircle: {
-    width: 34,
-    height: 34,
-    borderRadius: 17,
+    width: 26,
+    height: 26,
+    borderRadius: 13,
     backgroundColor: colors.success,
     alignItems: "center",
     justifyContent: "center",
   },
-  okText: { color: colors.success, fontWeight: "800", fontSize: 16 },
-  dev: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-    alignSelf: "center",
-    backgroundColor: "rgba(253, 248, 237, 0.92)",
-    borderRadius: radius.pill,
-    borderWidth: 1,
-    borderColor: "rgba(212, 160, 23, 0.45)",
-    paddingHorizontal: 14,
-    paddingVertical: 9,
-    marginTop: 8,
-    ...shadow.glass,
-  },
-  devText: { color: colors.text, fontSize: 12.5 },
-  timer: { color: colors.muted, fontSize: 14 },
+  okBurst: { position: "absolute", width: 26, height: 26, borderRadius: 13, borderWidth: 2, borderColor: colors.success },
+  okText: { color: colors.success, fontWeight: "800", fontSize: 15 },
+  resendWrap: { alignItems: "center", gap: 6, marginTop: 14 },
+  resendQ: { color: colors.muted, fontSize: 13.5 },
+  resend: { color: brand.ink, fontSize: 14, fontWeight: "800", textDecorationLine: "underline" },
+  timer: { color: colors.muted, fontSize: 13.5 },
+  verifyBtn: { alignSelf: "stretch", marginTop: 32 },
 });
