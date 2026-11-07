@@ -4,9 +4,9 @@ import { Ionicons } from '@expo/vector-icons';
 import Screen from '../components/Screen';
 import ScreenHeader from '../components/ScreenHeader';
 import { badgeFor } from '../components/PropertyCard';
-import ListingCard from '../components/search/ListingCard';
+import ListingCard, { ListingCardSkeleton, ListingSkeletonList } from '../components/search/ListingCard';
 import Reveal, { stagger } from '../components/Reveal';
-import { EmptyState, ErrorState, LoadingState } from '../components/StateViews';
+import { EmptyState, ErrorState, Skeleton, SkeletonText } from '../components/StateViews';
 import { useApi } from '../hooks/useApi';
 import { api } from '../services/api';
 import { useToast } from '../context/ToastContext';
@@ -27,11 +27,29 @@ export function SavedScreen({ navigation }) {
     <Screen refreshControl={<RefreshControl refreshing={r} onRefresh={async () => { setR(true); await refresh(); setR(false); }} tintColor={colors.gold} />}>
       <ScreenHeader title="Saved properties" back />
       <View style={{ paddingHorizontal: 20, gap: 14 }}>
-        {loading && !data ? <LoadingState rows={3} /> : error && !data ? <ErrorState title="Unable to load saved properties" error={error} onRetry={reload} />
+        {loading && !data ? <ListingSkeletonList rows={3} gap={14} /> : error && !data ? <ErrorState title="Unable to load saved properties" error={error} onRetry={reload} />
           : data.items.length ? data.items.map((p, i) => <ListingCard key={p.id} property={p} index={i} tag={badgeFor(p)} />)
             : <EmptyState icon="heart-outline" title="No saved properties yet" message="Tap the heart on any property to keep it here." action="Explore properties" onAction={() => navigation.navigate('Search')} />}
       </View>
     </Screen>
+  );
+}
+
+// Matches a My listings item: status pill, the card, then the Edit / Delete row.
+function MyListingSkeletons({ rows = 3 }) {
+  return (
+    <View style={{ gap: 14 }} accessibilityLabel="Loading">
+      {Array.from({ length: rows }, (_, i) => (
+        <View key={i}>
+          <Skeleton style={{ width: 92, height: 28, borderRadius: radius.pill, marginBottom: 8 }} />
+          <ListingCardSkeleton />
+          <View style={styles.crud}>
+            <Skeleton style={{ flex: 1, height: 40, borderRadius: 12 }} />
+            <Skeleton style={{ flex: 1, height: 40, borderRadius: 12 }} />
+          </View>
+        </View>
+      ))}
+    </View>
   );
 }
 
@@ -81,7 +99,7 @@ export function MyPropertiesScreen({ navigation }) {
         }
       />
       <View style={{ paddingHorizontal: 20, gap: 14 }}>
-        {loading && !data ? <LoadingState rows={3} /> : error && !data ? <ErrorState title="Unable to load your properties" error={error} onRetry={reload} />
+        {loading && !data ? <MyListingSkeletons /> : error && !data ? <ErrorState title="Unable to load your properties" error={error} onRetry={reload} />
           : items.length ? items.map((p, i) => {
             const s = STATUS[p.approvalStatus] || STATUS.approved;
             return (
@@ -113,7 +131,7 @@ export function MyEnquiriesScreen({ navigation }) {
     <Screen>
       <ScreenHeader title="My enquiries" back />
       <View style={{ paddingHorizontal: 20, gap: 12 }}>
-        {loading && !data ? <LoadingState rows={3} /> : error && !data ? <ErrorState title="Unable to load enquiries" error={error} onRetry={reload} />
+        {loading && !data ? <EnquirySkeletons /> : error && !data ? <ErrorState title="Unable to load enquiries" error={error} onRetry={reload} />
           : data.items.length ? data.items.map((e, i) => (
             <Reveal key={e.id} delay={stagger(i, 70, 6)} style={styles.enq}>
               <Text style={styles.enqTitle} numberOfLines={2}>{e.propertyTitle || 'Property'}</Text>
@@ -124,6 +142,42 @@ export function MyEnquiriesScreen({ navigation }) {
             : <EmptyState icon="chatbubble-ellipses-outline" title="No enquiries yet" message="Tap “Enquire Now” on a property to contact the project team." action="Explore properties" onAction={() => navigation.navigate('Search')} />}
       </View>
     </Screen>
+  );
+}
+
+// Matches an enquiry card: two-line title, three-line message, then the time and status pill.
+function EnquirySkeletons({ rows = 3 }) {
+  return (
+    <View style={{ gap: 12 }} accessibilityLabel="Loading">
+      {Array.from({ length: rows }, (_, i) => (
+        <View key={i} style={styles.enq}>
+          <SkeletonText size={15} width="75%" />
+          <SkeletonText size={13.5} lineHeight={20} style={{ marginTop: 6 }} />
+          <SkeletonText size={13.5} lineHeight={20} width="60%" />
+          <View style={styles.enqFoot}>
+            <SkeletonText size={12} width={56} />
+            <Skeleton style={{ width: 64, height: 22, borderRadius: radius.pill }} />
+          </View>
+        </View>
+      ))}
+    </View>
+  );
+}
+
+// Matches the history group: icon tile, title and meta line, chevron.
+function HistorySkeletons({ rows = 4 }) {
+  return (
+    <View style={styles.group} accessibilityLabel="Loading">
+      {Array.from({ length: rows }, (_, i) => (
+        <View key={i} style={[styles.hRow, i < rows - 1 && styles.hBorder]}>
+          <Skeleton style={styles.hIc} />
+          <View style={{ flex: 1 }}>
+            <SkeletonText size={14.5} width="70%" />
+            <SkeletonText size={12} width="45%" style={{ marginTop: 2 }} />
+          </View>
+        </View>
+      ))}
+    </View>
   );
 }
 
@@ -138,7 +192,7 @@ function HistoryList({ navigation, title, load, clear, clearLabel, empty, render
     <Screen>
       <ScreenHeader title={title} subtitle={items?.length ? `${items.length} item${items.length === 1 ? '' : 's'}` : ' '} back />
       <View style={{ paddingHorizontal: 20 }}>
-        {!items ? <LoadingState rows={3} /> : items.length ? (
+        {!items ? <HistorySkeletons /> : items.length ? (
           <>
             <View style={styles.group}>
               {items.map((it, i) => (

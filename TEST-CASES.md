@@ -8,15 +8,14 @@ The suite starts the real Express app on a random port and calls it over HTTP. M
 | # | Case | Result |
 |---|---|---|
 | 1 | Server refuses to start without `MONGODB_URI` | ✅ |
-| 2 | Production refuses weak JWT secret / development OTP mode | ✅ |
+| 2 | Production refuses weak JWT secret | ✅ |
 | 3 | Unreachable MongoDB fails fast, no secret in output | ✅ |
 | 4 | Health endpoint | ✅ |
 | 5 | Unknown route → JSON 404; invalid JSON → 400 | ✅ |
-| 6 | Send OTP; invalid phone (many shapes incl. NoSQL object) | ✅ |
-| 7 | OTP hashed at rest, single-use, bound to phone | ✅ |
+| 6 | Old OTP endpoints removed (404); phone sign-in is Firebase | ✅ |
+| 7 | Firebase sign-in links an existing phone account only by verified phone | ✅ |
 | 8 | Resend cooldown (429) | ✅ |
-| 9 | Verify OTP: wrong → 401, malformed → 400, expired → 401, lock after 5 tries | ✅ |
-| 10 | Twilio mode sends SMS and never returns the OTP | ✅ |
+| 9 | Firebase ID tokens checked for revocation; disabled users rejected | ✅ |
 | 11 | User creation on first login; JWT: none / garbage / valid | ✅ |
 | 12 | Profile update; role cannot be self-assigned; broker purpose → broker role | ✅ |
 | 13 | Disabled account loses access immediately | ✅ |
@@ -45,7 +44,7 @@ Price/phone formatting, phone & OTP-paste validation, post-form validation mirro
 | `npx expo-doctor`, `npx expo install --check` | ⛔ need network; no dependency was added or upgraded versus your ZIP |
 | `eas build` / `expo run:android` / APK install | ⛔ |
 | Comparing with the reference website (it is a client-rendered app, nothing readable without JavaScript) | ⛔ |
-| Real SMS through Twilio | ⛔ (code path unit-tested with a stub) |
+| Real SMS through Firebase | ⛔ (verifier faked in tests; use Firebase test numbers on a device) |
 
 ## E. Manual device checklist 📱 (please tick on your phone)
 - [ ] Splash animation plays once, then Welcome appears

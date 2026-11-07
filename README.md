@@ -10,7 +10,7 @@ Discover, compare and post properties. Android-first React Native (Expo) app wit
 * **Ratings & reviews** – 1–5 star rating + optional comment on every property, rating distribution, averages shown on cards, a *Top rated* rail and *Top rated* sort. One rating per user per property (editable); owners cannot rate their own listing.
 * **Property details** – swipe gallery, facts, developer, RERA, amenities/facilities/security, floor plans, virtual tour, brochure, map link, save, compare, share, sticky **Enquire Now**.
 * **Profile** – saved properties, my posted properties, my enquiries, settings, logout. The app has no admin screens.
-* Login: **mobile + OTP**, animated splash, welcome, purpose selection (Buyer / Investor / Owner / Resale / Broker), animated welcome.
+* Login: **mobile + OTP via Firebase Authentication**, animated splash, welcome, purpose selection (Buyer / Investor / Owner / Resale / Broker), animated welcome.
 
 All property content comes from MongoDB through the API. **No demo/fake listings exist anywhere in the shipped app.** (Test fixtures live only in `backend/test/` and the test-suite's in-memory database.)
 
@@ -28,7 +28,7 @@ README.md  SETUP.md  TEST-CASES.md
 1. Use your existing Atlas cluster that already holds the `properties` collection.
 2. Atlas → *Network Access*: allow your IP (or `0.0.0.0/0` for a hosted backend).
 3. Put the connection string **only** in `backend/.env` (see below). Never in the app, never in Git.
-4. The app **reads** existing property documents untouched. It creates its own collections: `app_customers` (phone/OTP accounts), `app_users` (email/password accounts: developers, CRM staff), `otps` (auto-expire), `enquiries`, `reviews`, `property_ratings`. New posted properties are inserted into `properties`.
+4. The app **reads** existing property documents untouched. It creates its own collections: `app_customers` (phone accounts), `app_users` (email/password accounts: developers, CRM staff), `enquiries`, `reviews`, `property_ratings`. New posted properties are inserted into `properties`.
 5. Verify access and see which field names your documents use: `cd backend && npm run check:db`.
 
 ## 5. Backend setup
@@ -54,23 +54,26 @@ npx expo start -c
 |---|---|---|
 | backend/.env | `MONGODB_URI` | **required** Atlas connection string |
 | | `MONGODB_COLLECTION` | property collection, default `properties` |
-| | `NODE_ENV` | `development`, `test` or `production`. **Missing/unknown = treated as production** (no dev OTPs, no open CORS) |
+| | `NODE_ENV` | `development`, `test` or `production`. **Missing/unknown = treated as production** (no open CORS) |
 | | `JWT_SECRET` | 24+ random chars (required) |
-| | `OTP_MODE` | `development` (only with NODE_ENV development/test) or `twilio` (everywhere else; default outside development) |
-| | `OTP_TTL_MINUTES`, `OTP_RESEND_SECONDS`, `OTP_MAX_ATTEMPTS` | OTP policy (5 / 30 / 5) |
-| | `OTP_GLOBAL_HOURLY_LIMIT` | anti SMS-pumping cap on OTP SMS per hour for the whole server (default 300) |
-| | `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, `TWILIO_PHONE_NUMBER` | SMS provider (required with `OTP_MODE=twilio`) |
 | | `TRUST_PROXY` | reverse proxies in front of the API (default `1`; `0` when exposed directly). Rate limits use the client IP derived from it |
 | | `CORS_ORIGINS` | browser origins allowed. Production with this empty sends **no** CORS headers (the mobile app doesn't need CORS) |
 | | `PUBLIC_URL` | public https origin used in uploaded image URLs |
-| | `FIREBASE_PROJECT_ID`, `FIREBASE_SERVICE_ACCOUNT` | /api/v2 customer sign-in; the service account is required for token revocation checks |
+| | `FIREBASE_PROJECT_ID`, `FIREBASE_SERVICE_ACCOUNT` | **required for phone sign-in** and the /api/v2 customer routes; the service account is needed for token revocation checks |
 | frontend/.env | `EXPO_PUBLIC_API_URL` | backend address ending in `/api` |
 
-## 8. OTP – development mode
-`OTP_MODE=development` (only with `NODE_ENV=development` or `test`): the OTP is returned to the app as `devOtp` and is never logged; **development builds** of the app show a “tap to fill” chip (release builds never do). Never use it on a public server, because anyone can “verify” any number. Codes are stored hashed (HMAC), single-use, expire after `OTP_TTL_MINUTES`, lock after `OTP_MAX_ATTEMPTS` wrong tries (counted atomically, so parallel guesses can't exceed it), 30 s resend cooldown.
+## 8. Phone sign-in (Firebase OTP)
+Phone sign-in uses **Firebase Authentication**: the app asks Firebase to send the SMS, Firebase checks the 6-digit code (on Android it can read the SMS and sign in by itself), and the app then exchanges the Firebase ID token for an app session at `POST /api/v2/customers/register`. The backend sends no SMS and stores no codes.
 
-## 9. OTP – production (Twilio)
-Set `OTP_MODE=twilio` plus the three `TWILIO_*` variables on the server. Development OTPs **fail closed**: the backend refuses to start with `OTP_MODE=development` unless `NODE_ENV` is explicitly `development` or `test` – a missing `NODE_ENV` counts as production. Twilio credentials never reach the app. OTP sending is limited per IP, per number and globally (`OTP_GLOBAL_HOURLY_LIMIT`) against SMS pumping. For Indian SMS you may need DLT registration with your provider.
+* Firebase console → *Authentication → Sign-in method* → enable **Phone**, and allow India under *Settings → SMS region policy*.
+* Android: add the app's SHA-1 and SHA-256 keys (debug and release) to the Firebase Android app, then download `google-services.json` into `frontend/`.
+* Backend: `FIREBASE_PROJECT_ID` and `FIREBASE_SERVICE_ACCOUNT` are required for sign-in.
+* Phone sign-in needs a development or release build (`npx expo run:android` / EAS). **Expo Go has no Firebase native module**, so the login screen shows an error there.
+* Testing without real SMS: add **test phone numbers** with fixed codes under *Authentication → Sign-in method → Phone → Phone numbers for testing*.
+* Firebase enforces its own sending limits and SMS-abuse protection; existing phone accounts are linked to Firebase automatically the first time they sign in with the same number.
+
+## 9. Backend OTP and Twilio (removed)
+The backend's own OTP (`/api/auth/send-otp`, `/api/auth/verify-otp`, `OTP_*` and `TWILIO_*` settings) was removed; the old `otps` collection can be dropped.
 
 ## 10. Android physical phone
 1. Phone and PC on the same Wi-Fi. Find the PC IP (`ipconfig` / `ip a`).
@@ -84,7 +87,7 @@ Set `OTP_MODE=twilio` plus the three `TWILIO_*` variables on the server. Develop
 
 ## 12. Testing
 ```bash
-cd backend  && npm test      # API, auth, roles, ratings, OTP, startup guards
+cd backend  && npm test      # API, auth, roles, ratings, Firebase sign-in, startup guards
 cd frontend && npm test      # validation, compare logic, error mapping
 cd frontend && npm run bundle:check   # compiles the whole app with Metro
 ```
@@ -104,11 +107,11 @@ Roles: `user`, `broker`, `developer`. User and staff management lives in the sep
 * **Enquiries for the CRM:** the backend has no CRM API. Enquiries from the app are saved in the `enquiries` collection and contact forms from `/api/v2/leads/customer` in `customer_leads`; the CRM reads them from MongoDB directly.
 
 ### API summary
-`GET /api/health` · `POST /api/auth/send-otp` · `POST /api/auth/verify-otp` · `POST /api/auth/signin` · `POST /api/auth/logout-all` · `GET|PATCH /api/users/me` · `GET /api/users/me/{properties,enquiries}` · `GET /api/properties` (search, filters, sort, paging) · `GET /api/properties/{categories,facets,top-rated,compare,saved/list,:id}` · `POST|DELETE /api/properties/:id/save` · `GET|POST /api/properties/:id/reviews` · `DELETE /api/properties/:id/reviews/mine` · `POST /api/post-property` · `POST /api/enquiries` · Mobile API contract (Firebase customer auth): `/api/v2/*`, see `MOBILE_API.md`.
+`GET /api/health` · `POST /api/v2/customers/register` (Firebase phone sign-in) · `POST /api/auth/signin` · `POST /api/auth/logout-all` · `GET|PATCH /api/users/me` · `GET /api/users/me/{properties,enquiries}` · `GET /api/properties` (search, filters, sort, paging) · `GET /api/properties/{categories,facets,top-rated,compare,saved/list,:id}` · `POST|DELETE /api/properties/:id/save` · `GET|POST /api/properties/:id/reviews` · `DELETE /api/properties/:id/reviews/mine` · `POST /api/post-property` · `POST /api/enquiries` · Mobile API contract (Firebase customer auth): `/api/v2/*`, see `MOBILE_API.md`.
 
 ## 14. Production deployment (Render / Railway)
 * Root directory `backend`, build `npm install`, start `npm start`.
-* Environment: `NODE_ENV=production`, `MONGODB_URI`, `JWT_SECRET`, `OTP_MODE=twilio`, `TWILIO_*`, `TRUST_PROXY` (1 on Render/Railway), `PUBLIC_URL`, `FIREBASE_PROJECT_ID` + `FIREBASE_SERVICE_ACCOUNT`, optionally `CORS_ORIGINS`, `OTP_GLOBAL_HOURLY_LIMIT`.
+* Environment: `NODE_ENV=production`, `MONGODB_URI`, `JWT_SECRET`, `TRUST_PROXY` (1 on Render/Railway), `PUBLIC_URL`, `FIREBASE_PROJECT_ID` + `FIREBASE_SERVICE_ACCOUNT`, optionally `CORS_ORIGINS`, `OTP_GLOBAL_HOURLY_LIMIT`.
 * Production `/api/health` answers only `{"ok":true}`.
 * Uploaded photos are re-encoded with `sharp` (EXIF/GPS stripped, JPEG) – `npm install` on the server fetches its Linux binary.
 * Health check path `/api/health`. Use the **https** URL in the app (`EXPO_PUBLIC_API_URL=https://…/api`) – Android release builds block plain `http://`.
@@ -128,8 +131,9 @@ Local native build: `npx expo prebuild --platform android && npx expo run:androi
 * **“Cannot reach the server”** – wrong `EXPO_PUBLIC_API_URL`, firewall, different Wi-Fi, or you forgot `npx expo start -c` after editing `.env`. Settings → *Check server connection* tests it. A release build without `EXPO_PUBLIC_API_URL` has no fallback address.
 * **Config error: MONGODB_URI is missing** – create `backend/.env`.
 * **MongoDB timeout** – add your IP in Atlas Network Access.
-* **No OTP arrives** – in development the code is shown in the app's dev chip (development builds only); in production verify Twilio variables.
-* **Config error: OTP_MODE must be "twilio"** – set `NODE_ENV=development` for local development, or configure Twilio.
+* **No OTP arrives** – check Phone sign-in is enabled in Firebase and India is allowed in the SMS region policy; for testing use Firebase test phone numbers.
+* **"This app build isn't set up for phone sign-in"** – add the build's SHA-1/SHA-256 keys to the Firebase Android app and rebuild with the new `google-services.json`.
+* **"Phone sign-in needs the installed app build"** – you're in Expo Go; use `npx expo run:android` or an EAS build.
 * **Every /api/v2 request returns 401 "Invalid token"** – set `FIREBASE_SERVICE_ACCOUNT` (needed for token revocation checks).
 * **Empty lists** – the database really has no matching documents; run `npm run check:db`.
 * **Images blank** – the document's image URLs are missing/unreachable; a placeholder is shown, nothing is invented.

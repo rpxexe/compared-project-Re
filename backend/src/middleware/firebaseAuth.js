@@ -20,6 +20,9 @@ async function decode(req, res) {
     // Revoked, expired, disabled or malformed tokens are the client's problem and get the same
     // bare 401. Anything else (missing config/credentials) is logged by code only - never the token.
     if (!env.isTest && !isTokenError(e)) console.error(`Firebase token check failed: ${e?.code || e?.message}`);
+    // In development also say why a token was rejected (code + Firebase's reason, which names
+    // claims and project ids but never contains the token itself).
+    else if (env.isDevLike && !env.isTest) console.warn(`Firebase token rejected: ${e?.code || "unknown"} - ${String(e?.message || "").slice(0, 300)}`);
     deny(res, "Invalid token");
     return null;
   }

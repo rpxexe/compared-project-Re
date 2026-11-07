@@ -155,7 +155,6 @@ function installFakeModels() {
   const models = {
     Property: makeModel('Property'),
     User,
-    Otp: makeModel('Otp', () => ({ attempts: 0, lastSentAt: new Date() })),
     Enquiry: makeModel('Enquiry', () => ({ status: 'new', createdAt: new Date() })),
     Review: makeModel('Review', () => ({ createdAt: new Date() })),
     PropertyRating: makeModel('PropertyRating'),

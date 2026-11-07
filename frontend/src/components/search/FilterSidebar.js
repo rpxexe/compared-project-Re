@@ -4,6 +4,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { brand, colors, radius } from "../../theme";
 import { isReducedMotion } from "../../hooks/useReducedMotion";
 import Text from "../AppText";
+import { Skeleton, SkeletonText } from "../StateViews";
 
 const ITEM_H = 54;
 const INSET = 5; // gap between the selection pill and its row's edges
@@ -16,6 +17,24 @@ const BAR_W = 2;
 // Vertical list of filter categories for the active tab: icon + one-line label per row, hairline
 // separators, a highlight that slides to the selected row, and rows that fade in one by one when
 // the tab (`animKey`) changes. `counts` puts a dot on categories that hold selections.
+// Loading placeholder with the sidebar's own row height and padding: icon plus label per row,
+// the first row on the white selection pill.
+export function FilterSidebarSkeleton({ width, rows = 7 }) {
+  return (
+    <View style={[styles.root, { width }]}>
+      <View>
+        <View style={styles.highlight} />
+        {Array.from({ length: rows }, (_, i) => (
+          <View key={i} style={styles.item}>
+            <Skeleton style={{ width: 18, height: 18, borderRadius: 6 }} />
+            <SkeletonText size={13.5} width={i % 2 ? "55%" : "70%"} style={{ flex: 1 }} />
+          </View>
+        ))}
+      </View>
+    </View>
+  );
+}
+
 export default function FilterSidebar({ categories, value, counts, onSelect, width, animKey }) {
   const index = Math.max(0, categories.findIndex((c) => c.id === value));
   const y = useRef(new Animated.Value(index * ITEM_H)).current;

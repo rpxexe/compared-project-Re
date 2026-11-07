@@ -41,7 +41,7 @@ const signin = async (req, res) => {
   if (user.isActive === false)
     throw new AppError(403, "This account has been disabled. Contact support.");
 
-  // Email/password is the app's developer sign-in (customers use phone OTP), so accounts created
+  // Email/password is the app's developer sign-in (customers use Firebase phone sign-in), so accounts created
   // before developers had their own role become developers; staff roles are left alone.
   const set = { lastLoginAt: new Date() };
   if (!user.role || user.role === "user") set.role = "developer";

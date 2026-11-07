@@ -30,7 +30,7 @@ async function cardsFor(ids) {
 }
 
 // ----- Registration -------------------------------------------------------------------------
-// The registration response. `token` + `user` are the v1 session (same as POST /auth/verify-otp),
+// The registration response. `token` + `user` are the v1 session,
 // so an app that signs in with Firebase can keep calling the v1 routes too.
 async function signedIn(res, status, Model, doc, created) {
   await Model.updateOne({ _id: doc._id }, { $set: { lastLoginAt: new Date() } });

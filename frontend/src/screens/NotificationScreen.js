@@ -1,5 +1,5 @@
 import React, { useCallback, useMemo, useState } from "react";
-import { Pressable, ScrollView, StatusBar, StyleSheet, View, ActivityIndicator, RefreshControl } from "react-native";
+import { Pressable, ScrollView, StatusBar, StyleSheet, View, RefreshControl } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useFocusEffect } from "@react-navigation/native";
 import { LinearGradient } from "expo-linear-gradient";
@@ -10,6 +10,7 @@ import { useBottomSpace } from "../hooks/useBottomSpace";
 import { api } from "../services/api";
 import { colors, fonts, radius, shadow } from "../theme";
 import Text from "../components/AppText";
+import { Skeleton, SkeletonText } from "../components/StateViews";
 
 const INITIAL_NOTIFICATIONS = [
   {
@@ -181,9 +182,18 @@ export default function NotificationScreen({ navigation }) {
         }
       >
         {loading ? (
-          <View style={styles.loading}>
-            <ActivityIndicator size="large" color={colors.champagneDeep} />
-            <Text style={styles.emptyText}>Loading notifications…</Text>
+          <View accessibilityLabel="Loading notifications">
+            {[0, 1, 2, 3].map((i) => (
+              <View key={i} style={styles.card}>
+                <Skeleton style={styles.iconWrap} />
+                <View style={styles.cardBody}>
+                  <SkeletonText size={14} width="65%" />
+                  <SkeletonText size={12} lineHeight={18} style={{ marginTop: 5 }} />
+                  <SkeletonText size={12} lineHeight={18} width="80%" />
+                  <SkeletonText size={10} width={56} style={{ marginTop: 7 }} />
+                </View>
+              </View>
+            ))}
           </View>
         ) : null}
         {!loading && error ? (
@@ -225,21 +235,15 @@ export default function NotificationScreen({ navigation }) {
                 pointerEvents="none"
               />
 
-              <View
-                style={[
-                  styles.iconWrap,
-                  { backgroundColor: `${icon.color}18` },
-                ]}
-              >
-                <View
-                  style={[
-                    styles.iconWrap,
-                    { backgroundColor: `${icon.color}18` },
-                  ]}
-                >
-                  <Ionicons name={icon.name} size={20} color={icon.color} />
-                </View>
+              <View style={[styles.iconWrap, { backgroundColor: `${icon.color}18` }]}>
+                <Ionicons name={icon.name} size={20} color={icon.color} />
+              </View>
 
+              <View style={styles.cardBody}>
+                <View style={styles.titleRow}>
+                  <Text style={styles.title} numberOfLines={1}>{item.title}</Text>
+                  {item.unread ? <View style={styles.unreadDot} /> : null}
+                </View>
                 <Text style={styles.message}>{item.message}</Text>
                 <Text style={styles.time}>{item.time}</Text>
               </View>

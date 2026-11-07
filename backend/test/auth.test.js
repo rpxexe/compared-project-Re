@@ -5,7 +5,6 @@ const { startServer, models, env } = require('./helpers/harness');
 let t;
 test.before(async () => { t = await startServer(); });
 test.after(() => t.close());
-test.beforeEach(() => { models.Otp.reset(); });
 
 test('health endpoint responds', async () => {
   const r = await t.call('GET', '/health');
@@ -17,87 +16,6 @@ test('unknown route returns JSON 404', async () => {
   const r = await t.call('GET', '/nope');
   assert.equal(r.status, 404);
   assert.ok(r.body.message);
-});
-
-test('send-otp rejects invalid phone numbers', async () => {
-  for (const phone of ['', '123', '12345678901', 'abcdefghij', '5123456789', { $ne: 1 }]) {
-    const r = await t.call('POST', '/auth/send-otp', { body: { phone } });
-    assert.equal(r.status, 400, `phone ${JSON.stringify(phone)}`);
-  }
-});
-
-test('send-otp returns a dev OTP in development mode and never stores it in clear text', async () => {
-  const r = await t.call('POST', '/auth/send-otp', { body: { phone: '9876543210' } });
-  assert.equal(r.status, 200);
-  assert.match(r.body.devOtp, /^\d{6}$/);
-  const rec = models.Otp._rows[0];
-  assert.ok(!JSON.stringify(rec).includes(r.body.devOtp), 'OTP must be hashed');
-  assert.equal(r.body.resendInSeconds, env.otpResendSeconds);
-});
-
-test('resend is blocked during the cooldown window', async () => {
-  await t.call('POST', '/auth/send-otp', { body: { phone: '9876543210' } });
-  const r = await t.call('POST', '/auth/send-otp', { body: { phone: '9876543210' } });
-  assert.equal(r.status, 429);
-  assert.ok(r.body.retryAfterSeconds > 0);
-});
-
-test('verify-otp: wrong OTP -> 401 and attempts counted, correct OTP -> token + user created', async () => {
-  const s = await t.call('POST', '/auth/send-otp', { body: { phone: '9876543210' } });
-  const wrong = s.body.devOtp === '111111' ? '222222' : '111111';
-  const bad = await t.call('POST', '/auth/verify-otp', { body: { phone: '9876543210', otp: wrong } });
-  assert.equal(bad.status, 401);
-  assert.equal(bad.body.code, 'OTP_INVALID');
-  assert.equal(models.Otp._rows[0].attempts, 1);
-
-  const ok = await t.call('POST', '/auth/verify-otp', { body: { phone: '9876543210', otp: s.body.devOtp } });
-  assert.equal(ok.status, 200);
-  assert.ok(ok.body.token);
-  assert.equal(ok.body.user.phone, '9876543210');
-  assert.equal(ok.body.user.role, 'user');
-  assert.equal(ok.body.isNewUser, true);
-  assert.equal(models.User._rows.length, 1);
-  assert.equal(models.Otp._rows.length, 0, 'OTP is single-use');
-
-  const reuse = await t.call('POST', '/auth/verify-otp', { body: { phone: '9876543210', otp: s.body.devOtp } });
-  assert.equal(reuse.status, 401);
-});
-
-test('verify-otp: malformed OTP -> 400', async () => {
-  const r = await t.call('POST', '/auth/verify-otp', { body: { phone: '9876543210', otp: '12ab' } });
-  assert.equal(r.status, 400);
-});
-
-test('verify-otp: expired OTP -> 401 OTP_EXPIRED', async () => {
-  const s = await t.call('POST', '/auth/send-otp', { body: { phone: '9876543210' } });
-  models.Otp._rows[0].expiresAt = new Date(Date.now() - 1000);
-  const r = await t.call('POST', '/auth/verify-otp', { body: { phone: '9876543210', otp: s.body.devOtp } });
-  assert.equal(r.status, 401);
-  assert.equal(r.body.code, 'OTP_EXPIRED');
-});
-
-test('verify-otp: locks after too many wrong attempts, even with the right code', async () => {
-  const s = await t.call('POST', '/auth/send-otp', { body: { phone: '9876543210' } });
-  const wrong = s.body.devOtp === '111111' ? '222222' : '111111';
-  for (let i = 0; i < env.otpMaxAttempts; i += 1) await t.call('POST', '/auth/verify-otp', { body: { phone: '9876543210', otp: wrong } });
-  const r = await t.call('POST', '/auth/verify-otp', { body: { phone: '9876543210', otp: s.body.devOtp } });
-  assert.equal(r.status, 429);
-});
-
-test('twilio mode never returns the OTP and sends the SMS through the provider', async () => {
-  const { setSmsSender } = require('../src/utils/sms');
-  const sent = [];
-  setSmsSender(async (to, body) => { sent.push({ to, body }); });
-  process.env.OTP_MODE = 'twilio';
-  env.reload();
-  const r = await t.call('POST', '/auth/send-otp', { body: { phone: '9123456780' } });
-  process.env.OTP_MODE = 'development';
-  env.reload();
-  setSmsSender(null);
-  assert.equal(r.status, 200);
-  assert.equal(r.body.devOtp, undefined);
-  assert.equal(sent[0].to, '+919123456780');
-  assert.match(sent[0].body, /\d{6}/);
 });
 
 test('JWT: missing, garbage and valid tokens', async () => {
@@ -118,33 +36,18 @@ test('profile: purpose + name update; broker purpose grants broker role; role ca
   assert.equal((await t.call('PATCH', '/users/me', { token, body: { purpose: 'wizard' } })).status, 400);
 });
 
-// Logs in through a real (faked) SMS: OTP_MODE=twilio with the provider swapped out.
-async function smsLogin(phone) {
-  const { setSmsSender } = require('../src/utils/sms');
-  const sent = [];
-  setSmsSender(async (to, body) => { sent.push(body); });
-  process.env.OTP_MODE = 'twilio';
-  env.reload();
-  try {
-    await t.call('POST', '/auth/send-otp', { body: { phone } });
-    const otp = /code is (\d{6})/.exec(sent[0])[1];
-    return (await t.call('POST', '/auth/verify-otp', { body: { phone, otp } })).body;
-  } finally {
-    process.env.OTP_MODE = 'development';
-    env.reload();
-    setSmsSender(null);
-  }
-}
-
-test('phone logins never change a role, even after a real SMS OTP (roles are managed in the CRM)', async () => {
+test('phone logins never change a role (roles are managed in the CRM)', async () => {
   models.User.reset();
-  const a = await smsLogin('9000000001');
-  assert.equal(a.user.role, 'user');
   const d = await t.login('9000000002');
   assert.equal(d.user.role, 'user');
 });
 
+test('the old OTP endpoints are gone (phone sign-in is Firebase)', async () => {
+  assert.equal((await t.call('POST', '/auth/send-otp', { body: { phone: '9876543210' } })).status, 404);
+  assert.equal((await t.call('POST', '/auth/verify-otp', { body: { phone: '9876543210', otp: '123456' } })).status, 404);
+});
+
 test('invalid JSON body -> 400 JSON error', async () => {
-  const r = await t.call('POST', '/auth/send-otp', { body: '{bad json' });
+  const r = await t.call('POST', '/auth/signin', { body: '{bad json' });
   assert.equal(r.status, 400);
 });

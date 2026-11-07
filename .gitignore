@@ -10,3 +10,7 @@ ios/
 .env.*
 !.env.example
 *.log
+
+# Firebase Admin service-account keys (secrets)
+firebase-service-account.json
+*-firebase-adminsdk-*.json

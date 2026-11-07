@@ -8,10 +8,27 @@ import ProjectFilter from "./ProjectFilter";
 import { isReducedMotion } from "../../hooks/useReducedMotion";
 import { colors, radius } from "../../theme";
 import Text from "../AppText";
+import { Skeleton, SkeletonText } from "../StateViews";
 
 // The selected sidebar category's controls. What to draw comes from the category's config
 // entry: a special `panel`, or its config filters drawn by the shared FilterControl.
 // `transitionKey` (tab + category) replays a short fade/slide when either changes.
+// Loading placeholder: the category title row with its divider, then option chips at their
+// real 40px height.
+const CHIP_WIDTHS = [86, 64, 104, 72, 92, 58, 80];
+export function FilterContentSkeleton() {
+  return (
+    <View>
+      <View style={styles.head}>
+        <SkeletonText size={18} width="50%" style={{ flex: 1 }} />
+      </View>
+      <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
+        {CHIP_WIDTHS.map((w, i) => <Skeleton key={i} style={{ width: w, height: 40, borderRadius: radius.pill }} />)}
+      </View>
+    </View>
+  );
+}
+
 export default function FilterContent({ category, filters, draft, count, transitionKey, onValue, onQuery, onClear }) {
   const p = useRef(new Animated.Value(1)).current;
   useEffect(() => {

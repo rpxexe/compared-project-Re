@@ -1,6 +1,5 @@
 process.env.NODE_ENV = 'test';
 process.env.JWT_SECRET = 'test-secret-test-secret-test-secret';
-process.env.OTP_MODE = 'development';
 const http = require('http');
 const mongoose = require('mongoose');
 const { installFakeModels } = require('./fakeDb');
@@ -29,12 +28,18 @@ async function startServer() {
     try { json = await res.json(); } catch { /* empty */ }
     return { status: res.status, body: json, headers: res.headers };
   }
-  // Logs a phone in through the real OTP endpoints and returns { token, user }.
+  // A phone (customer) account and its session, as { token, user }. Phone sign-in itself is
+  // Firebase's job (covered in firebase.test.js / v2.test.js); this creates an account that is not
+  // linked to Firebase yet, like the ones made by the old OTP flow.
   async function login(phone) {
-    models.Otp._rows.length = 0; // skip resend cooldown between helper logins
-    const s = await call('POST', '/auth/send-otp', { body: { phone } });
-    const v = await call('POST', '/auth/verify-otp', { body: { phone, otp: s.body.devOtp } });
-    return v.body;
+    const { signToken } = require('../../src/middleware/auth');
+    const { publicUser } = require('../../src/utils/user');
+    const user = await models.User.findOneAndUpdate(
+      { phone },
+      { $setOnInsert: { phone }, $set: { lastLoginAt: new Date() } },
+      { upsert: true, new: true, setDefaultsOnInsert: true },
+    ).lean();
+    return { token: signToken(user), user: publicUser(user) };
   }
   return { base, call, login, close: () => new Promise((r) => server.close(r)), models, oid: () => new mongoose.Types.ObjectId() };
 }

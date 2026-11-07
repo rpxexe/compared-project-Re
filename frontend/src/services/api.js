@@ -177,9 +177,6 @@ export const session = {
 
 export const api = {
   health: () => call(client.get("/health")),
-  sendOtp: (phone) => call(client.post("/auth/send-otp", { phone })),
-  verifyOtp: (phone, otp) =>
-    call(client.post("/auth/verify-otp", { phone, otp })),
 
   me: () => call(client.get("/users/me")),
   updateMe: (patch) => call(client.patch("/users/me", patch)),

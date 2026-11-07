@@ -1,15 +1,15 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { ActivityIndicator, FlatList, ScrollView, StyleSheet, View } from 'react-native';
+import { FlatList, ScrollView, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useBottomSpace } from '../hooks/useBottomSpace';
 import { StatusBar } from 'expo-status-bar';
 import ScreenHeader from '../components/ScreenHeader';
 import FilterChip from '../components/FilterChip';
 import { badgeFor } from '../components/PropertyCard';
-import ListingCard from '../components/search/ListingCard';
+import ListingCard, { ListingCardSkeleton, ListingSkeletonList } from '../components/search/ListingCard';
 import Reveal from '../components/Reveal';
 import Button from '../components/Button';
-import { EmptyState, ErrorState, LoadingState } from '../components/StateViews';
+import { EmptyState, ErrorState } from '../components/StateViews';
 import { useApi } from '../hooks/useApi';
 import { api } from '../services/api';
 import { colors } from '../theme';
@@ -56,7 +56,7 @@ export default function NewProjectScreen() {
           </ScrollView>
         </Reveal>
       </View>
-      {st.loading && !items.length ? <View style={{ padding: 20 }}><LoadingState rows={4} /></View>
+      {st.loading && !items.length ? <View style={{ padding: 16, paddingTop: 4 }}><ListingSkeletonList rows={4} /></View>
         : st.error && !items.length ? <ErrorState title="Unable to load projects" error={st.error} onRetry={() => load(1, false)} />
           : (
             <FlatList
@@ -65,7 +65,7 @@ export default function NewProjectScreen() {
               renderItem={({ item, index }) => <ListingCard property={item} index={index} tag={badgeFor(item) || 'New Project'} />}
               onEndReachedThreshold={0.4} onEndReached={() => { if (!st.more && !st.loading && pg.page < pg.pages) load(pg.page + 1, true); }}
               ListEmptyComponent={<EmptyState icon="business-outline" title="No projects found" message="There are no projects in this category yet." />}
-              ListFooterComponent={st.more ? <ActivityIndicator color={colors.gold} style={{ margin: 16 }} /> : st.error ? <Button title="Retry" variant="ghost" small onPress={() => load(pg.page + 1, true)} /> : null}
+              ListFooterComponent={st.more ? <ListingCardSkeleton /> : st.error ? <Button title="Retry" variant="ghost" small onPress={() => load(pg.page + 1, true)} /> : null}
             />
           )}
     </View>

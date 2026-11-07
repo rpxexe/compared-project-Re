@@ -197,28 +197,16 @@ export default function LoginScreen({ navigation }) {
     const role = selectedRole.toLowerCase();
     const displayName = cleanName(name);
     try {
-      // Firebase sends and checks the code when the build has it; otherwise the backend does.
-      if (firebasePhone.available()) {
-        await firebasePhone.sendCode(digits);
-        navigation.navigate("Otp", { phone: digits, role, name: displayName, firebase: true, devOtp: null, resendIn: 30 });
+      // Firebase Authentication sends and checks the code. Its native module is only in development
+      // and release builds (not Expo Go), so phone sign-in needs one of those.
+      if (!firebasePhone.available()) {
+        setApiError("Phone sign-in needs the installed app build. It isn't available in Expo Go.");
         return;
       }
-      const r = await api.sendOtp(digits);
-      navigation.navigate("Otp", {
-        phone: digits,
-        role,
-        name: displayName,
-        devOtp: __DEV__ ? r.devOtp || null : null,
-        resendIn: r.resendInSeconds ?? 30,
-        expiresIn: r.expiresInSeconds ?? 300,
-      });
+      await firebasePhone.sendCode(digits);
+      navigation.navigate("Otp", { phone: digits, role, name: displayName, resendIn: 30 });
     } catch (e) {
-      // A resend cooldown means a still-valid code was sent moments ago, so continue to it.
-      if (e.status === 429 && e.retryAfterSeconds) {
-        navigation.navigate("Otp", { phone: digits, role, name: displayName, devOtp: null, resendIn: e.retryAfterSeconds, expiresIn: 300 });
-      } else {
-        setApiError(e.code?.startsWith?.("auth/") ? firebasePhone.friendlyError(e) : e.message || "Failed to send verification code");
-      }
+      setApiError(e.code?.startsWith?.("auth/") ? firebasePhone.friendlyError(e) : e.message || "Failed to send verification code");
     } finally {
       inFlight.current = false;
       setLoading(false);
